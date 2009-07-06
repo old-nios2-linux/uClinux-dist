@@ -21,6 +21,15 @@ echo_separator()
 	echo
 }
 
+default_vendor()
+{
+	if [ -f config/vendor-default ] ; then
+		fix_name "`cat config/vendor-default`"
+	else
+		fix_name McAfee
+	fi
+}
+
 #############################################################################
 
 echo "mainmenu \"Embedded Linux Configuration\""
@@ -40,7 +49,7 @@ echo "comment \"Select the Vendor you wish to target\""
 echo
 echo "choice"
 echo "	prompt \"Vendor\""
-echo "	default DEFAULTS_ANALOGDEVICES"
+echo "	default DEFAULTS_`default_vendor`"
 echo
 
 pfile=/tmp/products.$$
