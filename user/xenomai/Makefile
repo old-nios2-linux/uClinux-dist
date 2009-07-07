@@ -1,4 +1,4 @@
-VER = xenomai-2.4.7
+VER = xenomai-2.4.91
 
 ADEOS = $(ROOTDIR)/bfin_patch/adeos_patch/adeos-bfin.patch
 LINUX_DIR = $(ROOTDIR)/linux-2.6.x
