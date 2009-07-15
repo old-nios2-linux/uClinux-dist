@@ -78,12 +78,12 @@ add 4 bit SDIO support for bfin onboard sdio controller.
 Enable SDH/EMAC driver on bf51x.
 extend PPI driver to support arbitrary number of PPIs (like on BF56x/BF54x)
 Walk around most MUSB hardware anomalies. Bfin host and peripheral MUSB driver works well in both PIO and DMA mode.
-1.move to mainline
+2.move to mainline
 Remove old IDE driver, switch IDE devices to libata platform ata driver and CF devices to pcmcia driver instead.
 deprecate the bfin_nand (async) driver in favor of the generic platform nand driver
 Retire old spi_mmc driver. Turn to use the mmc_spi driver in mainline kernel. 
 Enable IS1760 USB Host Driver (added mainstream 2.6.26). Remove obsolete and “un-maintained” pehci driver
-1.new
+3.new
 Add Support for ATMEL AT25DF641 64-Megabit SPI Data Flash
 add cascaded AD73322 support on both sport0 and sport1 to transfer several PCM streams concurrently
 add SSM2602 audio codec support for BF52xC
@@ -135,7 +135,7 @@ import usbhubctrl
 import sscep
 import logrotate
 Add PPI/FPGA Demo Project
-1.new lib
+2.new lib
 Add libbtiff
 Add ircp and libopenobex.
 import libxml2
@@ -148,7 +148,7 @@ import dirac lib
 Import libogg
 import libvorbis and vorbis-tools
 import libmodbus
-1.improvement
+3.improvement
 Enable oprofile-0.9.2.
 Remove local asterrisk zaptel code, use the stuff found in the ucasterisk project instead.
 Allow nano-x to use tslib
