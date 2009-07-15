@@ -17,3 +17,6 @@
 		"\tLED4 => GPIO105\tPB4 => GPIO27\n"
 		"\tLED5 => GPIO106\n"
 		"\tLED6 => GPIO107\n"
+		" BF527-EZKIT:\n"
+		"\tPB1 => GPIO16\n"
+		"\tPB2 => GPIO29\n"
