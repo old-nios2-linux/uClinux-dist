@@ -45,11 +45,11 @@ Drop NP2 patch.
 update kgdb to mainline. Support access to MMR registers and L1/L2 SRAM.
 Add support for cpu frequency, cpu voltage and platform voltage scaling under Power Management framework.
 Add functional power management support
-1.SMP related
+2.SMP related
 Full SMP kernel support on bf561.
 Improve SMP IPI handler to circle all IPI messages in one loop in order to avoid dead lock.
 Enable kgdb to support SMP kernel on bf561. 
-1.Blackfin arch specific
+3.Blackfin arch specific
 Port kernel to bf51x, bf526/4/2, bf538/9, mobile ddr bf54xm.
 change L1 malloc to base on slab cache and lists. Remove the sram piece limitation and improve the performance to alloc/free sram piece data. And extend support to L2 SRAM as well.
 Skip single step if event priority of current instruction is higher than that of the instruction under gdb single stepping. Also make kgdb code transparent to app debugging.
