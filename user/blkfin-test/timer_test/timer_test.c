@@ -5,6 +5,7 @@
  * Licensed under the GPL-2 or later.
  */
 
+#define DEBUG
 #define pr_fmt(fmt) "timer_test: " fmt
 
 #include <linux/kernel.h>
