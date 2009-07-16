@@ -1,0 +1,476 @@
+m4trace:/usr/share/aclocal-1.10/python.m4:35: -1- AC_DEFUN([AM_PATH_PYTHON], [
+  dnl Find a Python interpreter.  Python versions prior to 1.5 are not
+  dnl supported because the default installation locations changed from
+  dnl $prefix/lib/site-python in 1.4 to $prefix/lib/python1.5/site-packages
+  dnl in 1.5.
+  m4_define_default([_AM_PYTHON_INTERPRETER_LIST],
+                    [python python2 python2.5 python2.4 python2.3 python2.2 dnl
+python2.1 python2.0 python1.6 python1.5])
+
+  m4_if([$1],[],[
+    dnl No version check is needed.
+    # Find any Python interpreter.
+    if test -z "$PYTHON"; then
+      AC_PATH_PROGS([PYTHON], _AM_PYTHON_INTERPRETER_LIST, :)
+    fi
+    am_display_PYTHON=python
+  ], [
+    dnl A version check is needed.
+    if test -n "$PYTHON"; then
+      # If the user set $PYTHON, use it and don't search something else.
+      AC_MSG_CHECKING([whether $PYTHON version >= $1])
+      AM_PYTHON_CHECK_VERSION([$PYTHON], [$1],
+			      [AC_MSG_RESULT(yes)],
+			      [AC_MSG_ERROR(too old)])
+      am_display_PYTHON=$PYTHON
+    else
+      # Otherwise, try each interpreter until we find one that satisfies
+      # VERSION.
+      AC_CACHE_CHECK([for a Python interpreter with version >= $1],
+	[am_cv_pathless_PYTHON],[
+	for am_cv_pathless_PYTHON in _AM_PYTHON_INTERPRETER_LIST none; do
+	  test "$am_cv_pathless_PYTHON" = none && break
+	  AM_PYTHON_CHECK_VERSION([$am_cv_pathless_PYTHON], [$1], [break])
+	done])
+      # Set $PYTHON to the absolute path of $am_cv_pathless_PYTHON.
+      if test "$am_cv_pathless_PYTHON" = none; then
+	PYTHON=:
+      else
+        AC_PATH_PROG([PYTHON], [$am_cv_pathless_PYTHON])
+      fi
+      am_display_PYTHON=$am_cv_pathless_PYTHON
+    fi
+  ])
+
+  if test "$PYTHON" = :; then
+  dnl Run any user-specified action, or abort.
+    m4_default([$3], [AC_MSG_ERROR([no suitable Python interpreter found])])
+  else
+
+  dnl Query Python for its version number.  Getting [:3] seems to be
+  dnl the best way to do this; it's what "site.py" does in the standard
+  dnl library.
+
+  AC_CACHE_CHECK([for $am_display_PYTHON version], [am_cv_python_version],
+    [am_cv_python_version=`$PYTHON -c "import sys; print sys.version[[:3]]"`])
+  AC_SUBST([PYTHON_VERSION], [$am_cv_python_version])
+
+  dnl Use the values of $prefix and $exec_prefix for the corresponding
+  dnl values of PYTHON_PREFIX and PYTHON_EXEC_PREFIX.  These are made
+  dnl distinct variables so they can be overridden if need be.  However,
+  dnl general consensus is that you shouldn't need this ability.
+
+  AC_SUBST([PYTHON_PREFIX], ['${prefix}'])
+  AC_SUBST([PYTHON_EXEC_PREFIX], ['${exec_prefix}'])
+
+  dnl At times (like when building shared libraries) you may want
+  dnl to know which OS platform Python thinks this is.
+
+  AC_CACHE_CHECK([for $am_display_PYTHON platform], [am_cv_python_platform],
+    [am_cv_python_platform=`$PYTHON -c "import sys; print sys.platform"`])
+  AC_SUBST([PYTHON_PLATFORM], [$am_cv_python_platform])
+
+
+  dnl Set up 4 directories:
+
+  dnl pythondir -- where to install python scripts.  This is the
+  dnl   site-packages directory, not the python standard library
+  dnl   directory like in previous automake betas.  This behavior
+  dnl   is more consistent with lispdir.m4 for example.
+  dnl Query distutils for this directory.  distutils does not exist in
+  dnl Python 1.5, so we fall back to the hardcoded directory if it
+  dnl doesn't work.
+  AC_CACHE_CHECK([for $am_display_PYTHON script directory],
+    [am_cv_python_pythondir],
+    [am_cv_python_pythondir=`$PYTHON -c "from distutils import sysconfig; print sysconfig.get_python_lib(0,0,prefix='$PYTHON_PREFIX')" 2>/dev/null ||
+     echo "$PYTHON_PREFIX/lib/python$PYTHON_VERSION/site-packages"`])
+  AC_SUBST([pythondir], [$am_cv_python_pythondir])
+
+  dnl pkgpythondir -- $PACKAGE directory under pythondir.  Was
+  dnl   PYTHON_SITE_PACKAGE in previous betas, but this naming is
+  dnl   more consistent with the rest of automake.
+
+  AC_SUBST([pkgpythondir], [\${pythondir}/$PACKAGE])
+
+  dnl pyexecdir -- directory for installing python extension modules
+  dnl   (shared libraries)
+  dnl Query distutils for this directory.  distutils does not exist in
+  dnl Python 1.5, so we fall back to the hardcoded directory if it
+  dnl doesn't work.
+  AC_CACHE_CHECK([for $am_display_PYTHON extension module directory],
+    [am_cv_python_pyexecdir],
+    [am_cv_python_pyexecdir=`$PYTHON -c "from distutils import sysconfig; print sysconfig.get_python_lib(1,0,prefix='$PYTHON_EXEC_PREFIX')" 2>/dev/null ||
+     echo "${PYTHON_EXEC_PREFIX}/lib/python${PYTHON_VERSION}/site-packages"`])
+  AC_SUBST([pyexecdir], [$am_cv_python_pyexecdir])
+
+  dnl pkgpyexecdir -- $(pyexecdir)/$(PACKAGE)
+
+  AC_SUBST([pkgpyexecdir], [\${pyexecdir}/$PACKAGE])
+
+  dnl Run any user-specified action.
+  $2
+  fi
+
+])
+m4trace:/usr/share/aclocal-1.10/python.m4:160: -1- AC_DEFUN([AM_PYTHON_CHECK_VERSION], [prog="import sys, string
+# split strings by '.' and convert to numeric.  Append some zeros
+# because we need at least 4 digits for the hex conversion.
+minver = map(int, string.split('$2', '.')) + [[0, 0, 0]]
+minverhex = 0
+for i in xrange(0, 4): minverhex = (minverhex << 8) + minver[[i]]
+sys.exit(sys.hexversion < minverhex)"
+  AS_IF([AM_RUN_LOG([$1 -c "$prog"])], [$3], [$4])])
+m4trace:/usr/share/aclocal-1.10/runlog.m4:12: -1- AC_DEFUN([AM_RUN_LOG], [{ echo "$as_me:$LINENO: $1" >&AS_MESSAGE_LOG_FD
+   ($1) >&AS_MESSAGE_LOG_FD 2>&AS_MESSAGE_LOG_FD
+   ac_status=$?
+   echo "$as_me:$LINENO: \$? = $ac_status" >&AS_MESSAGE_LOG_FD
+   (exit $ac_status); }])
+m4trace:acinclude.m4:2: -1- AC_DEFUN([RECVFROM_ARG6_TYPE], [
+   AC_LANG_PUSH(C++)
+   AC_MSG_CHECKING([for type of 6th argument to recvfrom()])
+   recvfrom6_t=
+   for t in socklen_t int; do
+     AC_TRY_COMPILE([
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>],[
+$t arg;
+recvfrom (0, NULL, 0, 0, NULL, &arg);],[
+      recvfrom6_t="$t"
+      break])
+   done
+
+   if test "x$recvfrom6_t" = x; then
+     AC_MSG_WARN([Cannot find type for 6th argument to recvfrom(). Using socklen_t ptr])
+     recvfrom6_t="socklen_t"
+   fi
+
+   AC_MSG_RESULT($recvfrom6_t)
+   AC_DEFINE_UNQUOTED(recvfrom6_t, $recvfrom6_t,
+     [Type of 6th argument to recvfrom()])
+   AC_LANG_POP(C++)
+])
+m4trace:configure.ac:5: -1- m4_pattern_forbid([^_?A[CHUM]_])
+m4trace:configure.ac:5: -1- m4_pattern_forbid([_AC_])
+m4trace:configure.ac:5: -1- m4_pattern_forbid([^LIBOBJS$], [do not use LIBOBJS directly, use AC_LIBOBJ (see section `AC_LIBOBJ vs LIBOBJS'])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^AS_FLAGS$])
+m4trace:configure.ac:5: -1- m4_pattern_forbid([^_?m4_])
+m4trace:configure.ac:5: -1- m4_pattern_forbid([^dnl$])
+m4trace:configure.ac:5: -1- m4_pattern_forbid([^_?AS_])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^SHELL$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PATH_SEPARATOR$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_NAME$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_TARNAME$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_VERSION$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_STRING$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_BUGREPORT$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^exec_prefix$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^prefix$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^program_transform_name$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^bindir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^sbindir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^libexecdir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^datarootdir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^datadir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^sysconfdir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^sharedstatedir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^localstatedir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^includedir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^oldincludedir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^docdir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^infodir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^htmldir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^dvidir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^pdfdir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^psdir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^libdir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^localedir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^mandir$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_NAME$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_TARNAME$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_VERSION$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_STRING$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^PACKAGE_BUGREPORT$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^DEFS$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^ECHO_C$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^ECHO_N$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^ECHO_T$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^LIBS$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^build_alias$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^host_alias$])
+m4trace:configure.ac:5: -1- m4_pattern_allow([^target_alias$])
+m4trace:configure.ac:8: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:8: the top level])
+m4trace:configure.ac:31: -1- m4_pattern_allow([^libpcapdir$])
+m4trace:configure.ac:34: -1- m4_pattern_allow([^pcredir$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^build$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^build_cpu$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^build_vendor$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^build_os$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^host$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^host_cpu$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^host_vendor$])
+m4trace:configure.ac:40: -1- m4_pattern_allow([^host_os$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^CFLAGS$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^LDFLAGS$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^LIBS$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^CPPFLAGS$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^ac_ct_CC$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^EXEEXT$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^OBJEXT$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^CFLAGS$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^LDFLAGS$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^LIBS$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^CPPFLAGS$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^CC$])
+m4trace:configure.ac:44: -1- m4_pattern_allow([^ac_ct_CC$])
+m4trace:configure.ac:45: -1- m4_pattern_allow([^CXX$])
+m4trace:configure.ac:45: -1- m4_pattern_allow([^CXXFLAGS$])
+m4trace:configure.ac:45: -1- m4_pattern_allow([^LDFLAGS$])
+m4trace:configure.ac:45: -1- m4_pattern_allow([^LIBS$])
+m4trace:configure.ac:45: -1- m4_pattern_allow([^CPPFLAGS$])
+m4trace:configure.ac:45: -1- m4_pattern_allow([^CXX$])
+m4trace:configure.ac:45: -1- m4_pattern_allow([^ac_ct_CXX$])
+m4trace:configure.ac:46: -1- m4_pattern_allow([^INSTALL_PROGRAM$])
+m4trace:configure.ac:46: -1- m4_pattern_allow([^INSTALL_SCRIPT$])
+m4trace:configure.ac:46: -1- m4_pattern_allow([^INSTALL_DATA$])
+m4trace:configure.ac:80: -1- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:80: the top level])
+m4trace:configure.ac:89: -1- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:89: the top level])
+m4trace:configure.ac:95: -1- m4_pattern_allow([^__func__$])
+m4trace:configure.ac:98: -1- m4_pattern_allow([^__func__$])
+m4trace:configure.ac:102: -1- m4_pattern_allow([^COMPAT_OBJS$])
+m4trace:configure.ac:103: -1- m4_pattern_allow([^COMPAT_SRCS$])
+m4trace:configure.ac:105: -1- m4_pattern_allow([^STRIP$])
+m4trace:configure.ac:113: -1- m4_pattern_allow([^DEC$])
+m4trace:configure.ac:116: -1- m4_pattern_allow([^NETBSD$])
+m4trace:configure.ac:120: -1- m4_pattern_allow([^OPENBSD$])
+m4trace:configure.ac:124: -1- m4_pattern_allow([^FREEBSD$])
+m4trace:configure.ac:128: -1- m4_pattern_allow([^BSDI$])
+m4trace:configure.ac:131: -1- m4_pattern_allow([^IRIX$])
+m4trace:configure.ac:134: -1- m4_pattern_allow([^HPUX$])
+m4trace:configure.ac:137: -1- m4_pattern_allow([^HAVE_LIBNM$])
+m4trace:configure.ac:141: -1- m4_pattern_allow([^HAVE_LIBODM$])
+m4trace:configure.ac:142: -1- m4_pattern_allow([^HAVE_LIBCFG$])
+m4trace:configure.ac:145: -1- m4_pattern_allow([^STUPID_SOLARIS_CHECKSUM_BUG$])
+m4trace:configure.ac:146: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:149: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:152: -1- m4_pattern_allow([^STUPID_SOLARIS_CHECKSUM_BUG$])
+m4trace:configure.ac:153: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:156: -1- m4_pattern_allow([^STUPID_SOLARIS_CHECKSUM_BUG$])
+m4trace:configure.ac:157: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:160: -1- m4_pattern_allow([^STUPID_SOLARIS_CHECKSUM_BUG$])
+m4trace:configure.ac:161: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:164: -1- m4_pattern_allow([^STUPID_SOLARIS_CHECKSUM_BUG$])
+m4trace:configure.ac:165: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:168: -1- m4_pattern_allow([^STUPID_SOLARIS_CHECKSUM_BUG$])
+m4trace:configure.ac:169: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:172: -1- m4_pattern_allow([^SOLARIS$])
+m4trace:configure.ac:175: -1- m4_pattern_allow([^SUNOS$])
+m4trace:configure.ac:176: -1- m4_pattern_allow([^SPRINTF_RETURNS_STRING$])
+m4trace:configure.ac:179: -1- m4_pattern_allow([^LINUX$])
+m4trace:configure.ac:183: -1- m4_pattern_allow([^MACOSX$])
+m4trace:configure.ac:185: -1- m4_pattern_allow([^HAVE_LIBM$])
+m4trace:configure.ac:191: -1- m4_pattern_allow([^LUA_CFLAGS$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^CPP$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^CPPFLAGS$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^CPP$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^GREP$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^EGREP$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^STDC_HEADERS$])
+m4trace:configure.ac:201: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:201: the top level])
+m4trace:configure.ac:204: -1- AM_PATH_PYTHON([2.4], [], [if test "$with_ndiff" = "check"; then
+     AC_MSG_WARN([Not building Ndiff because Python 2.4 or later was not found])
+   else
+     AC_MSG_FAILURE([--with-ndiff requires Python 2.4 or later])
+   fi
+   with_ndiff=no])
+m4trace:configure.ac:204: -1- AM_PYTHON_CHECK_VERSION([$PYTHON], [2.4], [AC_MSG_RESULT(yes)], [AC_MSG_ERROR(too old)])
+m4trace:configure.ac:204: -1- AM_RUN_LOG([$PYTHON -c "$prog"])
+m4trace:configure.ac:204: -1- AM_PYTHON_CHECK_VERSION([$am_cv_pathless_PYTHON], [2.4], [break])
+m4trace:configure.ac:204: -1- AM_RUN_LOG([$am_cv_pathless_PYTHON -c "$prog"])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^PYTHON$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^PYTHON_VERSION$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^PYTHON_PREFIX$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^PYTHON_EXEC_PREFIX$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^PYTHON_PLATFORM$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^pythondir$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^pkgpythondir$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^pyexecdir$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^pkgpyexecdir$])
+m4trace:configure.ac:223: -1- m4_pattern_allow([^BUILDNDIFF$])
+m4trace:configure.ac:224: -1- m4_pattern_allow([^INSTALLNDIFF$])
+m4trace:configure.ac:225: -1- m4_pattern_allow([^NDIFF_CLEAN$])
+m4trace:configure.ac:226: -1- m4_pattern_allow([^NDIFF_DIST_CLEAN$])
+m4trace:configure.ac:229: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:229: the top level])
+m4trace:configure.ac:232: -1- AM_PATH_PYTHON([2.4], [], [if test "$with_zenmap" = "check"; then
+     AC_MSG_WARN([Not building Zenmap because Python 2.4 or later was not found])
+   else
+     AC_MSG_FAILURE([--with-zenmap requires Python 2.4 or later])
+   fi
+   with_zenmap=no])
+m4trace:configure.ac:232: -1- AM_PYTHON_CHECK_VERSION([$PYTHON], [2.4], [AC_MSG_RESULT(yes)], [AC_MSG_ERROR(too old)])
+m4trace:configure.ac:232: -1- AM_RUN_LOG([$PYTHON -c "$prog"])
+m4trace:configure.ac:232: -1- AM_PYTHON_CHECK_VERSION([$am_cv_pathless_PYTHON], [2.4], [break])
+m4trace:configure.ac:232: -1- AM_RUN_LOG([$am_cv_pathless_PYTHON -c "$prog"])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^PYTHON$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^PYTHON_VERSION$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^PYTHON_PREFIX$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^PYTHON_EXEC_PREFIX$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^PYTHON_PLATFORM$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^pythondir$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^pkgpythondir$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^pyexecdir$])
+m4trace:configure.ac:232: -1- m4_pattern_allow([^pkgpyexecdir$])
+m4trace:configure.ac:253: -1- m4_pattern_allow([^BUILDZENMAP$])
+m4trace:configure.ac:254: -1- m4_pattern_allow([^INSTALLZENMAP$])
+m4trace:configure.ac:255: -1- m4_pattern_allow([^UNINSTALLZENMAP$])
+m4trace:configure.ac:256: -1- m4_pattern_allow([^ZENMAP_CLEAN$])
+m4trace:configure.ac:257: -1- m4_pattern_allow([^ZENMAP_DIST_CLEAN$])
+m4trace:configure.ac:263: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:263: the top level])
+m4trace:configure.ac:314: -1- m4_pattern_allow([^HAVE_OPENSSL$])
+m4trace:configure.ac:318: -1- m4_pattern_allow([^OPENSSL_LIBS$])
+m4trace:configure.ac:327: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:327: the top level])
+m4trace:configure.ac:328: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:328: the top level])
+m4trace:configure.ac:374: -1- _m4_warn([obsolete], [The macro `AC_TRY_RUN' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2592: AC_TRY_RUN is expanded from...
+configure.ac:374: the top level])
+m4trace:configure.ac:374: -1- _m4_warn([cross], [AC_RUN_IFELSE called without default to allow cross compiling], [../../lib/autoconf/general.m4:2576: AC_RUN_IFELSE is expanded from...
+../../lib/autoconf/general.m4:2592: AC_TRY_RUN is expanded from...
+configure.ac:374: the top level])
+m4trace:configure.ac:399: -1- m4_pattern_allow([^HAVE_LIBPCAP$])
+m4trace:configure.ac:414: -1- m4_pattern_allow([^PCAP_DEPENDS$])
+m4trace:configure.ac:415: -1- m4_pattern_allow([^PCAP_BUILD$])
+m4trace:configure.ac:416: -1- m4_pattern_allow([^PCAP_CLEAN$])
+m4trace:configure.ac:417: -1- m4_pattern_allow([^PCAP_DIST_CLEAN$])
+m4trace:configure.ac:418: -1- m4_pattern_allow([^LIBPCAP_LIBS$])
+m4trace:configure.ac:421: -1- m4_pattern_allow([^subdirs$])
+m4trace:configure.ac:430: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:430: the top level])
+m4trace:configure.ac:431: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:431: the top level])
+m4trace:configure.ac:458: -1- m4_pattern_allow([^subdirs$])
+m4trace:configure.ac:475: -1- m4_pattern_allow([^LIBPCRE_LIBS$])
+m4trace:configure.ac:476: -1- m4_pattern_allow([^LIBPCREDIR$])
+m4trace:configure.ac:477: -1- m4_pattern_allow([^PCRE_DEPENDS$])
+m4trace:configure.ac:478: -1- m4_pattern_allow([^PCRE_BUILD$])
+m4trace:configure.ac:479: -1- m4_pattern_allow([^PCRE_CLEAN$])
+m4trace:configure.ac:480: -1- m4_pattern_allow([^PCRE_DIST_CLEAN$])
+m4trace:configure.ac:492: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:492: the top level])
+m4trace:configure.ac:493: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:493: the top level])
+m4trace:configure.ac:509: -1- m4_pattern_allow([^subdirs$])
+m4trace:configure.ac:524: -1- m4_pattern_allow([^LIBDNET_LIBS$])
+m4trace:configure.ac:525: -1- m4_pattern_allow([^LIBDNETDIR$])
+m4trace:configure.ac:526: -1- m4_pattern_allow([^DNET_DEPENDS$])
+m4trace:configure.ac:527: -1- m4_pattern_allow([^DNET_BUILD$])
+m4trace:configure.ac:528: -1- m4_pattern_allow([^DNET_CLEAN$])
+m4trace:configure.ac:529: -1- m4_pattern_allow([^DNET_DIST_CLEAN$])
+m4trace:configure.ac:539: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:539: the top level])
+m4trace:configure.ac:540: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:540: the top level])
+m4trace:configure.ac:541: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:541: the top level])
+m4trace:configure.ac:589: -1- _m4_warn([cross], [AC_RUN_IFELSE called without default to allow cross compiling], [../../lib/autoconf/general.m4:2576: AC_RUN_IFELSE is expanded from...
+configure.ac:589: the top level])
+m4trace:configure.ac:617: -1- m4_pattern_allow([^LIBLUA_LIBS$])
+m4trace:configure.ac:618: -1- m4_pattern_allow([^LIBLUADIR$])
+m4trace:configure.ac:619: -1- m4_pattern_allow([^LUA_DEPENDS$])
+m4trace:configure.ac:620: -1- m4_pattern_allow([^LUA_BUILD$])
+m4trace:configure.ac:621: -1- m4_pattern_allow([^LUA_CLEAN$])
+m4trace:configure.ac:622: -1- m4_pattern_allow([^LUA_DIST_CLEAN$])
+m4trace:configure.ac:623: -1- m4_pattern_allow([^INSTALLNSE$])
+m4trace:configure.ac:624: -1- m4_pattern_allow([^CXXFLAGS$])
+m4trace:configure.ac:632: -2- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:632: the top level])
+m4trace:configure.ac:639: -1- m4_pattern_allow([^HAVE_SOCKADDR_SA_LEN$])
+m4trace:configure.ac:643: -1- m4_pattern_allow([^WORDS_BIGENDIAN$])
+m4trace:configure.ac:643: -1- m4_pattern_allow([^AC_APPLE_UNIVERSAL_BUILD$])
+m4trace:configure.ac:648: -2- m4_pattern_allow([^IN_ADDR_DEEPSTRUCT$])
+m4trace:configure.ac:652: -3- m4_pattern_allow([^IN_ADDR_DEEPSTRUCT$])
+m4trace:configure.ac:650: -2- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:650: the top level])
+m4trace:configure.ac:647: -1- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:647: the top level])
+m4trace:configure.ac:657: -2- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:657: the top level])
+m4trace:configure.ac:671: -1- m4_pattern_allow([^HAVE_STRUCT_ICMP$])
+m4trace:configure.ac:675: -2- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:675: the top level])
+m4trace:configure.ac:688: -1- m4_pattern_allow([^HAVE_STRUCT_IP$])
+m4trace:configure.ac:692: -2- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+configure.ac:692: the top level])
+m4trace:configure.ac:706: -1- m4_pattern_allow([^HAVE_IP_IP_SUM$])
+m4trace:configure.ac:711: -1- RECVFROM_ARG6_TYPE
+m4trace:configure.ac:711: -1- _m4_warn([obsolete], [The macro `AC_TRY_COMPILE' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:2470: AC_TRY_COMPILE is expanded from...
+acinclude.m4:2: RECVFROM_ARG6_TYPE is expanded from...
+configure.ac:711: the top level])
+m4trace:configure.ac:711: -1- m4_pattern_allow([^recvfrom6_t$])
+m4trace:configure.ac:714: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:714: the top level])
+m4trace:configure.ac:737: -1- m4_pattern_allow([^NBASEDIR$])
+m4trace:configure.ac:738: -1- m4_pattern_allow([^NBASE_BUILD$])
+m4trace:configure.ac:739: -1- m4_pattern_allow([^LIBNBASE_LIBS$])
+m4trace:configure.ac:741: -1- m4_pattern_allow([^subdirs$])
+m4trace:configure.ac:746: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:746: the top level])
+m4trace:configure.ac:767: -1- m4_pattern_allow([^NSOCKDIR$])
+m4trace:configure.ac:768: -1- m4_pattern_allow([^NSOCK_BUILD$])
+m4trace:configure.ac:769: -1- m4_pattern_allow([^LIBNSOCK_LIBS$])
+m4trace:configure.ac:771: -1- m4_pattern_allow([^subdirs$])
+m4trace:configure.ac:776: -2- _m4_warn([obsolete], [The macro `AC_HELP_STRING' is obsolete.
+You should run autoupdate.], [../../lib/autoconf/general.m4:209: AC_HELP_STRING is expanded from...
+configure.ac:776: the top level])
+m4trace:configure.ac:790: -1- m4_pattern_allow([^subdirs$])
+m4trace:configure.ac:793: -1- m4_pattern_allow([^NCATDIR$])
+m4trace:configure.ac:794: -1- m4_pattern_allow([^NCAT_BUILD$])
+m4trace:configure.ac:795: -1- m4_pattern_allow([^NCAT_INSTALL$])
+m4trace:configure.ac:796: -1- m4_pattern_allow([^NCAT_UNINSTALL$])
+m4trace:configure.ac:797: -1- m4_pattern_allow([^NCAT_CLEAN$])
+m4trace:configure.ac:798: -1- m4_pattern_allow([^NCAT_DIST_CLEAN$])
+m4trace:configure.ac:800: -1- _m4_warn([obsolete], [AC_OUTPUT should be used without arguments.
+You should run autoupdate.], [])
+m4trace:configure.ac:800: -1- m4_pattern_allow([^LIB@&t@OBJS$])
+m4trace:configure.ac:800: -1- m4_pattern_allow([^LTLIBOBJS$])

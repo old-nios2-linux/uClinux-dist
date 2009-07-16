@@ -1,4 +1,5 @@
-VER = nmap-4.85BETA9
+VER = nmap-5.00
+URL = http://nmap.org/dist/$(VER).tar.bz2
 
 export ac_cv_path_STRIP = true
 
