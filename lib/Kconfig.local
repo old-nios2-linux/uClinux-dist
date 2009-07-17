@@ -103,6 +103,12 @@ config LIB_LIBEXOSIP
 	  application that wish to establish sessions like multiplayer games. 
 	  http://savannah.nongnu.org/projects/exosip/
 
+config LIB_FAAC
+	bool "Build faac"
+	help
+	  FAAC is an open source MPEG-4 and MPEG-2 AAC encoder
+	  http://www.audiocoding.com/faac.html
+
 config LIB_FAAD2
 	bool "Build faad2"
 	help

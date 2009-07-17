@@ -10,6 +10,7 @@ dir_3_$(CONFIG_LIB_CRYPTOPP)         += crypto++lib
 dir_3_$(CONFIG_LIB_DIRAC)            += dirac
 dir_3_$(CONFIG_LIB_DMALLOC)          += dmalloc
 dir_3_$(CONFIG_LIB_E2FSPROGS_LIBS)   += e2fsprogs-libs
+dir_3_$(CONFIG_LIB_FAAC)             += faac
 dir_3_$(CONFIG_LIB_FAAD2)            += faad2
 dir_3_$(CONFIG_LIB_FLAC)             += flac
 dir_3_$(CONFIG_LIB_FTPLIB)           += ftplib
