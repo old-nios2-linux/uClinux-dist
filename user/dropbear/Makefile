@@ -1,6 +1,6 @@
 VER = dropbear-0.52
 
-FLTFLAGS = -s 0x4000
+FLTFLAGS += -s 0x4000
 
 export MULTI = 1
 export PROGRAMS = dropbear dbclient dropbearkey dropbearconvert scp
