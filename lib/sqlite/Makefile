@@ -1,7 +1,7 @@
 VER = sqlite-3.6.14.2
 URL = http://sqlite.org/sqlite-amalgamation-$(patsubst sqlite-%,%,$(VER)).tar.gz
 
-FLTFLAGS = -s 32000
+FLTFLAGS += -s 32000
 
 include $(ROOTDIR)/tools/autotools.mk
 
