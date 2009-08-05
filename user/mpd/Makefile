@@ -18,7 +18,7 @@ CONF_OPTS = \
 	$(call USE_ENABLE,LIB_LIBID3TAG,id3) \
 	--disable-lsr
 
-FLTFLAGS=-s 0x14000
+FLTFLAGS += -s 0x14000
 
 include $(ROOTDIR)/tools/autotools.mk
 
