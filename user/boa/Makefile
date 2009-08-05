@@ -1,6 +1,6 @@
 VER = boa-0.94.14rc21
 
-FLTFLAGS = -s 65536
+FLTFLAGS += -s 65536
 
 all: build-$(VER)/Makefile
 	$(MAKE) -C build-$(VER)
