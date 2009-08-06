@@ -113,7 +113,7 @@ LINTFLAGS = -q
 # less than 16k of stack.  I've made it 20k just to be sure.  I think
 # the actual algol procedure stack frames are malloced so only the interpreter
 # overheads count.
-FLTFLAGS=-s 20000
+FLTFLAGS += -s 20000
 
 ##
 ## The target:
