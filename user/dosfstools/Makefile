@@ -1,4 +1,4 @@
-VER = dosfstools-3.0.2
+VER = dosfstools-3.0.5
 
 CPPFLAGS += -D_FILE_OFFSET_BITS=64
 
