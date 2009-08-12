@@ -1,4 +1,4 @@
-VER = sqlite-3.6.14.2
+VER = sqlite-3.6.17
 URL = http://sqlite.org/sqlite-amalgamation-$(patsubst sqlite-%,%,$(VER)).tar.gz
 
 FLTFLAGS += -s 32000
