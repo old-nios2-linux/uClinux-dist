@@ -114,7 +114,7 @@ int test_dec32(void)
 
 int main(int argc, char *argv[])
 {
-	int ret;
+	int ret = 0;
 
 	srand((unsigned long)(argv + time(0)));
 
