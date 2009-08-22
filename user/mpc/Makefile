@@ -1,4 +1,5 @@
 VER = mpc-0.12.1
+URL = http://downloads.sourceforge.net/musicpd/$(VER).tar.bz2
 
 CONF_OPTS = \
 	--disable-iconv
