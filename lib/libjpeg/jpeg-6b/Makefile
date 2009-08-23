@@ -35,7 +35,7 @@ CFLAGS += -I$(srcdir) -I.
 ANSI2KNRFLAGS= 
 
 # Link-time cc options:
-LDFLAGS= 
+#LDFLAGS= 
 
 # To link any special libraries, add the necessary -l commands here.
 LDLIBS= 
@@ -160,10 +160,10 @@ endif
 .SUFFIXES: .lo .la .c .o .pic.o
 
 .c.pic.o:
-	$(CC) -c $(CFLAGS) -o $@ $(srcdir)/$*.c
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/$*.c
 
 .S.pic.o:
-	$(CC) -c $(CFLAGS) -o $@ $(srcdir)/$*.S
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/$*.S
 
 # How to compile with libtool.
 # .c.lo:
