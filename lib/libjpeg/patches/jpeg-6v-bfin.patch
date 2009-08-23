@@ -431,7 +431,7 @@ Index: jfdctfst_bfin.S
 +	R1 = R1 +|+ R3, R3 = R1 -|- R3 || R0.L = W[P0++P1];	/* calculate tmp2,3,4,5, R0.L = data[6] */
 +	R0.H = W[P0++P2];									/* R0.H = data[7] */
 +	R2.H = W[P0];										/* R2.H = data[0] */
-+	R0 = R2 +|+ R0, R2 = R2 -|- R0;						/* calculate tmp0,1,6,7 /
++	R0 = R2 +|+ R0, R2 = R2 -|- R0;						/* calculate tmp0,1,6,7 */
 +
 +	/* At this point we have:
 +	tmp0 = R0.H, tmp1 = R0.L, tmp2 = R1.L, tmp3 = R1.H,
