@@ -98,7 +98,7 @@ am__objects_1 = jaricom$U.lo jcapimin$U.lo jcapistd$U.lo jcarith$U.lo \
 	jdsample$U.lo jdtrans$U.lo jerror$U.lo jfdctflt$U.lo \
 	jfdctfst$U.lo jfdctint$U.lo jidctflt$U.lo jidctfst$U.lo \
 	jidctint$U.lo jquant1$U.lo jquant2$U.lo jutils$U.lo \
-	jmemmgr$U.lo @MEMORYMGR@$U.lo
+	jmemmgr$U.lo @MEMORYMGR@$U.lo jfdctfst_bfin$U.lo
 am_libjpeg_la_OBJECTS = $(am__objects_1)
 libjpeg_la_OBJECTS = $(am_libjpeg_la_OBJECTS)
 AM_V_lt = $(am__v_lt_$(V))
@@ -292,7 +292,7 @@ LIBSOURCES = jaricom.c jcapimin.c jcapistd.c jcarith.c jccoefct.c jccolor.c \
         jddctmgr.c jdhuff.c jdinput.c jdmainct.c jdmarker.c jdmaster.c \
         jdmerge.c jdpostct.c jdsample.c jdtrans.c jerror.c jfdctflt.c \
         jfdctfst.c jfdctint.c jidctflt.c jidctfst.c jidctint.c jquant1.c \
-        jquant2.c jutils.c jmemmgr.c @MEMORYMGR@.c
+        jquant2.c jutils.c jmemmgr.c @MEMORYMGR@.c jfdctfst_bfin.S
 
 
 # System dependent sources
@@ -392,7 +392,7 @@ all: jconfig.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .lo .o .obj
+.SUFFIXES: .c .S .lo .o .obj
 am--refresh:
 	@:
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
@@ -592,6 +592,7 @@ mostlyclean-kr:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jerror$U.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jfdctflt$U.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jfdctfst$U.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jfdctfst_bfin$U.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jfdctint$U.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jidctflt$U.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jidctfst$U.Plo@am__quote@
@@ -632,6 +633,9 @@ mostlyclean-kr:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
+
+.S.lo:
+	$(LTCOMPILE) -c -o $@ $<
 
 .c.lo:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

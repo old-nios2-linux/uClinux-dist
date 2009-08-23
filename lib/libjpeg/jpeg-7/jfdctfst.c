@@ -36,7 +36,7 @@
 #include "jpeglib.h"
 #include "jdct.h"		/* Private declarations for DCT subsystem */
 
-#ifdef DCT_IFAST_SUPPORTED
+#if defined(DCT_IFAST_SUPPORTED) && !defined(DCT_IFAST_SUPPORTED_ARCH)
 
 
 /*
@@ -227,4 +227,4 @@ jpeg_fdct_ifast (DCTELEM * data, JSAMPARRAY sample_data, JDIMENSION start_col)
   }
 }
 
-#endif /* DCT_IFAST_SUPPORTED */
+#endif /* DCT_IFAST_SUPPORTED & !DCT_IFAST_SUPPORTED_ARCH */

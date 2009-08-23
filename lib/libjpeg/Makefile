@@ -1,5 +1,11 @@
 VER = jpeg-7
 
+ifeq ($(ARCH),blackfin)
+CPPFLAGS += -DDCT_IFAST_SUPPORTED_ARCH
+endif
+CONF_OPTS = \
+	--disable-ld-version-script
+
 include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
