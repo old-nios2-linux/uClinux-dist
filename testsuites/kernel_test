@@ -40,7 +40,7 @@ if [ $# -lt 1 ] ; then
   echo "The UART_MODE :     dma, pio."
   echo "The SMP,MPU :       on, off."
   echo "For example:./kernel_test BF537-STAMP-STD BF537 /home/test/work/cruise/checkouts/uclinux-dist flat slab\(p2\) on on write_through dma off off /home/test/work/cruise/test_scripts/uclinux-dist/logs."
-  exit
+  exit 1
 fi
 
 if [ $# -gt 0 ] ; then
@@ -452,7 +452,7 @@ if [ $BUILD_POLICY -eq 1  ] ; then
   if [ ! -f $UCLINUX_DIST_PATH/images/uImage ] ; then
   echo  "Linux image fails to be generated.Error!"
   tail -50  ./build_policy_kernel_log
-  exit
+  exit 3
   fi
       
   sleep 30
@@ -2142,6 +2142,5 @@ for i in `seq 0 24`
   fi
   done
   
-   
  
  echo  "Testing Done."
