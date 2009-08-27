@@ -21,7 +21,8 @@ while 1 {
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
         }
-
+        
+        # The following two conflicting items could have already been unselected by make_cut_fs_config.exp.
         -re "SPI support.*SPI.*\\\[.*]" {
             if { $board_type == "BF518F-EZBRD" } {
                 send "N\r"
@@ -59,21 +60,14 @@ while 1 {
         }
 ##############################################################################
 
-        -re "CFI Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
+        -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
             send -s "Y\r"
         }
 
-        -re "Physical start address of flash mapping.*MTD_PHYSMAP_START.*\\\[.*]" {
+        -re "Physmap compat support.*MTD_PHYSMAP_COMPAT.*\\\[.*]" {
             send -s "\r"
         }
 
-        -re "Physical length of flash mapping.*MTD_PHYSMAP_LEN.*\\\[.*]" {
-            send -s "\r"
-        }
-
-        -re "Bank width in octets.*MTD_PHYSMAP_BANKWIDTH.*\\\[.*]" {
-            send -s "\r"
-        }
 ##############################################################################
 
         -re "Blackfin BF561 EZKIT Flash Chip Support \\\(MTD_EZKIT561\\\).*\\\[.*]" {
