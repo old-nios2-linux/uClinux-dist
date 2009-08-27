@@ -1746,6 +1746,12 @@ config USER_MSNTP_MSNTP
 	  Simple Network Time Protocol utility.
 	  Approx. binary size: 66k
 
+config USER_N2N
+	bool "n2n"
+	help
+	  A P2P VPN client.
+
+	  http://www.ntop.org/n2n/
 
 config USER_NESSUS
 	bool "nessus"
