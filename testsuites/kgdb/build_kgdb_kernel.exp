@@ -35,11 +35,6 @@ step "Apply kgdb patch."
 
 cd $uclinux_path/linux-2.6.x
 
-if { $debug_port == "ethernet" } {
-
-exec patch -p0  < ../bfin_patch/kgdb_patch/kgdboe_bfin_linux-2.6.x.patch
-
-}
 if { $core_config == "SMP" } {
 
 exec patch -p1  < ../bfin_patch/kgdb_patch/kgdb_smp_switch_master_cpu_linux-2.6.x.patch
