@@ -56,7 +56,7 @@ incr case_num
 send -s "cat /proc/uptime ; cat /proc/interrupts\r"
 while 1 {
     expect {
-        -re "\[0-9]+\\.\[0-9]+ (\[0-9]+\\.\[0-9]+)" {
+        -re "(\[0-9]+\\.\[0-9]+) \[0-9]+\\.\[0-9]+" {
             set START_TIME $expect_out(1,string)
             expect {
                 -re "$timer_interrupt_id: + (\[0-9]+) .* $timer_interrupt_name" {
@@ -93,7 +93,7 @@ incr case_num
 send -s "cat /proc/uptime ; cat /proc/interrupts\r"
 while 1 {
     expect {
-        -re "\[0-9]+\\.\[0-9]+ (\[0-9]+\\.\[0-9]+)" {
+        -re "(\[0-9]+\\.\[0-9]+) \[0-9]+\\.\[0-9]+" {
             set END_TIME $expect_out(1,string)
             expect {
                 -re "$timer_interrupt_id: + (\[0-9]+) .* $timer_interrupt_name" {

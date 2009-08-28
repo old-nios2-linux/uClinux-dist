@@ -152,7 +152,7 @@ while 1 {
 }
 expect -re $kernel_prompt
 incr case_num
-send "while \[ 1 \]; md5sum /mnt/setup.exe ; done\r" 
+send "while \[ 1 \]; do md5sum /mnt/setup.exe ; done\r" 
 while 1 {
    expect {
       -re "\[0-9a-z]+  /mnt/setup.exe" {

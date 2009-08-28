@@ -260,7 +260,7 @@ set jffs_temp_result $TEST_FAIL
 incr case_num
 
 set timeout 60
-send "while \[ 1 \]; md5sum /mnt/version ; done\r"
+send "while \[ 1 \]; do md5sum /mnt/version ; done\r"
 while 1 {
    expect {
       -re "\[0-9a-z]+  /mnt/version" {

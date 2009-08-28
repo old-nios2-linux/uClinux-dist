@@ -87,19 +87,14 @@ while 1 {
    spawn ps a
    while 1 {
       expect {
-	"telnet_test" {
-		incr found
-                send_log "telnet_test is running.\n"
-	}
-
 	"ftp_test" {
 		incr found
                 send_log "ftp_test is running.\n"                
 	}
 	
-	"telnet_test <defunct>" {
-		set found 0
-		break
+	"telnet_test" {
+		incr found
+                send_log "telnet_test is running.\n"
 	}
 
 	"ftp_test <defunct>" {
@@ -107,7 +102,12 @@ while 1 {
 		break
 	}
 	
-        eof {
+	"telnet_test <defunct>" {
+		set found 0
+		break
+	}
+
+        timeout {
 	 	break
         }
       }
