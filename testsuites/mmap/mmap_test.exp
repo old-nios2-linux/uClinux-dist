@@ -53,7 +53,7 @@ while 1 {
 
 incr case_num
 set timeout 60
-spawn rcp mmap_test_load mmap_test_unload root@$targetip:/lib/modules
+spawn rcp mmap_test_load mmap_test_unload root@$targetip:/
 while 1 {
     expect {
         -re "connect|No route to host|No such file or directory" {
@@ -73,7 +73,7 @@ while 1 {
 set spawn_id $kermit_spawn_id
 
 incr case_num
-send "cd /lib/modules; ./mmap_test_load\r"
+send "./mmap_test_load\r"
 while 1 {
     expect {
         -re "(fail|No such file or directory|\[eE]rror).*$kernel_prompt" {
