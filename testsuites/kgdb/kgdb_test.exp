@@ -1454,39 +1454,6 @@ if { $board_type == "BF548-EZKIT" || $board_type == "BF561-EZKIT" } {
 		}
 	}
         incr case_num
-	send "thread $CPU1_NUM\r"
-	expect {
-	  -re	"Switching to thread $CPU1_NUM" {
-                case_pass $case_num
-		expect {
-			"(gdb) " {
-			}
-		}
-		}
-		timeout {
-                clean_host_gdb
-                case_fail $case_num
-			exit
-		}
-	} 
-        incr case_num
-        # read cpu1 register
-        send " x/1xw 0xffe05000\r"
-        expect {
-           -re "0xffe05000:\[\x20\t]+0xe5040501" {
-                case_pass $case_num
-                expect {
-                        "(gdb) " {
-                        }
-                }
-                }
-                timeout {
-                clean_host_gdb
-                case_fail $case_num
-                        exit
-                }
-        }
-        incr case_num
 	send "thread $CPU0_NUM\r"
 	expect {
 	  -re	"Switching to thread $CPU0_NUM" {
@@ -1501,9 +1468,9 @@ if { $board_type == "BF548-EZKIT" || $board_type == "BF561-EZKIT" } {
                 case_fail $case_num
 			exit
 		}
-	}
-        # read cpu0 register
+	} 
         incr case_num
+        # read cpu1 register
         send " x/1xw 0xffe05000\r"
         expect {
            -re "0xffe05000:\[\x20\t]+0xe5040500" {
@@ -1523,6 +1490,39 @@ if { $board_type == "BF548-EZKIT" || $board_type == "BF561-EZKIT" } {
 	send "thread $CPU1_NUM\r"
 	expect {
 	  -re	"Switching to thread $CPU1_NUM" {
+                case_pass $case_num
+		expect {
+			"(gdb) " {
+			}
+		}
+		}
+		timeout {
+                clean_host_gdb
+                case_fail $case_num
+			exit
+		}
+	}
+        # read cpu0 register
+        incr case_num
+        send " x/1xw 0xffe05000\r"
+        expect {
+           -re "0xffe05000:\[\x20\t]+0xe5040501" {
+                case_pass $case_num
+                expect {
+                        "(gdb) " {
+                        }
+                }
+                }
+                timeout {
+                clean_host_gdb
+                case_fail $case_num
+                        exit
+                }
+        }
+        incr case_num
+	send "thread $CPU0_NUM\r"
+	expect {
+	  -re	"Switching to thread $CPU0_NUM" {
                 case_pass $case_num
 		expect {
 			"(gdb) " {
