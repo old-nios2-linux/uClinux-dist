@@ -84,35 +84,49 @@ while 1 {
    
    set timeout 5
    set found 0
-   spawn ps a
+   spawn /bin/sh
+   expect -re  "$sh_prompt"
+   send -s "ps a | grep ftp_test.exp | grep -v grep\r"
+   expect   "\r"
    while 1 {
       expect {
 	"ftp_test" {
 		incr found
-                send_log "ftp_test is running.\n"                
+                send_log "\nftp_test is running. Found is $found.\n"                
 	}
 	
-	"telnet_test" {
-		incr found
-                send_log "telnet_test is running.\n"
-	}
-
-	"ftp_test <defunct>" {
+	-re "defunct" {
 		set found 0
 		break
 	}
 	
-	"telnet_test <defunct>" {
-		set found 0
-		break
-	}
-
         timeout {
 	 	break
         }
       }
    }
    
+   expect -re  "$sh_prompt"
+   send -s "ps a | grep telnet_test.exp | grep -v grep\r"
+   expect "\r"
+   while 1 {
+      expect {
+	"telnet_test" {
+		incr found
+                send_log "\ntelnet_test is running. Found is $found .\n"                
+	}
+	
+	-re "defunct" {
+		set found 0
+		break
+	}
+	
+        timeout {
+	 	break
+        }
+      }
+   }
+
    if {$found == 2} {
 		set spawn_id $telnet_test_id
 		send -s "\3"
