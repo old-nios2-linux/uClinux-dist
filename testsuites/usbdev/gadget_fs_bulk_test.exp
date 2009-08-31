@@ -5,6 +5,7 @@
 #
 
 source  ../kernel_config.exp
+source  configs/config.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
@@ -32,7 +33,6 @@ source ../reboot_kernel.exp
 step "Start testing."
 sleep 5
 set case_num 0
-set test_interval [expr 3600*24]
 
 send "\r"
 expect -re $kernel_prompt

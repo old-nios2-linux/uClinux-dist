@@ -27,7 +27,7 @@ else
  if [ "$script_name" == "./build_qt_kernel.exp" ] ; then
      sleep 7200
  elif [ "$script_name" == "./gadget_fs_bulk_test.exp" ] || [ "$script_name" == "./gadget_fs_control_test.exp" ] || [ "$script_name" == "./gadget_zero_bulk_test.exp" ] || [ "$script_name" == "./gadget_zero_control_test.exp" ] ; then
-     sleep 86500
+     sleep 3800
  elif [ "$script_name" == "./ltp_auto_test.exp" ] ; then
      sleep 7200
  else
