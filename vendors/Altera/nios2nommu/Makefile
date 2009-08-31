@@ -72,4 +72,4 @@ clean::
 
 .PHONY: all clean image romfs
 
-include ../../Altera/vendor.mak
+include ../../$(CONFIG_VENDOR)/vendor.mak

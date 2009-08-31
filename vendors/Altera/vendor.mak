@@ -32,7 +32,7 @@ ifeq ($(CONFIG_INSTALL_ELF_SHARED_LIBS),y)
 		$(ROMFSINST) -d -p 755 $$i /lib/$$soname; \
 	done; \
 	if [ "$(CONFIG_INSTALL_ELF_TRIM_LIBS)" = "y" ] ; then \
-		$(ROOTDIR)/vendors/AnalogDevices/trim-libs.sh; \
+		$(ROOTDIR)/vendors/$(CONFIG_VENDOR)/trim-libs.sh; \
 	fi; \
 	if type $(CROSS_COMPILE)ldconfig >/dev/null 2>&1; then \
 		$(CROSS_COMPILE)ldconfig -r $(ROMFSDIR); \
