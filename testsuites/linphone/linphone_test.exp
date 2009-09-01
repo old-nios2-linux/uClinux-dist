@@ -149,11 +149,15 @@ set timeout 3000
 incr case_num
 while 1 {
 expect {
+        -re "COMM.*PID" {
+        set underrun_test_status 1
+        break
+        }
         "Underrun happened" {
         set underrun_test_status 1
         break
         }
-      -re  "Network is unreachable|Illegal instruction|Bus error" {
+       -re  "Network is unreachable|Illegal instruction|Bus error" {
         set underrun_test_status 1
         break
         }

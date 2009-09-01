@@ -177,7 +177,7 @@ while 1 {
      }
 }
 
-if { $board_type == "BF537-STAMP" } {
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
 
 	if { $TransRate > 4000 && $Throughput > 85 } {
 	
@@ -190,7 +190,29 @@ if { $board_type == "BF537-STAMP" } {
 	
 } elseif { $board_type == "BF533-STAMP" } {
 
-	if { $TransRate > 4000 && $Throughput > 55 } {
+	if { $TransRate > 3500 && $Throughput > 50 } {
+	
+                case_pass $case_num
+	
+	} else {
+                case_fail $case_num
+		exit
+		
+	}
+
+} elseif { $board_type == "BF526-EZKIT" } {
+
+	if { $TransRate > 3000 && $Throughput > 60 } {
+	
+                case_pass $case_num
+	
+	} else {
+                case_fail $case_num
+		exit
+		
+	}
+} else {
+	if { $TransRate > 2500 && $Throughput > 50 } {
 	
                 case_pass $case_num
 	
@@ -202,56 +224,6 @@ if { $board_type == "BF537-STAMP" } {
 
 }
 
-spawn ftp $targetip 
-while 1 {
-    expect {
-                "Name" { }
-                timeout { send_user "Failed first return\n"
-                        break }
-        }
-        send -s "root\r"
-        expect {
-                -re "\[Pp\]assword" { }
-                timeout { send_user "Failed first return\n"
-                        break }
-        }
-        send -s "uClinux\r"
-        expect {
-                "ftp>" { }
-                timeout { send_user "Failed first return\n"
-                        break }
-        }
-
-        send -s "cd /\r"
-        expect {
-                "ftp>" { }
-                timeout { send_user "Failed first return\n"
-                        break }
-        }
-
-        send -s "get netperf_tcp_rr\r"
-        expect {
-                "ftp>" { }
-                timeout { send_user "Failed first return\n"
-                        break }
-        }
-	
-	send -s "get netperf_tcp_stream\r"
-        expect {
-                "ftp>" { }
-                timeout { send_user "Failed first return\n"
-                        break }
-        }
-         
-	 send -s "bye\r"
-	 expect {
-                "Goodbye" { break }
-                timeout { send_user "Failed first return\n"
-                        break }
-         }
-	 
-   }
-   
 set spawn_id $netserver_id
 set timeout 3
 send -s "sudo pkill netserver_x86 \r"
