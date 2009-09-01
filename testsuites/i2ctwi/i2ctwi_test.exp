@@ -25,7 +25,7 @@ incr case_num
 sleep 5
 send "\r"
 
-send "insmod /twi_smbus_test.ko\r"
+send "modprobe twi_smbus_test\r"
 while 1 {
    expect {
       "PASS" {

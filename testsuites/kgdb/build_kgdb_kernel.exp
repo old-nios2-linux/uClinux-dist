@@ -31,16 +31,6 @@ log_file [log_file_name $argv0.$debug_port ]
 source  ../board_info.exp
 send_user "Starting $argv0\n"
 
-step "Apply kgdb patch."
-
-cd $uclinux_path/linux-2.6.x
-
-if { $core_config == "SMP" } {
-
-exec patch -p1  < ../bfin_patch/kgdb_patch/kgdb_smp_switch_master_cpu_linux-2.6.x.patch
-
-}
-
 cd $uclinux_path/testsuites
 
 step "Make config."
