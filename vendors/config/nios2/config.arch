@@ -15,7 +15,7 @@ ARCH    = nios2  # this is for the kernel
 ENDIAN  = little
 
 ifeq ($(CONFIG_MMU),y)
-CONFIGURE_HOST       := nios2-wrs-linux-gnu
+CONFIGURE_HOST       := nios2-linux-gnu
 CONFIGURE_SHARED_ENABLE := --enable-shared
 CONFIGURE_SHARED_WITH   := --with-shared
 else
