@@ -29,6 +29,9 @@ if [ -z "$libs" ] ; then
 fi
 cd lib
 
+if has libpthread.so.0 ${libs} ; then
+	libs=$(echo libgcc_s.so.1 ${libs})
+fi
 addlibs() {
 	newlibs=$( (echo $libs; scanelf -F'%n#f' -qR ${libs}) | sed 's:[, ]:\n:g' | sort -u)
 	newlibs=$(echo $newlibs)
