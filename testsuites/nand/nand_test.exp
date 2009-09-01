@@ -23,9 +23,9 @@ step "Mount modules"
 if { $board_type == "BF537-STAMP" } {
 
 incr case_num
-set timeout 5
+set timeout 30
 
-send -s "modprobe bfin_nand\r"
+send -s "modprobe plat_nand\r"
 while 1 {
     expect {
         -re "NAND device.*Creating .* MTD partitions" {
@@ -54,7 +54,7 @@ send -s "dmesg \r"
 while 1 {
     expect {
 
-       -re "\"NAND.*\".*(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*)\"\r\n(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*)\"\r\n" {
+        -nocase -re "\".*NAND.*\".*(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*)\"\r\n(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*)\"\r\n" {
                 set kernel_partition_address $expect_out(1,string)
                 set kernel_partition_name $expect_out(2,string)
                 set rootfs_partition_address $expect_out(3,string)
@@ -78,7 +78,7 @@ send -s "cat /proc/filesystems \r"
 while 1 {
     expect {
 
-        -re "yaffs" {
+        -re "ubifs" {
                 case_pass $case_num
 		expect ">"
                 break;
@@ -171,7 +171,7 @@ incr case_num
 step "Reading MTD "	
 set mtd_temp_result $TEST_FAIL
 set timeout 60
-send -s "mount -t yaffs2 /dev/mtdblock$nand_rootfs_num /mnt\n"
+send -s "mount -t ubifs /dev/mtdblock$nand_rootfs_num /mnt\n"
 while 1 {
     expect {
                                                                                                                                                              
@@ -192,8 +192,7 @@ while 1 {
     }
 }
    
-step "cp pwd to YAFFS."
-set yaffs_temp_result $TEST_FAIL
+step "cp pwd to FS."
 incr case_num
 
 set timeout 60
@@ -214,8 +213,7 @@ while 1 {
 
 sleep 1
 
-step "YAFFS Validating data integrity"
-set yaffs_temp_result $TEST_FAIL
+step "Validating data integrity"
 incr case_num
 
 set timeout 60
@@ -237,7 +235,7 @@ while 1 {
 }
 
 expect ">"
-puts "Writing YAFFS......\n"
+puts "Writing ......\n"
 
 incr case_num
 set timeout 60
@@ -318,9 +316,9 @@ expect  -re $kernel_prompt
 
 if { $board_type == "BF537-STAMP" } {
 incr case_num
-set timeout 5
+set timeout 15
 
-send -s "rmmod bfin_nand\r"
+send -s "rmmod plat_nand\r"
 while 1 {
     expect {
         -re $kernel_prompt {
@@ -342,9 +340,9 @@ while 1 {
 }
 
 incr case_num
-set timeout 10
+set timeout 30
 
-send -s "modprobe bfin_nand\r"
+send -s "modprobe plat_nand\r"
 while 1 {
     expect {
 
