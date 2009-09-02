@@ -2,7 +2,7 @@
 
 set -e
 
-has() { [[ " ${*:2} " == *" $1 "* ]] ; }
+has() { [[ " ${*:2} " == *" "$1" "* ]] ; }
 
 v=
 vecho() { [ -z "$v" ] || echo "$*" ; }
@@ -29,9 +29,6 @@ if [ -z "$libs" ] ; then
 fi
 cd lib
 
-if has libpthread.so.0 ${libs} ; then
-	libs=$(echo libgcc_s.so.1 ${libs})
-fi
 addlibs() {
 	newlibs=$( (echo $libs; scanelf -F'%n#f' -qR ${libs}) | sed 's:[, ]:\n:g' | sort -u)
 	newlibs=$(echo $newlibs)
@@ -40,6 +37,14 @@ addlibs() {
 	addlibs
 }
 addlibs
+
+# nptl like to dlopen() the libgcc_s.so library but not link against it,
+# so make sure we do not prune it if we might possibly need it
+if has "libpthread.so.*" ${libs} ; then
+	if ! has "libgcc_s.so.*" ${libs} ; then
+		libs="${libs} $(echo libgcc_s.so.*)"
+	fi
+fi
 
 (
 find . -maxdepth 1 -type l -printf '%P\n'
