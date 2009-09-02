@@ -31,23 +31,23 @@ endif
 romfs.shared.libs:
 ifeq ($(CONFIG_INSTALL_ELF_SHARED_LIBS),y)
 	set -e; \
-	t=`bfin-linux-uclibc-gcc $(CPUFLAGS) -print-file-name=libc.a`; \
+	t=`$(CROSS_COMPILE)gcc $(CPUFLAGS) -print-file-name=libc.a`; \
 	t=`dirname $$t`/../..; \
 	for i in $$t/lib/*so*; do \
 		i=`readlink -f "$$i"`; \
-		soname=`bfin-linux-uclibc-readelf -d "$$i" | sed -n '/(SONAME)/s:.*[[]\(.*\)[]].*:\1:p'`; \
+		soname=`$(CROSS_COMPILE)readelf -d "$$i" | sed -n '/(SONAME)/s:.*[[]\(.*\)[]].*:\1:p'`; \
 		$(ROMFSINST) -d -p 755 $$i /lib/$$soname; \
 	done; \
 	if [ "$(CONFIG_INSTALL_ELF_TRIM_LIBS)" = "y" ] ; then \
 		$(ROOTDIR)/vendors/AnalogDevices/trim-libs.sh; \
 	fi; \
-	if type bfin-linux-uclibc-ldconfig >/dev/null 2>&1; then \
-		bfin-linux-uclibc-ldconfig -r $(ROMFSDIR); \
+	if type $(CROSS_COMPILE)ldconfig >/dev/null 2>&1; then \
+		$(CROSS_COMPILE)ldconfig -r $(ROMFSDIR); \
 	fi
 endif
 ifeq ($(CONFIG_INSTALL_FLAT_SHARED_LIBS),y)
 	set -e; \
-	t=`bfin-uclinux-gcc $(CPUFLAGS) -mid-shared-library -print-file-name=libc`; \
+	t=`$(CROSS_COMPILE)gcc $(CPUFLAGS) -mid-shared-library -print-file-name=libc`; \
 	if [ -f $$t -a ! -h $$t ] ; then \
 		$(ROMFSINST) -p 755 $$t /lib/lib1.so; \
 	fi
@@ -249,7 +249,7 @@ MAKE_UIMAGE_ROMFS = \
 	set -e; \
 	$(OBJCOPY) -O binary -S $(IMAGE_KERNEL_BASE).$(1) $(IMAGE_KERNEL_BASE).bin; \
 	gzip -f9 $(IMAGE_KERNEL_BASE).bin; \
-	$(MKIMAGE) -A blackfin -O linux -T kernel \
+	$(MKIMAGE) -A $(ARCH) -O linux -T kernel \
 		-C gzip -a $(CONFIG_BOOT_LOAD) -e $(call KERNEL_ENTRY,$(1)) -n "Linux Kernel and $(1)" \
 		-d $(IMAGE_KERNEL_BASE).bin.gz $(IMAGE_UIMAGE_BASE).$(1); \
 	rm $(IMAGE_KERNEL_BASE).bin.gz
