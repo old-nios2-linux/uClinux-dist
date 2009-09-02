@@ -124,7 +124,7 @@ while 1 {
 
         -re "SoC AC97 Audio for the ADI BF5xx chip.*SND_BF5XX_AC97.*\\\[.*]" {
             if { $audio_dev == "audio_ad1980" || $audio_dev == "audio_ad1981b" } {
-                send "Y\r"
+                send "N\r"
             } else {
                 send "N\r"
             }
@@ -132,7 +132,7 @@ while 1 {
 
         -re "SoC AD1980/1 Audio support for BF5xx.*SND_BF5XX_SOC_AD1980.*\\\[.*]" {
             if { $audio_dev == "audio_ad1980" || $audio_dev == "audio_ad1981b" } {
-                send "Y\r"
+                send "N\r"
             } else {
                 send "N\r"
             }
@@ -140,7 +140,7 @@ while 1 {
 
         -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
             if { $board_type == "BF527-EZKIT" && $audio_dev == "audio_ad1981b" } {
-                send "1\r"
+                send "\r"
             } else {
                 send "\r"
             }
@@ -149,7 +149,7 @@ while 1 {
         -re "Support for frame buffer devices.*FB.*\\\[.*]" {
             if { $board_type == "BF527-EZKIT" && $audio_dev == "audio_ad1981b" } {
                 #ad1981b conflicts with bfin-t350mcqb on BF527-EZKIT
-                send "N\r"
+                send "\r"
             } else {
                 send "\r"
             }
