@@ -232,7 +232,7 @@ image.kernel.all: \
 
 ############################################################################
 #
-# Kernel targets (uImage)
+# Kernel targets (uImage/zImage)
 #
 
 LINUXBOOTDIR = $(ROOTDIR)/$(LINUXDIR)/arch/$(ARCH)/boot
@@ -261,15 +261,20 @@ ifeq ($(CONFIG_EXT2_FS),y)
 image.uimage.ext2: image.uimage.ext2.force
 endif
 
-.PHONY: image.zimage.initramfs
-image.zimage.initramfs.force:
+define MAKE_KERNEL_IMAGE
 	cp $(IMAGE_ROMFS_BASE).initramfs$(COMP_ROOTFS) $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio
 	CPPFLAGS="" CFLAGS="" LDFLAGS="" \
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXSRC) zImage
-	cp $(LINUXBOOTDIR)/zImage $(IMAGEDIR)/zImage$(COMP_KERN).initramfs$(COMP_ROOTFS)
+	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXSRC) $(1)$(COMP_KERN)
+	cp $(LINUXBOOTDIR)/$(1)$(COMP_KERN) $(IMAGEDIR)/$(2)$(COMP_KERN).initramfs$(COMP_ROOTFS)
 	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map$(COMP_KERN).initramfs$(COMP_ROOTFS)
 	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
 	$(STRIP) -g $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
+	ln -sf $(2)$(COMP_KERN).initramfs$(COMP_ROOTFS) $(IMAGEDIR)/$(2)
+endef
+
+.PHONY: image.zimage.initramfs image.zimage.initramfs.force
+image.zimage.initramfs.force:
+	$(call MAKE_KERNEL_IMAGE,zImage,zImage)
 	$(STRIP) -g $(IMAGEDIR)/zImage$(COMP_KERN).initramfs$(COMP_ROOTFS)
 
 .PHONY: image.zimage.initramfs.bz2 image.zimage.initramfs.bz2.force
@@ -293,16 +298,9 @@ ifeq ($(CONFIG_RD_LZMA),y)
 image.zimage.initramfs.lzma: image.zimage.initramfs.lzma.force
 endif
 
-.PHONY: image.uimage.initramfs
+.PHONY: image.uimage.initramfs image.uimage.initramfs.force
 image.uimage.initramfs.force:
-	cp $(IMAGE_ROMFS_BASE).initramfs$(COMP_ROOTFS) $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio
-	CPPFLAGS="" CFLAGS="" LDFLAGS="" \
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXSRC) vmImage$(COMP_KERN)
-	cp $(LINUXBOOTDIR)/vmImage$(COMP_KERN) $(IMAGE_UIMAGE_BASE)$(COMP_KERN).initramfs$(COMP_ROOTFS)
-	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map$(COMP_KERN).initramfs$(COMP_ROOTFS)
-	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
-	$(STRIP) -g $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
-	ln -sf uImage$(COMP_KERN).initramfs$(COMP_ROOTFS) $(IMAGE_UIMAGE_BASE)
+	$(call MAKE_KERNEL_IMAGE,vmImage,uImage)
 
 .PHONY: image.uimage.bz2.initramfs image.uimage.bz2.initramfs.force
 image.uimage.bz2.initramfs.force:
@@ -389,7 +387,7 @@ image.uimage.all: \
 	image.uimage.bz2.initramfs \
 	image.uimage.gz.initramfs \
 	image.uimage.lzma.initramfs
-image.uimage.all: \
+image.zimage.all: \
 	image.zimage.initramfs \
 	image.zimage.initramfs.bz2 \
 	image.zimage.initramfs.gz \
