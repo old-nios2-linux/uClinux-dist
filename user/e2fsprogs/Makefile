@@ -1,4 +1,4 @@
-VER = e2fsprogs-1.41.6
+VER = e2fsprogs-1.41.9
 URL = http://downloads.sourceforge.net/sourceforge/e2fsprogs/$(VER).tar.gz
 
 MAKE := $(MAKE) DVI=true MAKEINFO=true
