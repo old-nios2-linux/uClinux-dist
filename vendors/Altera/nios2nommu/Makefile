@@ -67,6 +67,7 @@ image::
 	$(MAKE) image.rootfs.all
 	$(MAKE) image.kernel.all
 	$(MAKE) image.uimage.all
+	$(MAKE) image.zimage.all
 
 clean::
 
