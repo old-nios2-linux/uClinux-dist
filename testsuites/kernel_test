@@ -186,7 +186,7 @@ if [ $BOARD_CONFIG = "BF537-STAMP-ADV7393" ] ; then
 
    AUTO_RUN_STATUS[2]="1"; AUTO_RUN_STATUS[9]="1"; AUTO_RUN_STATUS[10]="0"; AUTO_RUN_STATUS[11]="0"; AUTO_RUN_STATUS[12]="0"; AUTO_RUN_STATUS[51]="1"; AUTO_RUN_STATUS[56]="1"; AUTO_RUN_STATUS[78]="1"; AUTO_RUN_STATUS[$(( n + 10 ))]="1"
    ##add 1981b test here
-   AUTO_RUN_STATUS[$(( n + 5 ))]="1"
+   AUTO_RUN_STATUS[$(( n + 5 ))]="0"
    MANUAL_RUN_STATUS[19]="1"
 
 fi
@@ -258,7 +258,7 @@ if [ $BOARD_CONFIG = "BF533-STAMP-STD" ] ; then
 
    BOARD_TYPE=BF533-STAMP
 
-   AUTO_RUN_STATUS[57]="1"; AUTO_RUN_STATUS[43]="1"; AUTO_RUN_STATUS[$(( n + 3 ))]="1"; AUTO_RUN_STATUS[$(( n + 4 ))]="1"; AUTO_RUN_STATUS[$(( n + 5 ))]="1"; AUTO_RUN_STATUS[$(( n + 6 ))]="1"
+   AUTO_RUN_STATUS[57]="1"; AUTO_RUN_STATUS[43]="1"; AUTO_RUN_STATUS[$(( n + 3 ))]="1"; AUTO_RUN_STATUS[$(( n + 4 ))]="1"; AUTO_RUN_STATUS[$(( n + 5 ))]="0"; AUTO_RUN_STATUS[$(( n + 6 ))]="1"
    MANUAL_RUN_STATUS=( [0]="1" [1]="1" [2]="1" [3]="0" [4]="1" [5]="1" [6]="1" [7]="0" [8]="0" [9]="0" [10]="0" [11]="1" [12]="0" [13]="1" [14]="1" [15]="1" [16]="1" [17]="" [18]="0" [19]="0" [20]="0" [21]="0" [22]="1" [23]="1" [$(( n + 1 ))]="" [$(( n + 2 ))]="0" )
 fi
 
@@ -351,7 +351,7 @@ if [ $BOARD_CONFIG = "BF527-EZKIT-USBDEV" ] ; then
         MANUAL_RUN_STATUS[$(( n + i ))]="0"
     done
 
-    AUTO_RUN_STATUS[62]="1"; AUTO_RUN_STATUS[$(( n + 5 ))]="1"; AUTO_RUN_STATUS[$(( n + 12 ))]="1"; AUTO_RUN_STATUS[$(( n + 18 ))]="1"
+    AUTO_RUN_STATUS[62]="1"; AUTO_RUN_STATUS[$(( n + 5 ))]="0"; AUTO_RUN_STATUS[$(( n + 12 ))]="1"; AUTO_RUN_STATUS[$(( n + 18 ))]="1"
 
 fi
 
