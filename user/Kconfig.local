@@ -342,4 +342,7 @@ menu "Blackfin device drivers (Experimental)"
 config USER_BLACKFIN_DRV_TEA5764
 	bool "tea5764"
 
+config USER_BLACKFIN_DRV_TIMER_LATENCY
+	bool "bfin timer latency test"
+
 endmenu

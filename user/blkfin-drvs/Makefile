@@ -4,6 +4,7 @@ dir_  =
 dir_all = $(dir_y) $(dir_n) $(dir_)
 
 dir_$(CONFIG_USER_BLACKFIN_DRV_TEA5764)               += tea5764
+dir_$(CONFIG_USER_BLACKFIN_DRV_TIMER_LATENCY)               += timer_latency
 
 all romfs:
 	for i in $(dir_y)   ; do $(MAKE) -C $$i $@ || exit $$? ; done
