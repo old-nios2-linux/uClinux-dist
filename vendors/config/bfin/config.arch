@@ -23,6 +23,8 @@ CONFIGURE_HOST       := bfin-uclinux
 CONFIGURE_SHARED_ENABLE := --disable-shared
 CONFIGURE_SHARED_WITH   := --without-shared
 endif
+CROSS_COMPILE_SHARED_ELF  := bfin-linux-uclibc-
+CROSS_COMPILE_SHARED_FLAT := bfin-uclinux-
 CROSS_COMPILE        := $(CONFIGURE_HOST)-
 CROSS                := $(CROSS_COMPILE)
 KERNEL_CROSS_COMPILE := bfin-uclinux-
