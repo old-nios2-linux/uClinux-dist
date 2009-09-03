@@ -41,7 +41,7 @@ set timeout 10
 send "dmesg |grep 7183\r"
 while 1 {
     expect {
-        -re "i2c driver ready.*V4L driver Blackfin CMOS Camera now ready.*$kernel_prompt" {
+        -re "V4L driver Blackfin CMOS Camera now ready.*i2c driver ready.*$kernel_prompt" {
             case_pass $case_num
             break
         }
