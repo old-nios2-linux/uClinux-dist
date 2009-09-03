@@ -46,7 +46,7 @@ incr case_num
 send "dmesg|grep -i sd\r"
 while 1 {
     expect {
-        -re "sda: sda1.*Attached SCSI disk.*$kernel_prompt" {
+        -re "sda1.*Attached SCSI disk.*$kernel_prompt" {
             case_pass $case_num
             break
         }
