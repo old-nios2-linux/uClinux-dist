@@ -20,7 +20,7 @@ step "Start testing."
 set case_num 0
 
 set timeout 10
-sleep 5
+sleep 15
 send "\r"
 expect -re $kernel_prompt
 
