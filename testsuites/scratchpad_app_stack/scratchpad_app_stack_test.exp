@@ -43,7 +43,7 @@ while 1 {
 }
 
 step "\n"
-spawn bfin-uclinux-flthdr -u -s 3500 helloworld
+spawn bfin-uclinux-flthdr -u -s 2000 helloworld
 while 1 {
    expect {
 
