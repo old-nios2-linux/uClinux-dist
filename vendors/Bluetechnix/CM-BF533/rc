@@ -1,4 +1,4 @@
-hostname blackfin
+#hostname blackfin
 mount -t proc proc /proc
 mount -t ramfs ramfs /var
 mount -t sysfs sysfs /sys
@@ -16,6 +16,6 @@ mkdir /var/tmp /var/log /var/run /var/lock
 #dhcpcd &
 #ifconfig eth0 10.100.4.251 up
 ifconfig lo 127.0.0.1
-inetd &
+#inetd &
 #cat /etc/issue
 cat /etc/motd
