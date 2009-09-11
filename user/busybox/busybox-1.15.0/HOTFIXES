@@ -3,3 +3,4 @@ busybox-1.15.0-httpd.patch
 busybox-1.15.0-hush.patch
 busybox-1.15.0-inetd.patch
 busybox-1.15.0-modprobe.patch
+busybox-1.15.0-unlzma.patch
