@@ -1,3 +1,4 @@
 busybox-1.15.0-unpack.patch
 busybox-1.15.0-httpd.patch
 busybox-1.15.0-hush.patch
+busybox-1.15.0-inetd.patch
