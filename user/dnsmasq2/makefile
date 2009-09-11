@@ -1,11 +1,4 @@
-all: 
-	make -C src all
+VER = dnsmasq-2.35
 
-clean :
-	make -C src clean
-
-install : 
-	make -C src install
-
-romfs:
-	make -C src romfs
+all clean install romfs: 
+	make -C $(VER)/src $@
