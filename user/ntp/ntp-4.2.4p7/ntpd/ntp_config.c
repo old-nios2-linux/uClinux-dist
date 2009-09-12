@@ -2436,7 +2436,18 @@ do_resolve_internal(void)
 #ifndef SYS_WINNT
 	(void) signal_no_reset(SIGCHLD, catchchild);
 
-#ifndef SYS_VXWORKS
+#if !defined(HAVE_FORK) && defined(HAVE_PTHREAD_CREATE)
+	/* The system lacks fork() like no-mmu Linux, so use threads */
+	{
+		pthread_t tid;
+		fflush(stdout);
+		i = pthread_create(&tid, NULL, (void *)ntp_intres, NULL);
+		if (i) {
+			msyslog(LOG_ERR, "pthread_create() failed, can't start ntp_intres: %m");
+			abort_resolve();
+		}
+	}
+#elif !defined(SYS_VXWORKS)
 	/* the parent process will write to the pipe
 	 * in order to wake up to child process
 	 * which may be waiting in a select() call

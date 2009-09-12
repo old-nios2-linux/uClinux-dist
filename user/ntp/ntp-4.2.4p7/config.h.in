@@ -553,6 +553,9 @@
 /* Are function prototypes OK? */
 #undef HAVE_PROTOTYPES
 
+/* Do we have pthread support */
+#undef HAVE_PTHREAD_CREATE
+
 /* Define to 1 if you have the `pututline' function. */
 #undef HAVE_PUTUTLINE
 

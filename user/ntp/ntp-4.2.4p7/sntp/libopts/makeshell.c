@@ -506,7 +506,7 @@ textToVariable( tOptions* pOpts, teTextTo whichVar, tOptDesc* pOD )
       static char const*  apzTTNames[] = { TEXTTO_TABLE };
 #   undef _TT_
 
-#if defined(__windows__) && !defined(__CYGWIN__)
+#if defined(__windows__) && !defined(__CYGWIN__) || !defined(HAVE_FORK)
     printf( "%1$s_%2$s_TEXT='no %2$s text'\n",
             pOpts->pzPROGNAME, apzTTNames[ whichVar ]);
 #else
@@ -1036,7 +1036,7 @@ openOutput( char const* pzFile )
 void
 genshelloptUsage( tOptions*  pOpts, int exitCode )
 {
-#if defined(__windows__) && !defined(__CYGWIN__)
+#if defined(__windows__) && !defined(__CYGWIN__) || !defined(HAVE_FORK)
     optionUsage( pOpts, exitCode );
 #else
     /*

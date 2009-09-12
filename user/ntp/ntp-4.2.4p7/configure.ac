@@ -403,8 +403,15 @@ dnl so only use one of them.  Linux (glibc-2.1.2 and -2.2.2, at least)
 dnl does Strange Things with extra processes using the Posix-compatibility
 dnl real-time library, so we don't want to use it.
 
+AC_CHECK_FUNC(fork)
+
 case "$host" in
- *-*-*linux*) ;;
+ *-*-*linux*)
+    if test "x$ac_cv_func_fork" = "xno"; then
+        AC_SEARCH_LIBS([pthread_create], [pthread],
+            AC_DEFINE(HAVE_PTHREAD_CREATE, ,[Do we have pthread support]))
+    fi
+    ;;
  *)
     AC_CHECK_LIB(rt, sched_setscheduler, ,
 	AC_CHECK_LIB(posix4, sched_setscheduler))
