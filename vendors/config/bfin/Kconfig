@@ -78,4 +78,19 @@ config BLACKFIN_CHECK_POINTER
 config BLACKFIN_INSTALL_UCLINUX_CONFIG
 	bool "install uClinux-dist .config into /root"
 
+config USE_CCACHE
+	bool "use ccache to speed up builds"
+	default y
+	help
+	  ccache is a compiler cache that can greatly speed up builds of
+	  the distribution and kernel.  If you have ccache installed, then
+	  saying Y here will enable support for it.  It is safe to say Y
+	  even if you don't have it installed as detection will be handled
+	  automatically.
+
+	  You can run this in the top level to see how well you're doing:
+	  CCACHE_DIR=ccache ccache -s
+
+	  http://ccache.samba.org/
+
 endmenu

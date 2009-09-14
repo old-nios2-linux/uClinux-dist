@@ -23,7 +23,7 @@ if [ -d "${STAGEDIR}" ] ; then
 			[ -d "${STAGEDIR}${p}" ] && set -- "$@" -isystem "${STAGEDIR}${p}"
 		done
 
-		if [ -n "${UCLINUX_USE_CCACHE}" ] ; then
+		if [ "${UCLINUX_USE_CCACHE}" != "no" ] && [ "${CONFIG_USE_CCACHE}" = "y" ] ; then
 			if ccache -V > /dev/null 2>&1 ; then
 				export CCACHE_DIR="${ROOTDIR}/ccache"
 				ccache="ccache"
@@ -32,7 +32,7 @@ if [ -d "${STAGEDIR}" ] ; then
 	fi
 	if ${l} ; then
 		for p in /usr/local/lib /usr/lib /lib ; do
-			[ -d "${STAGEDIR}${p}" ] && set -- "$@" -L "${STAGEDIR}${p}" 
+			[ -d "${STAGEDIR}${p}" ] && set -- "$@" -L "${STAGEDIR}${p}"
 			case "$@" in
 				"-c "*|*" -c "*|*" -c") ;;
 				"-E "*|*" -E "*|*" -E") ;;
