@@ -1,4 +1,4 @@
-VER = libpng-1.2.38
+VER = libpng-1.2.40
 URL = http://downloads.sourceforge.net/sourceforge/libpng/$(VER).tar.lzma
 
 include $(ROOTDIR)/tools/autotools.mk
