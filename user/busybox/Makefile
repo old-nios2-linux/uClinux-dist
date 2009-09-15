@@ -1,4 +1,4 @@
-VER = busybox-1.15.0
+VER = busybox-1.15.1
 URL = http://busybox.net/downloads/$(VER).tar.bz2
 
 export KBUILD_OUTPUT = $(ROOTDIR)/user/busybox/build-$(VER)
@@ -11,7 +11,10 @@ all: build-$(VER)/.config depmod.pl
 # changed.  this will save time on pointless recompiling/relinking.
 build-$(VER)/.config: $(ROOTDIR)/config/.config
 	mkdir -p build-$(VER)
-	sed -n -e '/CONFIG_USER_BUSYBOX_/s:CONFIG_USER_BUSYBOX_:CONFIG_:p' $< > $@.uclinux-dist.new
+	sed -n \
+		-e '/_CROSS_COMPILER_PREFIX=/s:=.*:="$(CROSS_COMPILE)":' \
+		-e '/CONFIG_USER_BUSYBOX_/s:CONFIG_USER_BUSYBOX_:CONFIG_:p' \
+		$< > $@.uclinux-dist.new
 	set -e ; \
 	if [ ! -e $@ ] || ! cmp -s $@.uclinux-dist.new $@.uclinux-dist.old ; then \
 		cp $@.uclinux-dist.new $@.uclinux-dist.old ; \
