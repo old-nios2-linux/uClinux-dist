@@ -2299,6 +2299,9 @@ config USER_PPTP_CLIENT_PPTP_CALLMGR
 config USER_PROFTPD_PROFTPD
 	bool "proftpd"
 
+config USER_PTPD_PTPD
+	bool "ptpd"
+
 config USER_QUAGGA_ZEBRA_ZEBRA
 	bool "quagga"
 	help

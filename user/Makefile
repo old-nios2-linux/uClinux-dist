@@ -312,6 +312,7 @@ dir_$(CONFIG_USER_PROCPS_VMSTAT)            += procps
 dir_$(CONFIG_USER_PROCPS_W)                 += procps
 dir_$(CONFIG_USER_PROCPS_WATCH)             += procps
 dir_$(CONFIG_USER_PROFTPD_PROFTPD)          += proftpd
+dir_$(CONFIG_USER_PTPD_PTPD)                += ptpd
 dir_$(CONFIG_USER_PYTHON_PYTHON)            += python
 dir_$(CONFIG_USER_QSPITEST_TEST)            += qspitest
 dir_$(CONFIG_USER_QSPITEST_RX)              += qspitest
