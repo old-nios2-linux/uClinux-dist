@@ -3,5 +3,6 @@ all: src/Makefile
 clean:
 	$(MAKE) -C src clean
 romfs:
-	$(MAKE) -C src romfs
+	echo "installing ptpd"
+	$(ROMFSINST) src/ptpd /bin/$(PROG)
 .PHONY: all clean romfs

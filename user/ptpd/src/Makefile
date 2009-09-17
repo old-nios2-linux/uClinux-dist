@@ -22,8 +22,5 @@ $(PROG): $(OBJ)
 
 $(OBJ): $(HDR)
 
-romfs:
-	echo "installing ptpd"
-	$(ROMFSINST) /bin/$(PROG)
 clean:
 	$(RM) $(PROG) $(OBJ)
