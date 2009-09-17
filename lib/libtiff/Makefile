@@ -1,10 +1,11 @@
-VER = tiff-4.0.0beta3
+VER = tiff-4.0.0beta4
+URL = ftp://ftp.remotesensing.org/pub/libtiff/$(VER).tar.gz
 
 include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
-	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libtiff.so.5 /usr/lib/
-	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libtiffxx.so.5 /usr/lib/
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libtiff.so.5 /usr/lib/libtiff.so.5
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libtiffxx.so.5 /usr/lib/libtiffxx.so.5
 
 	$(ROMFSINST) -d -e CONFIG_LIB_TIFF_EXAMPLES $(STAGEDIR)/usr/bin/tiffcp /usr/bin/tiffcp
 	$(ROMFSINST) -d -e CONFIG_LIB_TIFF_EXAMPLES $(STAGEDIR)/usr/bin/fax2ps /usr/bin/fax2ps
