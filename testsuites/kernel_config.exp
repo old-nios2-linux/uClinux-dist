@@ -1,5 +1,6 @@
 #!/usr/bin/expect
 
+source  ../board_info.exp
 
 # directory and file locations
 
@@ -47,8 +48,8 @@ set HAVE_JFFS2_IMAGE     0
 set HAVE_KERNEL_ONLY_IMAGE     0
 set HAVE_ROMFS_IMAGE     0
 
-set def_uart_port [ exec grep  CONFIG_SERIAL_BFIN_UART.*=y $uclinux_path/linux-2.6.x/.config | head -1 | awk  -F= {{print $1}} ] 
-set def_uart_port [ string index $def_uart_port end ] 
+set def_uart_port [ exec grep  CONFIG_SERIAL_BFIN_UART.*=y $uclinux_path/linux-2.6.x/arch/blackfin/configs/$board_type\_defconfig | head -1 | awk  -F= {{print $1}} ]
+set def_uart_port [ string index $def_uart_port end ]
 
 set bootargs_param0  "root=/dev/mtdblock0 rw earlyprintk=serial,uart$def_uart_port,$baud_rate console=ttyBF$def_uart_port,$baud_rate"
 # For linux mount jffs2 as rootfs, which need mtd ext2 support.
