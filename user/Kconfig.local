@@ -86,6 +86,8 @@ config DYNTICK_TEST
 	bool "Dynamic Tick Test"
 config BFIN_DMA
         bool "bfin-dma test"
+config XIP_TEST
+        bool "xip test"
 endmenu
 
 

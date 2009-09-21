@@ -17,8 +17,6 @@ if { $argc < 2} {
     exit
 }
 
-set HAVE_ROMFS_IMAGE 1
-
 cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
@@ -40,20 +38,40 @@ while 1 {
             send "y\r"
         }
 
+        -re "Initial RAM filesystem and RAM disk.*BLK_DEV_INITRD.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Detect flash chips by Common Flash Interface.*MTD_CFI.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Support for AMD.*flash chips.*MTD_CFI_AMDSTD.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Support for ROM chips in bus mapping.*MTD_ROM.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "ROM file system support.*ROMFS_FS.*\\\[.*]" {
             send "Y\r"
+        }
+
+        -re "RomFS backing stores.* (\[0-9]+). MTD-backed ROM file system support.*choice.*\\\[.*]" {
+            send "$expect_out(1,string)\r"
         }
 
         -re "Enable shared FLAT support \\\(BINFMT_SHARED_FLAT\\\).*\\\[././.]" {
             send "Y\r"
         }
 
-        -re "Generic uClinux RAM/ROM filesystem support \\\(MTD_UCLINUX\\\).*\\\[./././.]" {
+        -re "xip test.*XIP_TEST.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -re "Build bit vector.*LIB_BITVECTOR.*\\\[.*]" {
-            send "N\r"
         }
 
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
@@ -64,46 +82,6 @@ while 1 {
             } else {
                 send "4\r"
             }
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .01
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
-spawn make config
-while 1 {
-    expect {
-        -re "AnalogDevices Products.* (\[0-9]+). $board_type.*choice.*\\\[.*]" {
-            send "$expect_out(1,string)\r"
-        }
-
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -re "MTD-based ROM file system support.*ROMFS_MTD_FS.*\\\[.*]" {
-            send "Y\r"
         }
 
         "\\\(*) \\\[*]" {

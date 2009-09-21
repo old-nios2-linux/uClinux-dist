@@ -1629,7 +1629,8 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
             ./xip_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
         fi
 
-        cp $UCLINUX_DIST_PATH/images/uImage.romfs $THIS_LOG/uImage.romfs.xip.$format
+        cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.xip.$format
+        cp $UCLINUX_DIST_PATH/images/img.romfs $THIS_LOG/img.romfs.$format
         cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.xip.$format
         mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_kernel_log $THIS_LOG/build_xip_${format}_kernel_log
         mv $UCLINUX_DIST_TESTSUITES/xip/xip_test_log $THIS_LOG/xip_${format}_test_log

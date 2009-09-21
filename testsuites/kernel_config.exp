@@ -35,7 +35,6 @@ set compressed_kernel_only_image  vmImage
 set boot_image uImage
 set kernel_and_ext2_image   linux.ext2
 set kernel_and_cramfs_image linux.cramfs
-set kernel_and_romfs_image  uImage.romfs
 
 set compressed_kernel_and_ext2_image   uImage.ext2
 set compressed_kernel_and_cramfs_image uImage.cramfs  
@@ -46,7 +45,6 @@ set yaffs_rootfs_image   rootfs.yaffs
 set yaffs2_rootfs_image  rootfs.yaffs2
 set HAVE_JFFS2_IMAGE     0
 set HAVE_KERNEL_ONLY_IMAGE     0
-set HAVE_ROMFS_IMAGE     0
 
 set def_uart_port [ exec grep  CONFIG_SERIAL_BFIN_UART.*=y $uclinux_path/linux-2.6.x/arch/blackfin/configs/$board_type\_defconfig | head -1 | awk  -F= {{print $1}} ]
 set def_uart_port [ string index $def_uart_port end ]

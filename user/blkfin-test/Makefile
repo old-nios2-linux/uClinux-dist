@@ -37,6 +37,7 @@ dir_$(CONFIG_SIMPLE_GPIO_TEST)              += simple-gpio-test
 dir_$(CONFIG_FIXED_CODE_TEST)               += fixed_code_test
 dir_$(CONFIG_DYNTICK_TEST)                  += dyntick-test
 dir_$(CONFIG_BFIN_DMA)                      += bfin-dma
+dir_$(CONFIG_XIP_TEST)                      += xip_test
 
 all romfs:
 	for i in $(dir_y)   ; do $(MAKE) -C $$i $@ || exit $$? ; done

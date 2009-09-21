@@ -20,8 +20,31 @@ source ../spawn_kermit.exp
 
 step "Start testing."
 
+set romfs_image     img.romfs
+set max_image_size  0x4FFFF
+set end_addr [format "%08x" [expr 0x$rootfs_start_addr + $max_image_size]]
 set case_num 0
+
 incr case_num
+send_user "$uclinux_path/user/genromfs/genromfs -f ../../images/img.romfs -d $uclinux_path/user/blkfin-test/xip_test\n"
+if [ catch {exec $uclinux_path/user/genromfs/genromfs -f ../../images/img.romfs -d $uclinux_path/user/blkfin-test/xip_test} ] {
+    send_user "FAIL: generate romfs\n"
+    case_fail $case_num
+} else {
+    send_user "PASS: generate romfs\n"
+    case_pass $case_num
+}
+
+incr case_num
+send_user "cp $uclinux_path/images/img.romfs /tftpboot\n"
+if [ catch {exec cp $uclinux_path/images/img.romfs /tftpboot} ] {
+    send_user "FAIL: copy img.romfs to /tftpboot\n"
+    case_fail $case_num
+} else {
+    send_user "PASS: copy img.romfs to /tftpboot\n"
+    case_pass $case_num
+}
+
 
 send_user "Try to figure out if we are in u-boot or the kernel"
 set where_are_we 0
@@ -45,13 +68,13 @@ expect {
 
 if { $where_are_we == "uboot" } {
     set timeout 50
-    expect ">"
+    expect -re $uboot_prompt
     send_user "sending reset\n"
     send "reset\r"
 } else {
     if { $where_are_we == "kernel" } {
         set timeout 60
-        expect ">"
+        expect -re $kernel_prompt
         send_user "sending reboot\n"
         send "reboot\r"
     } else {
@@ -71,7 +94,7 @@ while 1 {
             send "\r"
         }
 
-        ">" {
+        -re $uboot_prompt {
             send_user "successful reset attemp\n"
             break
         }
@@ -83,106 +106,126 @@ while 1 {
     }
 }
 
-if { $board_type == "BF548-EZKIT" || $board_type == "BF526-EZBRD" } {
-    send -s "set bootargs root=mtd3 rootfstype=romfs ro console=ttyBF0,57600\r"
+incr case_num
+set timeout 20
+send -s "tftpboot 0x1000000 $romfs_image\r"
+while 1 {
+    expect {
+        -re "Bytes transferred = \[0-9]+ \\\((\[0-9a-fA-F]+) hex\\\).*$uboot_prompt" {
+            set image_size $expect_out(1,string)
+            send_user "Image size is $image_size\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "ERROR: Uboot locked up during tftp\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 80
+send -s "protect off 0x$rootfs_start_addr 0x$end_addr\r"
+while 1 {
+    expect {
+        -re "Un-Protected.*$uboot_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "ERROR: unprotect failed\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 240	
+send -s "erase 0x$rootfs_start_addr 0x$end_addr\r"
+while 1 {
+    expect {
+        -re "Erased.*$uboot_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "ERROR: erase failed\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 60
+send -s "cp.b 0x1000000 $rootfs_start_addr 0x$image_size\r"
+while 1 {
+    expect {
+        -re "done.*$uboot_prompt" {
+            case_pass $case_num 
+            break
+        }
+        timeout {
+            send_user "ERROR: cp failed\n"
+            case_fail $case_num
+        }
+    }
+}
+
+
+step "Reboot the kernel."
+# To add following line here to indicate that if the bootargs is different,
+# it could be set here. If the bootargs value is 0, it needn't be stated,
+# for it is the default value.
+# set bootargs  $bootargs_param0
+source ../reboot_kernel.exp
+sleep 10
+send "\r"
+expect -re $kernel_prompt
+
+incr case_num
+set timeout 5
+send "mount -t romfs /dev/mtdblock2 /mnt\r"
+while 1 {
+    expect {
+        -re "\[f]Fail|\[e]Error|mount:" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 5
+send "/mnt/xip_test\r"
+while 1 {
+    expect {
+        -re "pf is 0x(\[0-9a-f]+)!\r\n$kernel_prompt" {
+            set func_addr $expect_out(1,string)
+            send_user "Function address is $func_addr\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+if { $func_addr > $rootfs_start_addr && $func_addr < $end_addr } {
+    send_user "Function address 0x$func_addr is in romfs region: 0x$rootfs_start_addr - 0x$end_addr\n"
+    case_pass $case_num
 } else {
-    send -s "set bootargs root=mtd0 rootfstype=romfs ro console=ttyBF0,57600\r"
+    send_user "Function address 0x$func_addr is not in romfs region: 0x$rootfs_start_addr - 0x$end_addr\n"
+    case_fail $case_num
 }
-expect ">"
-
-send -s "tftpboot 0x1000000 $kernel_and_romfs_image\r"
-while 1 {
-    expect {
-        "#" {
-            expect ">"
-            break
-        }
-        timeout {
-            puts "Fail tftp"
-            break
-        }
-    }
-}
-
-send -s "bootm\r"
-
-set timeout 180
-while 1 {
-    expect {
-        -re "Kernel panic" {
-            puts "kernel panic detected... "
-            case_fail $case_num
-        }
-
-        -re "Sash command shell.*/> " {
-            puts "successful boot attempt"
-            break
-        }
-
-         -re $kernel_prompt {
-            puts "successful boot attempt"
-            break
-        }
-
-        -re "Linux version (.*) " {
-            set linux_version $expect_out(1,string)
-        }
-
-# Look for gcc version N.N[.N[.N]]
-        -re "gcc version (\[0-9](\.\[0-9]+)+)" {
-            set gcc_version [lindex $expect_out(0,string) 2]
-        }
-
-# Look for text followed by 1 or more spaces or tabs
-# followed by = followed by 1 or more spaces or tabs
-# followed by (0xNNNNNN-0xNNNNNN)
-        -re "text\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_text $expect_out(1,string)
-        }
-
-        -re "data\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_data $expect_out(1,string)
-        }
-
-        -re "bss\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_bss $expect_out(1,string)
-        }
-
-        -re "rootfs\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_rootfs $expect_out(1,string)
-        }
-
-# Note that here we're looking for zero or 1 space. Doh!
-        -re "stack\[\x20\t]?=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_stack $expect_out(1,string)
-        }
-
-        -re "\[Ii]nstruction \[Cc]ache \[Ee]nabled" {
-            #set instruction_cache_boot_flag $CACHE_ENABLED
-        }
-
-        -re "\[Ii]nstruction \[Cc]ache \[Dd]isabled" {
-            #set instruction_cache_boot_flag $CACHE_DISABLED
-        }
-
-        -re "\[Dd]ata \[Cc]ache \[Ee]nabled" {
-            #set data_cache_boot_flag $CACHE_ENABLED
-        }
-
-        -re "\[Dd]ata \[Cc]ache \[Dd]isabled" {
-            #set data_cache_boot_flag $CACHE_DISABLED
-        }
-
-        timeout {
-            puts "failed boot attempt"
-            case_fail $case_num
-        }
-    }
-}
-
-sleep 5
-
-case_pass $case_num
 
 all_pass
 
