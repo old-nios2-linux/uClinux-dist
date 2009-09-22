@@ -8,7 +8,7 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
-set ttyBFdev /dev/ttyBF0
+set ttyBFdev /dev/ttyBF$def_uart_port
 set target_file aaa
 set host_file bbb
 set save_file ccc

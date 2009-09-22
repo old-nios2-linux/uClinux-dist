@@ -41,19 +41,19 @@ set ttydev_for_testcase_use $ttydev
 
 if {  $port_type== "sport_uart" } {
 
-set bootargs             $bootargs_param7
 set ttyBFdev /dev/ttySS0
 
 } elseif { $port_type== "serial_uart" } {
 
 if { $board_type == "BF527-EZKIT" } {
-set bootargs             $bootargs_param8
 set ttyBFdev /dev/ttyBF0
+} elseif { $board_type == "BF548-EZKIT" } {
+set ttyBFdev /dev/ttyBF3
 } else {
-set bootargs             $bootargs_param7
 set ttyBFdev /dev/ttyBF1
 }
 }
+set bootargs             $bootargs_param7
 
 puts "port_type $port_type ttydev_for_testcase_use $ttydev_for_testcase_use"
 
