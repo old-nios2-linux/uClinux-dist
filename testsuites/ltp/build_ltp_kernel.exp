@@ -91,7 +91,7 @@ while 1 {
             if { $high_res_timer_preempt == 1 } {
                 send "Y\r"
             } else {
-                send "\r"
+                send "N\r"
             }
         }
 
