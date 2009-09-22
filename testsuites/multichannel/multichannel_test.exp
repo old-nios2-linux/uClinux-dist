@@ -5,6 +5,13 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
+if { $argc < 2} {
+    puts "Please input: board_type, audio_dev"
+    puts "audio_dev: audio_ad1836, audio_ad1938"
+    exit
+}
+set audio_dev [lindex $argv 1]
+
 step "Spawn kermit"
 source ../spawn_kermit.exp
 
@@ -21,54 +28,28 @@ expect -re $kernel_prompt
 step "Start testing"
 set case_num 0
 
-set timeout 30
+if { $audio_dev == "audio_ad1836" } {
+    set channel_num 6
+} elseif { $audio_dev == "audio_ad1938" } {
+    set channel_num 8
+}
+set test_file ${channel_num}_channels.wav
+
+
+set timeout 90
 incr case_num
-if [ catch {exec rcp six_channels.wav root@$targetip:/} ] {
-    send_user "\nfail to copy six_channels.wav\n"
+send_user "rcp $user/download/$test_file root@$targetip:/\n"
+if [ catch {exec rcp $user/download/$test_file root@$targetip:/} ] {
+    send_user "\nfail to copy $test_file\n"
     case_fail $case_num
 } else {
     case_pass $case_num
 }
 
-set timeout 5
-incr case_num
-send "dmesg |grep -i -c AD1836\r"
-while 1 {
-    expect {
-        -re "AD1836\r\n\[1-9]" {
-            set device_arg ""
-            case_pass $case_num
-            break
-        }
-        -re "AD1836\r\n0" {
-            send "dmesg |grep -i -c AD1980\r"
-            while 1 {
-                expect {
-                    -re "AD1980\r\n\[1-9]" {
-                        set device_arg "-D plug:surround51"
-                        case_pass $case_num
-                        break
-                    }
-                    -re "AD1980\r\n0" {
-                        case_fail $case_num
-                    }
-                    timeout {
-                        case_fail $case_num
-                    }
-                }
-            }
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
-
 set count_under_run 0
 set timeout 60
 incr case_num
-send "speaker-test $device_arg -c 6\r"
+send "speaker-test -c $channel_num\r"
 while 1 {
     expect {
         -re "TUV|UVF|TU|UV|VF" {
@@ -102,14 +83,14 @@ sleep 5
 
 set timeout 30
 incr case_num
-send "aplay $device_arg six_channels.wav;aplay $device_arg six_channels.wav;aplay $device_arg six_channels.wav\r"
+send "aplay $test_file;aplay $test_file;aplay $test_file\r"
 while 1 {
     expect {
         -re "TUV|UVF|TU|UV|VF" {
             incr count_under_run
             continue
         }
-        -re "Channels 6.*Channels 6.*Channels 6.*$kernel_prompt" {
+        -re "Channels $channel_num.*Channels $channel_num.*Channels $channel_num.*$kernel_prompt" {
             case_pass $case_num
             break
         }
