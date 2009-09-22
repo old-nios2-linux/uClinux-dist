@@ -104,7 +104,7 @@ while 1 {
         }
 
         -re "Initial kernel command string.*CMDLINE.*\\\[(.*)]" {
-            send -s "$expect_out(1,string) kgdboe=@10.100.4.50/,@10.100.4.174/\r"
+            send -s "console=ttyBF$def_uart_port,57600 kgdboe=@10.100.4.50/,@10.100.4.174/\r"
          }
 
          -re "Blackfin On-Chip Watchdog Timer.*BFIN_WDT.*\\\[.*]" {
@@ -179,9 +179,9 @@ while 1 {
  
          -re "Initial kernel command string.*CMDLINE.*\\\[(.*)]" {
             if { $board_type == "BF548-EZKIT" || $board_type == "BF537-STAMP" } {
-            send -s "$expect_out(1,string) kgdboc=ttyBF1,57600n8\r"
+            send -s "console=ttyBF$def_uart_port,57600 kgdboc=ttyBF1,57600n8\r"
             } elseif { $board_type == "BF527-EZKIT" } {
-            send -s "console=ttyBF1,57600 kgdboc=ttyBF0,57600n8\r"
+            send -s "console=ttyBF$def_uart_port,57600 kgdboc=ttyBF0,57600n8\r"
             }
          }
 
