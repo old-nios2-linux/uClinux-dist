@@ -6,3 +6,4 @@ busybox-1.15.0-modprobe.patch
 busybox-1.15.0-unlzma.patch
 busybox-1.15.1-ash.patch
 busybox-1.15.1-dd.patch
+busybox-1.15.1-sed.patch
