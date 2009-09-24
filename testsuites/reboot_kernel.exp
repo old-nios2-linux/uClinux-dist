@@ -93,7 +93,7 @@ if { $ram_size <= 32 } {
 
 if { $boot_image == "linux" } {
          set bootcmd bootelf
-   } elseif { $boot_image == "uImage" } {
+   } elseif { $boot_image == "uImage" || $boot_image == "vmImage" } {
          set bootcmd bootm
 }
 send -s "tftpboot $bootaddr $boot_image\r"
