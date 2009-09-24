@@ -18,34 +18,6 @@ set TEST_FAIL               "fail"
 
 set case_num 0
 
-step "Mount modules"
-
-if { $board_type == "BF537-STAMP" } {
-
-incr case_num
-set timeout 30
-
-send -s "modprobe plat_nand\r"
-while 1 {
-    expect {
-        -re "NAND device.*Creating .* MTD partitions" {
-		expect ">"
-                case_pass $case_num
-                break;
-        }
-
-        "No | error" {
-                case_fail $case_num
-                exit
-        }
-
-        timeout {
-                case_fail $case_num
-		exit
-        }
-    }
-}
-}  
 
 step "Locate the partition."
 incr case_num
@@ -137,15 +109,32 @@ exit
 
 incr case_num
 
-step "Erase MTD "
-set mtd_temp_result $TEST_FAIL
-set timeout 180
-send -s "flash_eraseall /dev/mtd$nand_rootfs_num\r"
+step "Detect UBI "
+set timeout 80
+send -s "ubinfo\r"
 while 1 {
     expect {
 	
-	 -re $kernel_prompt {
-		set mtd_temp_result $TEST_PASS
+	 -re "UBI control device major/minor.*$kernel_prompt" {
+                case_pass $case_num
+		break
+	}
+
+	timeout {
+                case_fail $case_num
+		exit
+	}
+    }
+}
+incr case_num
+
+step "Format MTD "
+set timeout 500
+send -s "ubiformat /dev/mtd$nand_rootfs_num -s 512 -O 512 \r"
+while 1 {
+    expect {
+	
+	 -re "ubiformat: formatting eraseblock .* complete.*$kernel_prompt" {
                 case_pass $case_num
 		break
 	}
@@ -157,6 +146,61 @@ while 1 {
     }
 }
 
+incr case_num
+step "Attach MTD "
+set timeout 180
+send -s "ubiattach /dev/ubi_ctrl -m $nand_rootfs_num \r"
+while 1 {
+    expect {
+	
+	 -re "UBI device number 0.*$kernel_prompt" {
+                case_pass $case_num
+		break
+	}
+
+	timeout {
+                case_fail $case_num
+		exit
+	}
+    }
+}
+
+incr case_num
+step "Make volume "
+set timeout 180
+send -s "ubimkvol /dev/ubi0 -s 20MiB -N ubifs0 \r"
+while 1 {
+    expect {
+	
+	 -re "Volume ID 0.*ubifs0.*$kernel_prompt" {
+                case_pass $case_num
+		break
+	}
+
+	timeout {
+                case_fail $case_num
+		exit
+	}
+    }
+}
+
+incr case_num
+set timeout 180
+send -s "cat /proc/mtd \r"
+while 1 {
+    expect {
+	
+	 -re "ubifs0.*$kernel_prompt" {
+                case_pass $case_num
+		break
+	}
+
+	timeout {
+                case_fail $case_num
+		exit
+	}
+    }
+}
 step "Touch file"
 
 send_log " \n1)create file system directory\n"
@@ -170,12 +214,11 @@ incr case_num
 
 step "Reading MTD "	
 set mtd_temp_result $TEST_FAIL
-set timeout 60
-send -s "mount -t ubifs /dev/mtdblock$nand_rootfs_num /mnt\n"
+set timeout 200
+send -s "mount -t ubifs ubi0:ubifs0 /mnt\n"
 while 1 {
     expect {
-                                                                                                                                                             
-         -re $kernel_prompt {
+        -re "UBIFS: mounted UBI device.*$kernel_prompt" {
                 set mtd_temp_result $TEST_PASS
                 case_pass $case_num
 		break
@@ -274,29 +317,26 @@ while 1 {
 	}
     }
 }
+set timeout 20
 
 incr case_num
-set timeout 60
-expect  -re $kernel_prompt
 send -s "umount /mnt\r"
 while 1 {
     expect {
 
-       -re $kernel_prompt {
+        -re "UBIFS: un-mount UBI device.*$kernel_prompt" {
+                case_pass $case_num
                 break
-        }
-
-       "failed" {
-                case_fail $case_num
-                exit
         }
 
         timeout {
                 case_fail $case_num
-		exit
+                exit
         }
     }
 }
+incr case_num
+set timeout 2
 send -s "ls /mnt\r"
 while 1 {
     expect {
@@ -312,51 +352,167 @@ while 1 {
         }
     }
 }
-expect  -re $kernel_prompt
 
-if { $board_type == "BF537-STAMP" } {
+expect -re "$kernel_prompt"
+
+set timeout 10
+step "Copy rootfs.ubifs to target board\n"
+spawn rcp $uclinux_path/images/rootfs.ubifs root@$targetip:/
+while 1 {
+   expect {
+
+      "*connect*" {
+         send_log "\nCopy to target board failed\n"
+         case_fail $case_num
+      }
+
+      eof {
+         send_log "\nCopy to target board done\n"
+         break
+      }
+
+      timeout {
+         break
+      }
+   }
+}
+set spawn_id $kermit_spawn_id
+
 incr case_num
-set timeout 15
-
-send -s "rmmod plat_nand\r"
+step "Make volume "
+set timeout 180
+send -s "ubimkvol /dev/ubi0 -s 20MiB -N ubifs1 \r"
 while 1 {
     expect {
-        -re $kernel_prompt {
-                expect ">"
+	
+	 -re "Volume ID .*ubifs0.*$kernel_prompt" {
                 case_pass $case_num
-                break;
-        }
+		break
+	}
 
-        "No | error" {
+	timeout {
                 case_fail $case_num
-                exit
-        }
-
-        timeout {
-                case_fail $case_num
-                exit
-        }
+		exit
+	}
     }
 }
 
 incr case_num
-set timeout 30
-
-send -s "modprobe plat_nand\r"
+step "Make volume "
+set timeout 180
+send -s "ubiupdatevol /dev/ubi0_1 rootfs.ubifs \r"
 while 1 {
     expect {
+	
+	 -re "$kernel_prompt" {
+                case_pass $case_num
+		break
+	}
 
-       -re "No | error |failed" {
+	timeout {
+                case_fail $case_num
+		exit
+	}
+    }
+}
+incr case_num
+
+step "Reading MTD "	
+set mtd_temp_result $TEST_FAIL
+set timeout 200
+send -s "mount -t ubifs ubi0:ubifs1 /mnt\n"
+while 1 {
+    expect {
+        -re "UBIFS: mounted UBI device.*$kernel_prompt" {
+                set mtd_temp_result $TEST_PASS
+                case_pass $case_num
+		break
+        }
+
+       "failed" {
                 case_fail $case_num
                 exit
         }
-
         timeout {
+                case_fail $case_num
+		exit
+        }
+    }
+}
+incr case_num
+send -s "ls /mnt\r"
+while 1 {
+    expect {
+
+       -re "sys.*var" {
                 case_pass $case_num
                 break
         }
+
+        timeout {
+                case_fail $case_num
+                exit
+        }
     }
 }
+incr case_num
+set timeout 20
+send -s "umount /mnt\r"
+while 1 {
+    expect {
+
+        -re "UBIFS: un-mount.*$kernel_prompt" {
+                case_pass $case_num
+                break
+        }
+
+        timeout {
+                case_fail $case_num
+                exit
+        }
+    }
+}
+incr case_num
+set timeout 60
+expect  -re $kernel_prompt
+send -s "ubidetach /dev/ubi_ctrl -m $nand_rootfs_num\r"
+while 1 {
+    expect {
+
+       -re "UBI:.* is detached from ubi.*$kernel_prompt" {
+                break
+        }
+
+       "failed" {
+                case_fail $case_num
+                exit
+        }
+
+        timeout {
+                case_fail $case_num
+		exit
+        }
+    }
+}
+send_user "\n #######################################################################################################\n"
+step "Reboot the kernel."
+set boot_image uImage
+set bootargs             $bootargs_param8
+source ../reboot_kernel.exp
+
+set timeout 5
+send -s "\r"
+while 1 {
+   expect {
+        -re $kernel_prompt {
+                break
+        }
+
+         timeout {
+                case_fail $case_num
+                exit
+         }
+   }
 }
 
 send_log "\n"

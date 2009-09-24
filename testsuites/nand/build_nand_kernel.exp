@@ -56,7 +56,7 @@ while 1 {
         -re "Blackfin on-chip MAC support.*BFIN_MAC.*\\\[.*]" {
 
              if { $board_type == "BF527-EZKIT" || $board_type == "BF526-EZBRD" } {
-                        send -s "M\r"
+                        send -s "Y\r"
              } else {
                         send -s "\r"
              }
@@ -65,7 +65,7 @@ while 1 {
 
         -re "Support for generic platform NAND driver.*MTD_NAND_PLATFORM.*\\\[.*]" {
              if { $board_type == "BF537-STAMP" } {
-                        send -s "M\r"
+                        send -s "Y\r"
              } else {
                         send -s "N\r"
              }
