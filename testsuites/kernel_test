@@ -382,7 +382,7 @@ fi
 
 if [ $BINARY_FORMAT = "elf" ] ; then
 
-   AUTO_RUN_STATUS[11]="0"; AUTO_RUN_STATUS[12]="0"; AUTO_RUN_STATUS[47]="0"; MANUAL_RUN_STATUS[13]="1"
+   AUTO_RUN_STATUS[11]="0"; AUTO_RUN_STATUS[12]="0"; AUTO_RUN_STATUS[47]="0"; MANUAL_RUN_STATUS[13]="1"; AUTO_RUN_STATUS[$(( n + 5 ))]="1"
 fi
 
 #########################   List the tests to be run on the machine  #########################
@@ -940,8 +940,8 @@ do
       sleep 30
       ./two_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
       sleep 30
-      ./audio_data_test.exp >/dev/null 2>&1
-      ./snd2fftw_test.exp >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
 
 
@@ -993,8 +993,8 @@ do
       sleep 30
       ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
       sleep 30
-      ./audio_data_test.exp >/dev/null 2>&1
-      ./snd2fftw_test.exp >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
 
 
@@ -1045,8 +1045,8 @@ do
       sleep 30
       ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
       sleep 30
-      ./audio_data_test.exp >/dev/null 2>&1
-      ./snd2fftw_test.exp >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
 
 
@@ -1098,8 +1098,8 @@ do
       sleep 30
       ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
       sleep 30
-      ./audio_data_test.exp >/dev/null 2>&1
-      ./snd2fftw_test.exp >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
 
 
@@ -1152,8 +1152,8 @@ do
       sleep 30
       ./ad73322_test.exp >/dev/null  2>&1
       sleep 30
-      ./audio_data_test.exp >/dev/null 2>&1
-      ./snd2fftw_test.exp >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
 
 
@@ -1205,8 +1205,8 @@ do
       sleep 30
       ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
       sleep 30
-      ./audio_data_test.exp >/dev/null 2>&1
-      ./snd2fftw_test.exp >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
 
 
