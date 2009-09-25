@@ -46,8 +46,15 @@ set yaffs2_rootfs_image  rootfs.yaffs2
 set HAVE_JFFS2_IMAGE     0
 set HAVE_KERNEL_ONLY_IMAGE     0
 
-set def_uart_port [ exec grep  CONFIG_SERIAL_BFIN_UART.*=y $uclinux_path/linux-2.6.x/arch/blackfin/configs/$board_type\_defconfig | head -1 | awk  -F= {{print $1}} ]
+if { [ catch { set def_uart_port [  exec grep  CONFIG_SERIAL_BFIN_UART.*=y $uclinux_path/linux-2.6.x/arch/blackfin/configs/$board_type\_defconfig | head -1 | awk  -F= {{print $1}}  ]  } ] } {
+
+set def_uart_port 0  
+puts "$board_type\_defconfig not found. Set def_uart_port to 0.\n "
+
+} else {
 set def_uart_port [ string index $def_uart_port end ]
+puts "$board_type\_defconfig is found. Set def_uart_port to $def_uart_port.\n "
+}
 
 set bootargs_param0  "root=/dev/mtdblock0 rw earlyprintk=serial,uart$def_uart_port,$baud_rate console=ttyBF$def_uart_port,$baud_rate"
 # For linux mount jffs2 as rootfs, which need mtd ext2 support.

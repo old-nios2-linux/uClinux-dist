@@ -104,6 +104,10 @@ if { $board_type == "BF537-STAMP" } {
 } else {
   set  cpu       BF537
 }
+
+if { $argv0 == "./build_policy_kernel.exp" } {
+puts "File name is $argv0.\n"
+
 if { $argc >= 2} {
   set  cpu  [lindex $argv 1]
 }
@@ -161,4 +165,5 @@ if { $argc >= 11} {
 if { $argc >= 12} {
    set mpu                [lindex $argv 11]
    send_log "\n#### MPU is $mpu\n"
+}
 }
