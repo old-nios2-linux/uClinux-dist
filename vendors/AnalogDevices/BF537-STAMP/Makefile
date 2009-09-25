@@ -6,6 +6,9 @@
 include $(LINUX_CONFIG)
 include $(CONFIG_CONFIG)
 
+# This is the LEB size for the CompactFlash / IDE ATA / NAND Flash card
+UBIFS_LEB_SIZE ?= 129024
+
 ROMFS_DIRS-y = bin etc etc/dhcpc home lib mnt proc sys usr var root home tmp etc/config var/run var/lib/misc
 ETC_FILES-y = \
 	filesystems group issue mdev.conf mime.types modprobe.conf motd \

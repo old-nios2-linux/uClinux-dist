@@ -142,7 +142,7 @@ endif
 
 .PHONY: image.rootfs.ubifs image.rootfs.ubifs.force
 UBIFS_MIN_IO_SIZE ?= 2048
-UBIFS_LEB_SIZE    ?= 129024
+UBIFS_LEB_SIZE    ?= 204800
 UBIFS_MAX_LEB_CNT ?= 1024
 MKFS_UBIFS_FLAGS ?= --squash-uids -m $(UBIFS_MIN_IO_SIZE) -e $(UBIFS_LEB_SIZE) -c $(UBIFS_MAX_LEB_CNT)
 image.rootfs.ubifs.force:
