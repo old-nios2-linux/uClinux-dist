@@ -5,12 +5,12 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
-if { $argc < 1} {
+if { $argc < 2} {
     puts "Please input:binary format (FDPIC or FLAT)"
     exit
 }
 
-set format [lindex $argv 0]
+set format [lindex $argv 1]
 send_user "\n#### binary format is $format\n"
 append TITLE " ($format)"
 

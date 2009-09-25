@@ -146,7 +146,7 @@ fi
 
    AUTO_RUN_STATUS=(  [0]="1"  [1]="1"  [2]="0" [3]="1"  [4]="1"  [5]="1"   [6]="1"  [7]="1"  [8]="1"   [9]="0"   [10]="1"   [11]="1"   [12]="0"     [13]="1" [14]="0"   [15]="1"  [16]="1"    [17]="1"  [18]="1"  [19]="1"  [20]="1"  [21]="1"   [22]="1" [23]="0"   [24]="0"  [25]="0"  [26]="0"  [27]="0"  [28]="1" [29]="1"  [30]="1"   [31]="0"  [32]="0"  [33]="0"  [34]="1" [35]="1" [36]="1" [37]="1" [38]="1" [39]="1" [40]="1" [41]="1" [42]="0" [43]="0" [44]="1" [45]="0" [46]="1" [47]="1"  [48]="1"  [49]="1"  [50]="1"  [51]="0" [52]="0" [53]="1" [54]="0" [55]="0" [56]="0" [57]="0" [58]="0" [59]="0" [60]="1" [61]="1" [62]="0" [63]="1" [64]="0" [65]="0" [66]="0" [67]="0"  [68]="0" [69]="1" [70]="0" [71]="1" [72]="0" [73]="1" [74]="0" [75]="0" [76]="0" [77]="0" [$(( n + 1 ))]="1"  [$(( n + 2 ))]="1"  [$(( n + 3 ))]="0"  [$(( n + 4 ))]="0"  [$(( n + 5 ))]="0"  [$(( n + 6 ))]="0"  [$(( n + 7 ))]="0"  [$(( n + 8 ))]="0" [$(( n + 9 ))]="0" [$(( n + 10 ))]="0" [$(( n + 11 ))]="0" [$(( n + 12 ))]="1" [$(( n + 13 ))]="0" [$(( n + 14 ))]="0" [$(( n + 15 ))]="1" [$(( n + 16 ))]="0" [$(( n + 17 ))]="0" [$(( n + 18 ))]="0" [$(( n + 19 ))]="0" [$(( n + 20 ))]="1" [$(( n + 21 ))]="0" )
 
-   MANUAL_TESTCASE=( [0]="simple_gpio"  [1]="pfbutton"  [2]="ppifcd"  [3]="joystick"  [4]="ndso"  [5]="awg"  [6]="i2ctwi"  [7]="wireless" [8]="bluetooth"  [9]="bluetoothcf"  [10]="canbus"   [11]="irda"  [12]="adp5588_qwerty"  [13]="linphone_ad1836"  [14]="sport_uart"  [15]="netaudio" [16]="touchscreen" [17]="" [18]="keypad" [19]="bluetoothalsa" [20]="rotary" [21]="" [22]="adp5520" [23]="bfinppi" [24]="sdio_wifi" [25]="sport_spi" [$(( n + 1 ))]="" [$(( n + 2 ))]="konqueror" )
+   MANUAL_TESTCASE=( [0]="simple_gpio"  [1]="pfbutton"  [2]="ppifcd"  [3]="joystick"  [4]="ndso"  [5]="awg"  [6]="i2ctwi"  [7]="wireless" [8]="bluetooth"  [9]="bluetoothcf"  [10]="canbus"   [11]="irda"  [12]="adp5588_qwerty"  [13]="linphone_ad1836"  [14]="sport_uart"  [15]="netaudio" [16]="touchscreen" [17]="" [18]="keypad" [19]="bluetoothalsa" [20]="rotary" [21]="" [22]="adp5520" [23]="bfinppi" [24]="sdio_wifi" [25]="sport_spi" [$(( n + 1 ))]="" [$(( n + 2 ))]="" )
 
    MANUAL_RUN_STATUS=( [0]="1"    [1]="1"     [2]="1"    [3]="1"    [4]="1"  [5]="1"  [6]="1"  [7]="1" [8]="1"  [9]="1"  [10]="1"   [11]="1"  [12]="0"  [13]="1"  [14]="1"  [15]="1" [16]="1" [17]="" [18]="0" [19]="0" [20]="0" [21]="0" [22]="1" [23]="0" [24]="0" [25]="0" [$(( n + 1 ))]="" [$(( n + 2 ))]="0" )
 
@@ -194,7 +194,7 @@ if [ $BOARD_CONFIG = "BF537-STAMP-AD(73311)" ] ; then
 
    BOARD_TYPE=BF537-STAMP
    
-   AUTO_RUN_STATUS[2]="1"; AUTO_RUN_STATUS[9]="1"; AUTO_RUN_STATUS[31]="1"; AUTO_RUN_STATUS[33]="1"; AUTO_RUN_STATUS[64]="1"; AUTO_RUN_STATUS[70]="1"; AUTO_RUN_STATUS[75]="1"; AUTO_RUN_STATUS[$(( n + 4 ))]="1"; AUTO_RUN_STATUS[$(( n + 11 ))]="1"; AUTO_RUN_STATUS[$(( n + 13 ))]="1"; MANUAL_RUN_STATUS[$(( n + 2 ))]="1"
+   AUTO_RUN_STATUS[2]="1"; AUTO_RUN_STATUS[9]="1"; AUTO_RUN_STATUS[31]="1"; AUTO_RUN_STATUS[33]="1"; AUTO_RUN_STATUS[64]="1"; AUTO_RUN_STATUS[70]="1"; AUTO_RUN_STATUS[75]="1"; AUTO_RUN_STATUS[$(( n + 4 ))]="1"; AUTO_RUN_STATUS[$(( n + 11 ))]="1"; AUTO_RUN_STATUS[$(( n + 13 ))]="1"
 
 fi
 
@@ -267,7 +267,7 @@ if [ $BOARD_CONFIG = "BF527-EZKIT-STD" ] ; then
 
   AUTO_RUN_STATUS[2]="1"; AUTO_RUN_STATUS[9]="1"; AUTO_RUN_STATUS[25]="1"; AUTO_RUN_STATUS[42]="0" ; AUTO_RUN_STATUS[45]="0"; AUTO_RUN_STATUS[57]="1"; AUTO_RUN_STATUS[55]="0"; AUTO_RUN_STATUS[62]="1"; AUTO_RUN_STATUS[70]="1"; AUTO_RUN_STATUS[64]="1"; AUTO_RUN_STATUS[65]="1"; AUTO_RUN_STATUS[75]="1"; AUTO_RUN_STATUS[$(( n + 6 ))]="1"; AUTO_RUN_STATUS[$(( n + 9 ))]="1"; AUTO_RUN_STATUS[$(( n + 11 ))]="1"; AUTO_RUN_STATUS[$(( n + 13 ))]="1"; AUTO_RUN_STATUS[$(( n + 17 ))]="1"; AUTO_RUN_STATUS[$(( n + 21 ))]="1"
 
-   MANUAL_RUN_STATUS=( [0]="0"    [1]="0"     [2]="0"    [3]="0"    [4]="0"  [5]="0"  [6]="1"  [7]="0" [8]="1"  [9]="0"  [10]="0"   [11]="1"  [12]="0"  [13]="0"  [14]="0"  [15]="0"  [16]="1" [17]="0" [18]="1"  [19]="1" [20]="1" [23]="1" [$(( n + 1 ))]="0" [$(( n + 2 ))]="1" )
+   MANUAL_RUN_STATUS=( [0]="0"    [1]="0"     [2]="0"    [3]="0"    [4]="0"  [5]="0"  [6]="1"  [7]="0" [8]="1"  [9]="0"  [10]="0"   [11]="1"  [12]="0"  [13]="0"  [14]="0"  [15]="0"  [16]="1" [17]="0" [18]="1"  [19]="1" [20]="1" [23]="1" [$(( n + 1 ))]="0" [$(( n + 2 ))]="0" )
 
 fi
 
@@ -289,7 +289,7 @@ if [ $BOARD_CONFIG = "BF548-EZKIT-STD" ] ; then
    
    AUTO_RUN_STATUS[9]="1";AUTO_RUN_STATUS[12]="1"; AUTO_RUN_STATUS[25]="1"; AUTO_RUN_STATUS[42]="0" ; AUTO_RUN_STATUS[45]="0"; AUTO_RUN_STATUS[54]="1"; AUTO_RUN_STATUS[57]="1"; AUTO_RUN_STATUS[55]="1"; AUTO_RUN_STATUS[62]="1"; AUTO_RUN_STATUS[64]="1"; AUTO_RUN_STATUS[65]="1"; AUTO_RUN_STATUS[66]="1"; AUTO_RUN_STATUS[67]="1"; AUTO_RUN_STATUS[68]="1"; AUTO_RUN_STATUS[70]="1"; AUTO_RUN_STATUS[75]="1"; AUTO_RUN_STATUS[$(( n + 6 ))]="1";AUTO_RUN_STATUS[$(( n + 9 ))]="1"; AUTO_RUN_STATUS[$(( n + 11 ))]="1"; AUTO_RUN_STATUS[$(( n + 13 ))]="1"; AUTO_RUN_STATUS[$(( n + 14 ))]="0"; AUTO_RUN_STATUS[$(( n + 17 ))]="1"; AUTO_RUN_STATUS[$(( n + 21 ))]="1"
 
-   MANUAL_RUN_STATUS=( [0]="1"    [1]="0"     [2]="0"    [3]="0"    [4]="0"  [5]="0"  [6]="1"  [7]="0" [8]="1"  [9]="0"  [10]="0"   [11]="1"  [12]="0"  [13]="0"  [14]="0"  [15]="0"  [16]="1" [17]="0" [18]="1"  [19]="1" [20]="1" [23]="1" [24]="1" [$(( n + 1 ))]="0"  [$(( n + 2 ))]="1" )
+   MANUAL_RUN_STATUS=( [0]="1"    [1]="0"     [2]="0"    [3]="0"    [4]="0"  [5]="0"  [6]="1"  [7]="0" [8]="1"  [9]="0"  [10]="0"   [11]="1"  [12]="0"  [13]="0"  [14]="0"  [15]="0"  [16]="1" [17]="0" [18]="1"  [19]="1" [20]="1" [23]="1" [24]="1" [$(( n + 1 ))]="0"  [$(( n + 2 ))]="0" )
 
 fi
 
@@ -582,7 +582,7 @@ do
   
   cd $UCLINUX_DIST_TESTSUITES/${AUTO_TESTCASE[$i]}
   sleep 30
-  ./boot_kernel_only_uimage_test.exp  >/dev/null  2>&1
+  ./boot_kernel_only_uimage_test.exp $BOARD_TYPE >/dev/null  2>&1
   cp $UCLINUX_DIST_TESTSUITES/${AUTO_TESTCASE[$i]}/boot_kernel_only_uimage_test_log $THIS_LOG
 
   fi
@@ -656,21 +656,21 @@ do
   cd $UCLINUX_DIST_TESTSUITES/timer
   ./build_timer_kernel.exp $BOARD_TYPE  100  >/dev/null  2>&1
   sleep 30
-  ./timer_tick_test.exp 100 >/dev/null  2>&1
+  ./timer_tick_test.exp $BOARD_TYPE 100 >/dev/null  2>&1
   
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.timer100 
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.timer100
   
   ./build_timer_kernel.exp $BOARD_TYPE  250  >/dev/null  2>&1
   sleep 30
-  ./timer_tick_test.exp 250 >/dev/null  2>&1
+  ./timer_tick_test.exp $BOARD_TYPE 250 >/dev/null  2>&1
   
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.timer250
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.timer250
     
   ./build_timer_kernel.exp $BOARD_TYPE  1000  >/dev/null  2>&1
   sleep 30
-  ./timer_tick_test.exp 1000 >/dev/null  2>&1
+  ./timer_tick_test.exp $BOARD_TYPE 1000 >/dev/null  2>&1
   
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.timer1000
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.timer1000
@@ -714,9 +714,9 @@ do
   else
       sleep 30
       if [ $BOARD_TYPE == "BF561-EZKIT" ] ; then
-          ./adv7183_test.exp >/dev/null  2>&1
+          ./adv7183_test.exp $BOARD_TYPE >/dev/null  2>&1
       else
-          ./camera_test.exp >/dev/null  2>&1
+          ./camera_test.exp $BOARD_TYPE >/dev/null  2>&1
       fi
   fi
 
@@ -771,7 +771,7 @@ do
       tail -50 ./build_video_kernel_log
   else
       sleep 30
-      ./adv7393_test.exp >/dev/null  2>&1
+      ./adv7393_test.exp $BOARD_TYPE >/dev/null  2>&1
   fi
 
 
@@ -855,7 +855,7 @@ do
       tail -50 ./build_tftlcd_kernel_log
   else
       sleep 30
-      ./tftlcd_lq035_test.exp LANDSCAPE >/dev/null  2>&1
+      ./tftlcd_lq035_test.exp $BOARD_TYPE LANDSCAPE >/dev/null  2>&1
   fi
 
 
@@ -891,7 +891,7 @@ do
       tail -50 ./build_tftlcd_kernel_log
   else
       sleep 30
-      ./tftlcd_lq035_test.exp PORTRAIT >/dev/null  2>&1
+      ./tftlcd_lq035_test.exp $BOARD_TYPE PORTRAIT >/dev/null  2>&1
   fi
 
 
@@ -936,9 +936,7 @@ do
       tail -50 ./build_audio_ad1836_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
-      sleep 30
-      ./two_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
       sleep 30
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
@@ -949,7 +947,6 @@ do
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.audio_ad1836
   cp $UCLINUX_DIST_TESTSUITES/audio/build_audio_ad1836_kernel_log $THIS_LOG
   cp $UCLINUX_DIST_TESTSUITES/audio/one_channel_audio_test_log $THIS_LOG/one_channel_audio_ad1836_test_log
-  cp $UCLINUX_DIST_TESTSUITES/audio/two_channel_audio_test_log $THIS_LOG/two_channel_audio_ad1836_test_log
   cp $UCLINUX_DIST_TESTSUITES/audio/audio_data_test_log $THIS_LOG/audio_data_test_log.ad1836
   cp $UCLINUX_DIST_TESTSUITES/audio/snd2fftw_test_log $THIS_LOG/snd2fftw_test_log.ad1836
   mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ad1836
@@ -991,7 +988,7 @@ do
       tail -50 ./build_audio_ad73311_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
       sleep 30
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
@@ -1043,7 +1040,7 @@ do
       tail -50 ./build_audio_ad1938_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
       sleep 30
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
@@ -1096,7 +1093,7 @@ do
       tail -50 ./build_audio_ad1980_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
       sleep 30
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
@@ -1150,7 +1147,7 @@ do
       tail -50 ./build_audio_ad73322_kernel_log
   else
       sleep 30
-      ./ad73322_test.exp >/dev/null  2>&1
+      ./ad73322_test.exp $BOARD_TYPE >/dev/null  2>&1
       sleep 30
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
@@ -1203,7 +1200,7 @@ do
       tail -50 ./build_audio_ssm2603_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp /dev/ttyS0 >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
       sleep 30
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
@@ -1431,13 +1428,13 @@ do
 
         if [ ${AUTO_RUN_STATUS[$(( n + 14 ))]} -eq 1  ] ; then
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1980_test.exp 1 >/dev/null  2>&1
+            ./power_ad1980_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10
 
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1980_test.exp 2 >/dev/null  2>&1
+            ./power_ad1980_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10
@@ -1459,13 +1456,13 @@ do
 
         if [ ${AUTO_RUN_STATUS[$(( n + 17 ))]} -eq 1  ] ; then
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ssm2602_test.exp 1 >/dev/null  2>&1
+            ./power_ssm2602_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10
 
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ssm2602_test.exp 2 >/dev/null  2>&1
+            ./power_ssm2602_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10
@@ -1512,7 +1509,7 @@ do
   cp $UCLINUX_DIST_PATH_BAK/config/.config config
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
 
-  #Build QT kernel and konqueror source of Static FLAT
+  #Build QT kernel of Static FLAT format
   cd $UCLINUX_DIST_PATH/
   make clean  > /dev/null 2>&1
   cd user/pictureflow/pictureflow-0.1.0/pictureflow-qt
@@ -1531,12 +1528,6 @@ do
   else
       sleep 30
       ./qt_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-      if [ ${MANUAL_RUN_STATUS[$(( n + 2 ))]} -eq 1  ] ; then
-          echo  "Build konqueror..."
-          ./konqueror_kernel_test.exp 1 >/dev/null  2>&1
-          sleep 30
-          mv $UCLINUX_DIST_TESTSUITES/qt/konqueror_kernel_test_log $THIS_LOG/konqueror_kernel_flat_test_log
-      fi
   fi
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.qt.flat
@@ -1544,7 +1535,7 @@ do
   mv $UCLINUX_DIST_TESTSUITES/qt/build_qt_kernel_log $THIS_LOG/build_qt_flat_kernel_log
   cp $UCLINUX_DIST_TESTSUITES/qt/qt_sample $THIS_LOG/qt_sample.flat
 
-  #Build QT kernel and konqueror source of FDPIC
+  #Build QT kernel of FDPIC format
   cd $UCLINUX_DIST_PATH/
   make clean  > /dev/null 2>&1
   cd user/pictureflow/pictureflow-0.1.0/pictureflow-qt
@@ -1563,12 +1554,6 @@ do
   else
       sleep 30
       ./qt_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-      if [ ${MANUAL_RUN_STATUS[$(( n + 2 ))]} -eq 1  ] ; then
-          echo  "Build konqueror..."
-          ./konqueror_kernel_test.exp 2 >/dev/null  2>&1
-          sleep 30
-          mv $UCLINUX_DIST_TESTSUITES/qt/konqueror_kernel_test_log $THIS_LOG/konqueror_kernel_fdpic_test_log
-      fi
   fi
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.qt.fdpic
@@ -1686,7 +1671,7 @@ if [ ${AUTO_RUN_STATUS[$(( n + 2 ))]} -eq 1 ] ; then
     # do if build uclinux-dist succeed
     echo "build_ltp_kernel.exp done"
     sleep 30
-    ./ltp_auto_test.exp /dev/ttyS0 2 > /dev/null 2>&1
+    ./ltp_auto_test.exp $BOARD_TYPE /dev/ttyS0 2 > /dev/null 2>&1
     echo "ltp_auto_test.exp done"
     ./ltp_compare_results_all.sh config/summary.base $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new >> ltp_test_log
     #./ltp_decide_standard.pl config/summary.base $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new
@@ -1749,7 +1734,7 @@ fi
   cd $UCLINUX_DIST_TESTSUITES/coreb
   ./build_coreb_kernel.exp $BOARD_TYPE  >/dev/null  2>&1
   sleep 30
-  ./coreb_test.exp >/dev/null  2>&1
+  ./coreb_test.exp $BOARD_TYPE >/dev/null  2>&1
   
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.coreb 
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.coreb
@@ -1888,25 +1873,25 @@ fi
   else
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_zero_control_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_zero_control_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_fs_control_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_fs_control_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_zero_bulk_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_zero_bulk_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_fs_bulk_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_fs_bulk_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
@@ -1915,38 +1900,38 @@ fi
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_audio_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_audio_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_ethernet_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_ethernet_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_serial_generic_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_serial_generic_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_serial_linuxACM_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_serial_linuxACM_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_storage_ram_test.exp $CONFIG >/dev/null  2>&1
+      ./gadget_storage_ram_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
       if [ $BOARD_TYPE == "BF548-EZKIT" ] ; then
           sleep 30
           cd $UCLINUX_DIST_TESTSUITES/usbdev
-          ./gadget_storage_hd_test.exp $CONFIG >/dev/null  2>&1
+          ./gadget_storage_hd_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
           cd $UCLINUX_DIST_TESTSUITES
           ./reset_board.exp  >/dev/null  2>&1
       fi
@@ -2007,7 +1992,7 @@ if [ ${AUTO_RUN_STATUS[$(( n + 20 ))]} -eq 1  ] ; then
             tail -50 ./build_oprofile_kernel_log
         else
             sleep 30
-            ./oprofile_test.exp $FORMAT >/dev/null  2>&1
+            ./oprofile_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
         fi
 
         cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.oprofile.$format

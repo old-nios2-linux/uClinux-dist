@@ -9,11 +9,11 @@ set TEST_PASS pass
 set TEST_FAIL fail
 set SLEEP_TIME 10
 
-set timer_frequency [lindex $argv 0]
+set timer_frequency [lindex $argv 1]
 
 append TITLE " ($timer_frequency Mhz)"
 
-if { $argc < 1} {
+if { $argc < 2} {
     puts "Please input: timer_frequency."
     puts "100, 250 or 1000(Mhz)."
     exit
