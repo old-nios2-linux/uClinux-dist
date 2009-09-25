@@ -1357,12 +1357,7 @@ do
   make clean > /dev/null 2>&1
 
   cd $UCLINUX_DIST_TESTSUITES/power
-  if [ ${AUTO_RUN_STATUS[$(( n + 5 ))]} -eq 1  ] ; then
-      ad1981b_flag=yes
-  else
-      ad1981b_flag=no
-  fi
-  ./build_power_kernel.exp $BOARD_TYPE $ad1981b_flag >/dev/null  2>&1
+  ./build_power_kernel.exp $BOARD_TYPE >/dev/null  2>&1
   sleep 30
 
   if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
@@ -1442,13 +1437,13 @@ do
 
         if [ ${AUTO_RUN_STATUS[$(( n + 5 ))]} -eq 1  ] ; then
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1981b_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+            ./power_ad1938_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10
 
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1981b_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+            ./power_ad1938_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10

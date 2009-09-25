@@ -5,8 +5,8 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
-if { $argc == 1 } {
-    set pm_state_count [lindex $argv 0]
+if { $argc == 2 } {
+    set pm_state_count [lindex $argv 1]
 } else {
     puts "Please input a power management state:"
     puts "1: Standby; 2: Suspend-to-RAM"
@@ -232,7 +232,7 @@ incr case_num
 send "tone &\n"
 while 1 {
     expect {
-        -re "\[0-9]+\r\n$kernel_prompt" {
+        -re " \[0-9]+ tone\r\n$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -276,7 +276,7 @@ while 1 {
             send_user "Uninstall module failed!\r"
             case_fail $case_num
         }
-        -re $kernel_prompt {
+        -re "Done.*$kernel_prompt" {
             case_pass $case_num
             break
         }

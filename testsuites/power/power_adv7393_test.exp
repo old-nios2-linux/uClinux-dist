@@ -266,7 +266,7 @@ incr case_num
 send "video_test&\r"
 while 1 {
     expect {
-        -re "\[0-9]+\r\n$kernel_prompt" {
+        -re " \[0-9]+ video_test\r\n$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -291,7 +291,7 @@ while 1 {
         -re "(kill:|Usage:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "Terminated" {
+        -re "Done" {
             send "\r"
             expect -re $kernel_prompt
             case_pass $case_num
