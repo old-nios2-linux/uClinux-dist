@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.30-rc7
+# Linux kernel version: 2.6.30
 #
 # CONFIG_FPU is not set
 CONFIG_ZONE_DMA=y
@@ -136,7 +136,7 @@ CONFIG_NIOS2_HW_MUL=y
 #
 # Platform drivers Options
 #
-CONFIG_GENERIC_GPIO=y
+# CONFIG_GENERIC_GPIO is not set
 # CONFIG_AVALON_DMA is not set
 # CONFIG_PCI_ALTPCI is not set
 # CONFIG_ALTERA_REMOTE_UPDATE is not set
@@ -405,7 +405,6 @@ CONFIG_KEYBOARD_ATKBD=y
 # CONFIG_KEYBOARD_XTKBD is not set
 # CONFIG_KEYBOARD_NEWTON is not set
 # CONFIG_KEYBOARD_STOWAWAY is not set
-# CONFIG_KEYBOARD_GPIO is not set
 # CONFIG_INPUT_MOUSE is not set
 # CONFIG_INPUT_JOYSTICK is not set
 # CONFIG_INPUT_TABLET is not set
@@ -471,7 +470,6 @@ CONFIG_HWMON=y
 # CONFIG_SENSORS_IT87 is not set
 # CONFIG_SENSORS_PC87360 is not set
 # CONFIG_SENSORS_PC87427 is not set
-# CONFIG_SENSORS_SHT15 is not set
 # CONFIG_SENSORS_SMSC47M1 is not set
 # CONFIG_SENSORS_SMSC47B397 is not set
 # CONFIG_SENSORS_VT1211 is not set
