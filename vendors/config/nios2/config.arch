@@ -90,7 +90,7 @@ ifneq ($(UCLINUX_BUILD_USER)$(UCLINUX_BUILD_LIB),)
 CFLAGS-y   := -pipe -Wall
 CXXFLAGS-y := -pipe -Wall
 CPPFLAGS-y := -DEMBED -I$(ROOTDIR)
-ifneq ($(CONFIG_MMU),)
+ifneq ($(CONFIG_MMU),y)
 CPPFLAGS-y += -D__uClinux__
 endif
 LDFLAGS-y  := 
