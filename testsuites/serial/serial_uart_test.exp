@@ -57,8 +57,8 @@ set ttyBFdev /dev/ttyBF1
 
 }
 set ext_uart_port [ string index $ttyBFdev end ]
-puts "ext_uart_port is $ext_uart_port"
-puts "port_type $port_type ttydev_for_testcase_use $ttydev_for_testcase_use"
+send_log "ext_uart_port is $ext_uart_port"
+send_log "port_type $port_type ttydev_for_testcase_use $ttydev_for_testcase_use"
 
 step "Start kermit."
 source ../spawn_kermit.exp
@@ -166,19 +166,19 @@ expect {
         -re  "$sh_prompt" {
           break }
          timeout {
-          puts " set $ttydev_for_testcase_use failed...\n"
+          send_log " set $ttydev_for_testcase_use failed...\n"
           break
          }
 }
 }
-set timeout 60
+set timeout 100
 while 1 {
 send -s " cat $save_file > $ttydev_for_testcase_use  \r"
 expect {
-        -re  "$sh_prompt" { 
+         -re  "$sh_prompt" { 
           break }
          timeout {
-          puts " send data failed...\n"
+         send_log " send data failed...\n"
           break
          }
 }
@@ -190,11 +190,11 @@ sleep 3
 while 1 {
 expect {
         -re  "$kernel_prompt" {
-          puts "Fail to wait.\n"
+          send_log "Fail to wait.\n"
           case_fail $case_num
           break }
          timeout {
-          puts "\nStill wait.\n"
+          send_log "\nStill wait.\n"
           break
          }
 }
@@ -276,11 +276,11 @@ while 1 {
 send -s "cat $ttydev_for_testcase_use > $host_file \r"
 expect {
         -re  "$sh_prompt" {
-          puts "Fail to cat on host.\n"
+          send_log "Fail to cat on host.\n"
           case_fail $case_num
           break }
          timeout {
-          puts "wait for receiving data...\n"
+          send_log "wait for receiving data...\n"
           break
          }
 }
@@ -304,11 +304,11 @@ sleep 5
 while 1 {
 expect {
         -re  "$sh_prompt" {
-          puts "Fail to wait.\n"
+          send_log "Fail to wait.\n"
           case_fail $case_num
           break }
          timeout {
-          puts "\nStill wait.\n"
+          send_log "\nStill wait.\n"
           break
          }
 }
@@ -319,7 +319,7 @@ expect {
         -re  "$sh_prompt" {
           break }
          timeout {
-          puts "Failed to come out.\n"
+          send_log "Failed to come out.\n"
           break
          }
 }
