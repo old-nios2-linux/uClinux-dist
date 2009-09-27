@@ -503,7 +503,7 @@ send_user "\n ##################################################################
 incr case_num
 step "Reboot the kernel."
 set boot_image vmImage
-set bootargs             $bootargs_param8
+set bootargs             $bootargs_param4
 source ../reboot_kernel.exp
 
 set timeout 5

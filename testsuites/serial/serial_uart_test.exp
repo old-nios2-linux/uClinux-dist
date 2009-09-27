@@ -49,12 +49,15 @@ if { $board_type == "BF527-EZKIT" } {
 set ttyBFdev /dev/ttyBF0
 } elseif { $board_type == "BF548-EZKIT" } {
 set ttyBFdev /dev/ttyBF3
+} elseif { $board_type == "BF537-STAMP" } {
+set ttyBFdev /dev/ttyBF1
 } else {
 set ttyBFdev /dev/ttyBF1
 }
-}
-set bootargs             $bootargs_param7
 
+}
+set ext_uart_port [ string index $ttyBFdev end ]
+puts "ext_uart_port is $ext_uart_port"
 puts "port_type $port_type ttydev_for_testcase_use $ttydev_for_testcase_use"
 
 step "Start kermit."
@@ -363,9 +366,8 @@ expect {
 step "Convert the console to the extend UART."
 
 set spawn_id $target_default_id
-set console [file tail $ttyBFdev]
-append bootargs_param7 " console=$console,57600n$bits_number"
-set bootargs             $bootargs_param7
+append bootargs_param6 " console=ttyBF$ext_uart_port,57600n$bits_number"
+set bootargs             $bootargs_param6
 source ../reboot_kernel.exp
 
 set timeout 3

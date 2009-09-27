@@ -178,8 +178,10 @@ while 1 {
          }
  
          -re "Initial kernel command string.*CMDLINE.*\\\[(.*)]" {
-            if { $board_type == "BF548-EZKIT" || $board_type == "BF537-STAMP" } {
+            if { $board_type == "BF537-STAMP" } {
             send -s "console=ttyBF$def_uart_port,57600 kgdboc=ttyBF1,57600n8\r"
+            } elseif { $board_type == "BF548-EZKIT" } {
+            send -s "console=ttyBF$def_uart_port,57600 kgdboc=ttyBF3,57600n8\r"
             } elseif { $board_type == "BF527-EZKIT" } {
             send -s "console=ttyBF$def_uart_port,57600 kgdboc=ttyBF0,57600n8\r"
             }
