@@ -127,7 +127,7 @@ int open_framebuffer(void)
 	xres = var.xres;
 	yres = var.yres;
 
-	fbuffer = mmap(NULL, fix.smem_len, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, fb_fd, 0);
+	fbuffer = mmap(NULL, fix.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
 	if (fbuffer == (unsigned char *)-1) {
 		perror("mmap framebuffer");
 		close(fb_fd);
