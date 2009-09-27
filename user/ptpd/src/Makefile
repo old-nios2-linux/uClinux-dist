@@ -3,6 +3,7 @@
 RM = rm -f
 CFLAGS = -Wall
 #CPPFLAGS = -DPTPD_DBG -DPTPD_NO_DAEMON
+CPPFLAGS += -DHAVE_LINUX_NET_TSTAMP_H
 
 PROG = ptpd
 OBJ  = ptpd.o arith.o bmc.o probe.o protocol.o \
