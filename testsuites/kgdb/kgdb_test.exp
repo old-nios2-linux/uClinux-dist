@@ -94,7 +94,7 @@ send -s "b"
 send -s "g"
 sleep 3
 expect {
-    -re "SysRq : GDB.*Entering KGDB" {
+    -re "SysRq :.*Entering KGDB" {
         send_log "Prepare KGDB through uart port debug!"
     }
 

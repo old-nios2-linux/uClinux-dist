@@ -290,6 +290,12 @@ while 1 {
                 case_fail $case_num
 		exit
 	}
+
+        "No such file or directory" {
+                case_fail $case_num
+                exit
+        }
+
 	timeout {
 		set mtd_results $TEST_PASS
                 case_pass $case_num

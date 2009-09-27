@@ -90,13 +90,14 @@ while 1 {
    expect   "\r"
    while 1 {
       expect {
-	"ftp_test" {
-		incr found
-                send_log "\nftp_test is running. Found is $found.\n"                
-	}
-	
 	-re "defunct" {
 		set found 0
+		break
+	}
+	
+	-re "expect.*ftp_test" {
+		incr found
+                send_log "\nftp_test is running. Found is $found.\n"                
 		break
 	}
 	
@@ -111,13 +112,14 @@ while 1 {
    expect "\r"
    while 1 {
       expect {
-	"telnet_test" {
-		incr found
-                send_log "\ntelnet_test is running. Found is $found .\n"                
-	}
-	
 	-re "defunct" {
 		set found 0
+		break
+	}
+	
+	-re "expect.*telnet_test" {
+		incr found
+                send_log "\ntelnet_test is running. Found is $found .\n"                
 		break
 	}
 	
