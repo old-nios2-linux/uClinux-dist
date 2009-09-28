@@ -132,6 +132,10 @@ set timeout 500
 send -s "ubiformat /dev/mtd$nand_rootfs_num -s 512 -O 512 \r"
 while 1 {
     expect {
+
+         -re "ubiformat:.*\\\(yes/no\\\)" {
+                send "yes\r"
+        }
 	
 	 -re "ubiformat: formatting eraseblock .* complete.*$kernel_prompt" {
                 case_pass $case_num
@@ -360,29 +364,6 @@ while 1 {
 
 expect -re "$kernel_prompt"
 
-set timeout 10
-step "Copy rootfs.ubifs to target board\n"
-spawn rcp $uclinux_path/images/rootfs.ubifs root@$targetip:/
-while 1 {
-   expect {
-
-      "*connect*" {
-         send_log "\nCopy to target board failed\n"
-         case_fail $case_num
-      }
-
-      eof {
-         send_log "\nCopy to target board done\n"
-         break
-      }
-
-      timeout {
-         break
-      }
-   }
-}
-set spawn_id $kermit_spawn_id
-
 incr case_num
 step "Make volume "
 set timeout 180
@@ -405,7 +386,7 @@ while 1 {
 incr case_num
 step "Make volume "
 set timeout 180
-send -s "ubiupdatevol /dev/ubi0_1 rootfs.ubifs \r"
+send -s "ubiupdatevol /dev/ubi0_1 $ubifs_rootfs_image \r"
 while 1 {
     expect {
 	

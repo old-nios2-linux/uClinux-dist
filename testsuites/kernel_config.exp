@@ -42,7 +42,7 @@ set compressed_kernel_and_cramfs_image uImage.cramfs
 set ext2_rootfs_image    rootfs.ext2
 set jffs2_rootfs_image   rootfs.jffs2
 set yaffs_rootfs_image   rootfs.yaffs
-set yaffs2_rootfs_image  rootfs.yaffs2
+set ubifs_rootfs_image   rootfs.ubifs
 set HAVE_JFFS2_IMAGE     0
 set HAVE_KERNEL_ONLY_IMAGE     0
 
