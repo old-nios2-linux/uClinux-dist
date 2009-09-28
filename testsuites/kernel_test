@@ -1964,7 +1964,7 @@ fi
 
 if [ ${AUTO_RUN_STATUS[$(( n + 20 ))]} -eq 1  ] ; then
 
-    APP_FORMAT="fdpic shared-flat"
+    APP_FORMAT="fdpic flat"
 
     for format in $APP_FORMAT
     do
