@@ -211,8 +211,16 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
-            send "\r"
+        -re "SoC AD73311 Audio support for Blackfin.*SND_BF5XX_SOC_AD73311.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF5xx chip.*SND_BF5XX_TDM.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "SoC AC97 Audio for the ADI BF5xx chip.*SND_BF5XX_AC97.*\\\[.*]" {
+            send "N\r"
         }
 
         -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
