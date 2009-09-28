@@ -47,14 +47,13 @@ int my_dispatch_message(struct message *msg)
 	default:
 		break;
 	}
-	put_receive_message_slot(msg->index);
 
 	return 0;
 }
 
 int main()
 {
-	int len;
+	int len, cur, todo = 0;
 	struct message *msg;
 	static unsigned long jiff = 0;
 	char buf[BLEN];
@@ -74,11 +73,13 @@ stub:
 
 	/* Do what you want */
 	while (1) {
-
-		/* read max BLEN bytes from ringbuf, it return immediately */
-		len = rbf_read(0, 1, buf, BLEN);
-		/* write len bytes to ringbuf, return until all are written */
-		rbf_write(0, 0, buf, len);
+		if (!todo) {
+			todo = rbf_read(0, 1, buf, BLEN);
+			cur = 0;
+		}
+		len = rbf_write(0, 1, buf + cur, todo);
+		cur += len;
+		todo -= len;
 
 		if (time_after(jiffies, jiff) && msg_num-- > 0) {
 			jiff = (unsigned long)jiffies + 50;

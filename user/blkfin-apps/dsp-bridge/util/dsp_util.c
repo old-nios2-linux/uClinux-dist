@@ -147,7 +147,7 @@ static int put_region(void *dst, size_t dst_size, const void *src, size_t src_si
 			dma_memcpy(dst, src, dst_size);
 		}
 		else if (ldst >= 0xfeb00000) {
-			dma_memcpy(dst, src, 0x1000);
+			dma_memcpy(dst, src, dst_size);
 		}
 		else {
 			dma_memcpy(dst, src, dst_size);
@@ -200,7 +200,7 @@ int elf_load(const char *buf)
 	/* now load all the program headers */
 	phdr = (ElfW(Phdr) *)(buf + ehdr->e_phoff);
 	for (i = 0; i < ehdr->e_phnum; ++i) {
-		//fprintf(stderr, "phdr: 0x%08x - 0x%08x+0x%08x <- 0x%08x+0x%08x\n", phdr, phdr->p_vaddr, phdr->p_memsz, buf + phdr->p_offset, phdr->p_filesz);
+		fprintf(stderr, "phdr: 0x%08x - 0x%08x+0x%08x <- 0x%08x+0x%08x\n", phdr, phdr->p_vaddr, phdr->p_memsz, buf + phdr->p_offset, phdr->p_filesz);
 		ret |= put_region((void*)phdr->p_vaddr, phdr->p_memsz, buf + phdr->p_offset, phdr->p_filesz);
 		++phdr;
 	}

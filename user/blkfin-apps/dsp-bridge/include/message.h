@@ -20,7 +20,8 @@
 #endif
 
 enum msg_type {
-	MSG_ACK_OK = 0,
+	MSG_NULL = 0,
+	MSG_ACK_OK,
 	MSG_ACK_FAIL,
 	MSG_DSP_START,		/* make dsp start user program */
 	MSG_DSP_RESET,		/* make dsp waiting for restart user program */

@@ -166,7 +166,7 @@ static int dispatch_message(struct message *msg)
 #endif
 	default:
 		if (user_dispatch_message)
-			return (* user_dispatch_message)(msg);
+			(* user_dispatch_message)(msg);
 	}
 	put_receive_message_slot(msg->index);
 

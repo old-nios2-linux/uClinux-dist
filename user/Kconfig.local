@@ -110,6 +110,10 @@ config USER_INETUTILS_RSHD
 	bool "rshd"
 config USER_BF561_COREBLD
 	bool "BF561 Core B support tools"
+config USER_DSP_BRIDGE
+	bool "dsp_bridge for bf561"
+	help
+	  A framework which was designed to enhance the CoreBLD
 config USER_POUND
 	bool "pound SSL Wrapper"
 	select LIB_LIBSSL

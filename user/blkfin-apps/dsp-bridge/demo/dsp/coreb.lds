@@ -45,8 +45,8 @@ SECTIONS
   {
     KEEP (*(.init))
     KEEP (*(.init.text))
-  } >MEM_L3 =0
-  .plt            : { *(.plt) } >MEM_L3
+  } >MEM_L2 =0
+  .plt            : { *(.plt) } >MEM_L2
   .text           :
   {
     /* *(EXCLUDE_FILE (*basiccrt.o ) .text) */
@@ -54,15 +54,15 @@ SECTIONS
     KEEP (*(.text.*personality*))
     /* .gnu.warning sections are handled specially by elf32.em.  */
     *(.gnu.warning)
-  } >MEM_L3 =0
+  } >MEM_L2 =0
   .fini           :
   {
     KEEP (*(.fini))
-  } >MEM_L3 =0
+  } >MEM_L2 =0
   .l2             :
   {
     *(.l2 .l2.*)
-  } >MEM_L3 =0
+  } >MEM_L2 =0
   /* Read-only sections, merged into text segment: */
   .interp         : { *(.interp) }
   .hash           : { *(.hash) }
@@ -112,45 +112,45 @@ SECTIONS
   {
     *(.l1.data)
   } >MEM_L1_DATA_A =0
-  .rodata         : { *(.rodata .rodata.* .gnu.linkonce.r.*) } >MEM_L3
-  .rodata1        : { *(.rodata1) } >MEM_L3
+  .rodata         : { *(.rodata .rodata.* .gnu.linkonce.r.*) } >MEM_L2
+  .rodata1        : { *(.rodata1) } >MEM_L2
   .sdata2         :
   {
     *(.sdata2 .sdata2.* .gnu.linkonce.s2.*)
-  } >MEM_L3
-  .sbss2          : { *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*) } >MEM_L3
-  .eh_frame_hdr : { *(.eh_frame_hdr) } >MEM_L3
-  .eh_frame       : ONLY_IF_RO { KEEP (*(.eh_frame)) } >MEM_L3
-  .gcc_except_table   : ONLY_IF_RO { *(.gcc_except_table .gcc_except_table.*) } >MEM_L3
+  } >MEM_L2
+  .sbss2          : { *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*) } >MEM_L2
+  .eh_frame_hdr : { *(.eh_frame_hdr) } >MEM_L2
+  .eh_frame       : ONLY_IF_RO { KEEP (*(.eh_frame)) } >MEM_L2
+  .gcc_except_table   : ONLY_IF_RO { *(.gcc_except_table .gcc_except_table.*) } >MEM_L2
   /* Adjust the address for the data segment.  We want to adjust up to
      the same address within the page on the next page up.  */
   . = ALIGN(0x1000) + (. & (0x1000 - 1));
   /* Exception handling  */
-  .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) } >MEM_L3
-  .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) } >MEM_L3
+  .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) } >MEM_L2
+  .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) } >MEM_L2
   /* Thread Local Storage sections  */
-  .tdata	  : { *(.tdata .tdata.* .gnu.linkonce.td.*) } >MEM_L3
-  .tbss		  : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) } >MEM_L3
+  .tdata	  : { *(.tdata .tdata.* .gnu.linkonce.td.*) } >MEM_L2
+  .tbss		  : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) } >MEM_L2
   .preinit_array     :
   {
     PROVIDE_HIDDEN (___preinit_array_start = .);
     KEEP (*(.preinit_array))
     PROVIDE_HIDDEN (___preinit_array_end = .);
-  } >MEM_L3
+  } >MEM_L2
   .init_array     :
   {
      PROVIDE_HIDDEN (___init_array_start = .);
      KEEP (*(SORT(.init_array.*)))
      KEEP (*(.init_array))
      PROVIDE_HIDDEN (___init_array_end = .);
-  } >MEM_L3
+  } >MEM_L2
   .fini_array     :
   {
     PROVIDE_HIDDEN (___fini_array_start = .);
     KEEP (*(.fini_array))
     KEEP (*(SORT(.fini_array.*)))
     PROVIDE_HIDDEN (___fini_array_end = .);
-  } >MEM_L3
+  } >MEM_L2
   .ctors          :
   {
     /* gcc uses crtbegin.o to find the start of
@@ -170,32 +170,32 @@ SECTIONS
     KEEP (*(EXCLUDE_FILE (*crtend*.o ) .ctors))
     KEEP (*(SORT(.ctors.*)))
     KEEP (*(.ctors))
-  } >MEM_L3
+  } >MEM_L2
   .dtors          :
   {
     KEEP (*crtbegin*.o(.dtors))
     KEEP (*(EXCLUDE_FILE (*crtend*.o ) .dtors))
     KEEP (*(SORT(.dtors.*)))
     KEEP (*(.dtors))
-  } >MEM_L3
-  .jcr            : { KEEP (*(.jcr)) } >MEM_L3
-  .data.rel.ro : { *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*) *(.data.rel.ro* .gnu.linkonce.d.rel.ro.*) } >MEM_L3
-  .dynamic        : { *(.dynamic) } >MEM_L3
+  } >MEM_L2
+  .jcr            : { KEEP (*(.jcr)) } >MEM_L2
+  .data.rel.ro : { *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*) *(.data.rel.ro* .gnu.linkonce.d.rel.ro.*) } >MEM_L2
+  .dynamic        : { *(.dynamic) } >MEM_L2
   .data           :
   {
     *(.data .data.* .gnu.linkonce.d.*)
     KEEP (*(.gnu.linkonce.d.*personality*))
     SORT(CONSTRUCTORS)
-  } >MEM_L3
-  .data1          : { *(.data1) } >MEM_L3
-  .got            : { *(.got.plt) *(.got) } >MEM_L3
+  } >MEM_L2
+  .data1          : { *(.data1) } >MEM_L2
+  .got            : { *(.got.plt) *(.got) } >MEM_L2
   /* We want the small data sections together, so single-instruction offsets
      can access them all, and initialized data all before uninitialized, so
      we can shorten the on-disk segment size.  */
   .sdata          :
   {
     *(.sdata .sdata.* .gnu.linkonce.s.*)
-  } >MEM_L3
+  } >MEM_L2
   __edata = .; PROVIDE (_edata = .);
   .sbss           :
   {
@@ -203,7 +203,7 @@ SECTIONS
     *(.dynsbss)
     *(.sbss .sbss.* .gnu.linkonce.sb.*)
     *(.scommon)
-  } >MEM_L3
+  } >MEM_L2
   .bss            :
   {
     *(.dynbss)
@@ -216,7 +216,7 @@ SECTIONS
        pad the .data section.  */
     . = ALIGN(. != 0 ? 32 / 8 : 1);
     __bss_end = .;
-  } >MEM_L3
+  } >MEM_L2
   . = ALIGN(32 / 8);
   . = ALIGN(32 / 8);
   __end = .; PROVIDE (_end = .);

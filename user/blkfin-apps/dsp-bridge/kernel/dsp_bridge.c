@@ -144,45 +144,6 @@ static int dsp_get_mmregion(unsigned long arg)
 	return 0;
 }
 
-static int dsp_get_message_slot(unsigned long arg)
-{
-	void __user *uarg = (void __user *)arg;
-	struct message *msg;
-
-	msg = get_message_slot();
-	if (copy_to_user(uarg, &msg, sizeof(msg)))
-		return -EFAULT;
-
-	return 0;
-}
-
-static int dsp_put_receive_message_slot(unsigned long arg)
-{
-	void __user *uarg = (void __user *)arg;
-	struct message *msg;
-
-	if (copy_from_user(&msg, uarg, sizeof(msg)))
-		return -EFAULT;
-
-	put_receive_message_slot(msg->index);
-
-	return 0;
-}
-
-static int dsp_send_message_direct(unsigned long arg)
-{
-	void __user *uarg = (void __user *)arg;
-	struct message *msg;
-
-	if (copy_from_user(&msg, uarg, sizeof(msg)))
-		return -EFAULT;
-
-	pr_debug("dsp_send_message_direct: user message from task %p\n", current);
-	send_message(msg);
-
-	return 0;
-}
-
 static int dsp_send_message(unsigned long arg)
 {
 	void __user *uarg = (void __user *)arg;
@@ -201,15 +162,16 @@ static int dsp_send_message(unsigned long arg)
 	msg->index = index;
 	flush_dcache_range((unsigned long)msg->data, (unsigned long)msg->data + msg->size);
 
+	msg->pid = current->pid;
 	pr_debug("dsp_send_message: user message from task %p\n", current);
 	send_message(msg);
 
 	return 0;
 }
 
-static int dsp_receive_message_direct(unsigned long arg)
+static int dsp_receive_message(unsigned long arg)
 {
-	void __user *uarg = (void __user *)arg;
+	struct message __user *umsg = (void __user *)arg;
 	struct message *msg = NULL;
 
 	spin_lock(&kmsg_queue.lock);
@@ -220,9 +182,17 @@ static int dsp_receive_message_direct(unsigned long arg)
 	}
 	spin_unlock(&kmsg_queue.lock);
 
-	if (msg && copy_to_user(uarg, &msg, sizeof(msg)))
-		return -EFAULT;
+	if (!msg) {
+		put_user(MSG_NULL, &umsg->type);
+		return 0;
+	} else {
+		if (copy_to_user(umsg, msg, sizeof(*msg))) {
+			kfree(msg);
+			return -EFAULT;
+		}
+	}
 
+	kfree(msg);
 	return 0;
 }
 
@@ -246,20 +216,11 @@ static int dsp_ctl_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case CMD_COREB_GET_MMREGION:
 		ret = dsp_get_mmregion(arg);
 		break;
-	case CMD_COREB_GET_MESSAGE_SLOT:
-		ret = dsp_get_message_slot(arg);
-		break;
-	case CMD_COREB_PUT_RECEIVE_MESSAGE_SLOT:
-		ret = dsp_put_receive_message_slot(arg);
-		break;
-	case CMD_COREB_SEND_MESSAGE_DIRECT:
-		ret = dsp_send_message_direct(arg);
-		break;
 	case CMD_COREB_SEND_MESSAGE:
 		ret = dsp_send_message(arg);
 		break;
-	case CMD_COREB_RECEIVE_MESSAGE_DIRECT:
-		ret = dsp_receive_message_direct(arg);
+	case CMD_COREB_RECEIVE_MESSAGE:
+		ret = dsp_receive_message(arg);
 		break;
 	default:
 		ret = -EINVAL;
@@ -352,17 +313,21 @@ static struct miscdevice dsp_ctl_dev = {
 int sig_message(struct message *msg)
 {
 	struct siginfo info;
+	struct message *kmsg;
 	struct task_struct *task;
 
 	task = find_task_by_vpid(msg->pid);
 	if (!task) {
-		put_receive_message_slot(msg->index);
 		pr_debug("can't send message to pid %ld\n", msg->pid);
 		return 0;
 	}
 
+	kmsg = kmalloc(sizeof(*msg), GFP_KERNEL);
+	memcpy(kmsg, msg, sizeof(*msg));
+	INIT_LIST_HEAD(&kmsg->list);
+
 	spin_lock(&kmsg_queue.lock);
-	list_add_tail(&msg->list, &kmsg_queue.queue_head);
+	list_add_tail(&kmsg->list, &kmsg_queue.queue_head);
 	kmsg_queue.qlen++;
 	spin_unlock(&kmsg_queue.lock);
 

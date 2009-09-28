@@ -58,7 +58,6 @@ void asm_set(unsigned long *addr, int val)
 {
 asm(
 	"p0 = r0;\n"
-	"ssync;\n"
 	"[p0] = r1;\n"
 	"ssync;\n"
 	:
@@ -71,7 +70,6 @@ int asm_read(unsigned long *addr)
 {
 asm(
 	"p0 = r0;\n"
-	"ssync;\n"
 	"r0 = [p0];\n"
 	"ssync;\n"
 	:
