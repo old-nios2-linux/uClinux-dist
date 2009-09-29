@@ -33,8 +33,16 @@ while 1 {
             send "y\r"
         }
 
+        -re "VIDEO test program.*USER_BLACKFIN_VIDEOTEST.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "jpegview.*USER_JPEGVIEW_JPEGVIEW.*\\\[.*]" {
+            send "Y\r"
+        }
+
         "\\\(*) \\\[*]" {
-            sleep .1
+            sleep .01
             send "\r"
         }
 
