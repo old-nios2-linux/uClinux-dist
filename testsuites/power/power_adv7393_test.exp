@@ -173,7 +173,7 @@ incr case_num
 send "modprobe bfin_adv7393fb\r"
 while 1 {
     expect {
-        -re "bfin_adv7393_fb.*BFIN ADV7393.*fb memory address.*$kernel_prompt" {
+        -re "ADV7393 frame buffer device.*fb memory address : 0x\[0-9a-f]+.*$kernel_prompt" {
             break
         }
         timeout {
