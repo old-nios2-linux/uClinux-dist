@@ -282,8 +282,8 @@ int main(int argc, char *argv[])
 	screen_height = screeninfo.yres_virtual;
 	bits_per_pixel = screeninfo.bits_per_pixel;
 	
-	screen_ptr = mmap(0, screen_height * screen_width * (bits_per_pixel/ 8), PROT_READ|PROT_WRITE, MAP_FILE|MAP_PRIVATE, screen_fd, 0);
-	
+	screen_ptr = mmap(0, screen_height * screen_width * (bits_per_pixel/ 8), PROT_READ|PROT_WRITE, MAP_SHARED, screen_fd, 0);
+	               
 	if (screen_ptr==MAP_FAILED) {
 		perror("Unable to mmap frame buffer\n");
 	}
