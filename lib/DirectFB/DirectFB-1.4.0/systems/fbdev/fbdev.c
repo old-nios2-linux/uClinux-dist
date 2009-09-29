@@ -408,15 +408,6 @@ system_get_info( CoreSystemInfo *info )
      snprintf( info->name, DFB_CORE_SYSTEM_INFO_NAME_LENGTH, "FBDev" );
 }
 
-static void *
-do_mmap( void *start, size_t length, int prot, int flags, int fd, off_t offset )
-{
-	void *ret = mmap( start, length, prot, flags | MAP_SHARED, fd, offset );
-	if (ret == MAP_FAILED)
-		ret = mmap( start, length, prot, flags | MAP_PRIVATE, fd, offset );
-	return ret;
-}
-
 static DFBResult
 system_initialize( CoreDFB *core, void **data )
 {
@@ -481,8 +472,8 @@ system_initialize( CoreDFB *core, void **data )
              shared->fix.mmio_start, shared->fix.mmio_len >> 10 );
 
      /* Map the framebuffer */
-     dfb_fbdev->framebuffer_base = do_mmap( NULL, shared->fix.smem_len,
-                                         PROT_READ | PROT_WRITE, 0,
+     dfb_fbdev->framebuffer_base = mmap( NULL, shared->fix.smem_len,
+                                         PROT_READ | PROT_WRITE, MAP_SHARED,
                                          dfb_fbdev->fd, 0 );
      if (dfb_fbdev->framebuffer_base == MAP_FAILED) {
           D_PERROR( "DirectFB/FBDev: "
@@ -646,8 +637,8 @@ system_join( CoreDFB *core, void **data )
      }
 
      /* Map the framebuffer */
-     dfb_fbdev->framebuffer_base = do_mmap( NULL, dfb_fbdev->shared->fix.smem_len,
-                                         PROT_READ | PROT_WRITE, 0,
+     dfb_fbdev->framebuffer_base = mmap( NULL, dfb_fbdev->shared->fix.smem_len,
+                                         PROT_READ | PROT_WRITE, MAP_SHARED,
                                          dfb_fbdev->fd, 0 );
      if (dfb_fbdev->framebuffer_base == MAP_FAILED) {
           D_PERROR( "DirectFB/FBDev: "
@@ -804,7 +795,7 @@ system_map_mmio( unsigned int    offset,
      if (length <= 0)
           length = dfb_fbdev->shared->fix.mmio_len;
 
-     addr = do_mmap( NULL, length, PROT_READ | PROT_WRITE, 0,
+     addr = mmap( NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED,
                   dfb_fbdev->fd, dfb_fbdev->shared->fix.smem_len + offset );
      if (addr == MAP_FAILED) {
           D_PERROR( "DirectFB/FBDev: Could not mmap MMIO region "
