@@ -1001,14 +1001,10 @@ static int config(uint32_t width, uint32_t height, uint32_t d_width,
 	    int x_offset=0,y_offset=0;
 	    if ((frame_buffer = (uint8_t *) mmap(0, fb_size, PROT_READ | PROT_WRITE,
 				    MAP_SHARED, fb_dev_fd, 0)) == (uint8_t *) -1) {
-                frame_buffer = (uint8_t *) mmap(0, fb_size, PROT_READ | PROT_WRITE,
-                                                MAP_PRIVATE, fb_dev_fd, 0);
-                if (frame_buffer == -1) {
-
+                
                     mp_msg(MSGT_VO, MSGL_ERR, "Can't mmap %s: %s\n", fb_dev_name, strerror(errno));
                     return 1;
-                }
-	    }
+            }
 
 	    center = frame_buffer +
 		    ( (out_width - in_width) / 2 ) * fb_pixel_size +
