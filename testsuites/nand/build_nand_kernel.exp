@@ -6,6 +6,8 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 set HAVE_KERNEL_ONLY_IMAGE 1
+set env(EXT2_BLOCKS) "20480"
+set env(UBIFS_LEB_SIZE) "129024"
 
 cd $uclinux_path/testsuites
 
@@ -58,7 +60,7 @@ while 1 {
         -re "Blackfin on-chip MAC support.*BFIN_MAC.*\\\[.*]" {
 
              if { $board_type == "BF527-EZKIT" || $board_type == "BF526-EZBRD" } {
-                        send -s "Y\r"
+                        send -s "M\r"
              } else {
                         send -s "\r"
              }
