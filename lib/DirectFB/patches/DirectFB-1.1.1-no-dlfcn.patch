@@ -1,7 +1,7 @@
 http://directfb.org/mantis/view.php?id=79
 
---- src/core/core.c
-+++ src/core/core.c
+--- a/src/core/core.c
++++ b/src/core/core.c
 @@ -31,7 +31,6 @@
  #include <stdlib.h>
  #include <unistd.h>
@@ -21,8 +21,8 @@ http://directfb.org/mantis/view.php?id=79
  D_DEBUG_DOMAIN( DirectFB_Core, "DirectFB/Core", "DirectFB Core" );
  
  /******************************************************************************/
---- lib/direct/interface.c
-+++ lib/direct/interface.c
+--- a/lib/direct/interface.c
++++ b/lib/direct/interface.c
 @@ -30,9 +30,6 @@
  
  #include <pthread.h>
@@ -41,8 +41,8 @@ http://directfb.org/mantis/view.php?id=79
  #endif
  
  typedef struct {
---- systems/vnc/vncinput.c
-+++ systems/vnc/vncinput.c
+--- a/systems/vnc/vncinput.c
++++ b/systems/vnc/vncinput.c
 @@ -19,7 +19,6 @@
  
  #include <stdio.h>

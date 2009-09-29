@@ -1,5 +1,5 @@
---- configure
-+++ configure
+--- a/configure
++++ b/configure
 @@ -22573,7 +22573,7 @@ need_libdl=yes
  want_ppcasm=yes
  
@@ -9,8 +9,8 @@
      have_linux=yes
      ;;
  
---- configure.in
-+++ configure.in
+--- a/configure.in
++++ b/configure.in
 @@ -22573,7 +22573,7 @@ need_libdl=yes
  want_ppcasm=yes
  
