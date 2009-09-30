@@ -187,9 +187,12 @@ image.rootfs.all: \
 # Kernel targets (ELF)
 #
 
-IMAGE_KERNEL = $(IMAGEDIR)/vmlinux
+SOURCE_KERNEL     = $(ROOTDIR)/$(LINUXDIR)/vmlinux
+IMAGE_KERNEL      = $(IMAGEDIR)/vmlinux
 IMAGE_KERNEL_BASE = $(IMAGEDIR)/linux
-ROMFS_ADDR = $$($(CROSS_COMPILE)readelf -s $(IMAGE_KERNEL) | awk '$$NF == "__end" {print "0x"$$2}')
+GET_KERNEL_SYMBOL = $(READELF) -s $(SOURCE_KERNEL) | awk '$$NF == "$(1)" {print "0x"$$2}'
+ROMFS_ADDR        = $$($(call GET_KERNEL_SYMBOL,__end))
+MAKE_KERNEL       = CPPFLAGS="" CFLAGS="" LDFLAGS="" $(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXSRC)
 MAKE_KERNEL_ROMFS = \
 	$(OBJCOPY) --add-section .romfs=$(IMAGE_ROMFS_BASE).$(1) \
 		--adjust-section-vma .romfs=$(ROMFS_ADDR) --no-adjust-warnings \
@@ -216,8 +219,17 @@ ifeq ($(CONFIG_ROMFS_FS),y)
 image.kernel.romfs: image.kernel.romfs.force
 endif
 
-.PHONY: image.kernel.vmlinux
-$(IMAGE_KERNEL): $(ROOTDIR)/$(LINUXDIR)/vmlinux
+.PHONY: image.kernel.vmlinux image.kernel.vmlinux.force
+image.kernel.vmlinux.force:
+	rm -f $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio
+	$(MAKE_KERNEL) vmlinux vmImage
+$(SOURCE_KERNEL):
+	$(MAKE) image.kernel.vmlinux.force
+$(IMAGE_KERNEL): $(SOURCE_KERNEL)
+	# only rebuild bare kernel images if needed
+	if test $$($(CROSS_COMPILE)size $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.o | sed 1d | awk '{print $$1}') -gt 512 ; then \
+		$(MAKE) image.kernel.vmlinux.force || exit $$? ; \
+	fi
 	cp $< $@
 	$(STRIP) -g $@
 image.kernel.vmlinux: $(IMAGE_KERNEL)
@@ -246,7 +258,7 @@ image.kernel.all: \
 
 LINUXBOOTDIR = $(ROOTDIR)/$(LINUXDIR)/arch/$(ARCH)/boot
 IMAGE_UIMAGE_BASE = $(IMAGEDIR)/uImage
-KERNEL_ENTRY = $$($(CROSS_COMPILE)nm $(IMAGE_KERNEL_BASE).$(1) | awk '$$NF == "__start" {print $$1}')
+KERNEL_ENTRY = $$($(call GET_KERNEL_SYMBOL,__start))
 MAKE_UIMAGE_ROMFS = \
 	set -e; \
 	$(OBJCOPY) -O binary -S $(IMAGE_KERNEL_BASE).$(1) $(IMAGE_KERNEL_BASE).bin; \
@@ -272,11 +284,10 @@ endif
 
 define MAKE_KERNEL_IMAGE
 	cp $(IMAGE_ROMFS_BASE).initramfs$(COMP_ROOTFS) $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio
-	CPPFLAGS="" CFLAGS="" LDFLAGS="" \
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXSRC) $(1)$(COMP_KERN)
+	$(MAKE_KERNEL) $(1)$(COMP_KERN)
 	cp $(LINUXBOOTDIR)/$(1)$(COMP_KERN) $(IMAGEDIR)/$(2)$(COMP_KERN).initramfs$(COMP_ROOTFS)
 	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map$(COMP_KERN).initramfs$(COMP_ROOTFS)
-	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
+	cp $(SOURCE_KERNEL) $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
 	$(STRIP) -g $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
 	ln -sf $(2)$(COMP_KERN).initramfs$(COMP_ROOTFS) $(IMAGEDIR)/$(2)
 endef
@@ -370,7 +381,7 @@ $(LINUXBOOTDIR)/vmImage:
 	 false
 
 .PHONY: image.uimage.vmimage
-$(IMAGEDIR)/vmImage: $(LINUXBOOTDIR)/vmImage
+$(IMAGEDIR)/vmImage: $(LINUXBOOTDIR)/vmImage $(IMAGE_KERNEL)
 	cp $< $@
 image.uimage.vmimage: $(IMAGEDIR)/vmImage
 
