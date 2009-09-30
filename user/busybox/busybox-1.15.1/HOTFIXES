@@ -9,3 +9,4 @@ busybox-1.15.1-dd.patch
 busybox-1.15.1-sed.patch
 busybox-1.15.1-buildsys.patch
 busybox-1.15.1-find.patch
+busybox-1.15.1-hush.patch
