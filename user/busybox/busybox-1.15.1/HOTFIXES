@@ -12,3 +12,4 @@ busybox-1.15.1-find.patch
 busybox-1.15.1-hush.patch
 busybox-1.15.1-lineedit.patch
 busybox-1.15.1-pidof_killall.patch
+busybox-1.15.1-uniq.patch
