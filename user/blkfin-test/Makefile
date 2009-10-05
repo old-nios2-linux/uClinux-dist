@@ -33,7 +33,6 @@ dir_$(CONFIG_CAMERA_TEST)                   += camera_test
 dir_$(CONFIG_STRING_TEST)                   += string_test
 dir_$(CONFIG_MMAP_TEST)                     += mmap_test
 dir_$(CONFIG_USER_GETTIMEOFDAY_TEST)        += gettimeofday_test
-dir_$(CONFIG_SIMPLE_GPIO_TEST)              += simple-gpio-test
 dir_$(CONFIG_FIXED_CODE_TEST)               += fixed_code_test
 dir_$(CONFIG_DYNTICK_TEST)                  += dyntick-test
 dir_$(CONFIG_BFIN_DMA)                      += bfin-dma
