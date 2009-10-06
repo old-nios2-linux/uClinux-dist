@@ -109,8 +109,8 @@ struct globals {
 	struct G_sizecheck { \
 		char G_sizecheck[sizeof(G) > COMMON_BUFSIZE ? -1 : 1]; \
 	}; \
-	G.xdev_dev = NULL; \
-	G.xdev_count = 0; \
+	IF_FEATURE_FIND_XDEV(G.xdev_dev = NULL;) \
+	IF_FEATURE_FIND_XDEV(G.xdev_count = 0;) \
 	G.actions = NULL; \
 	G.need_print = 1; \
 	G.recurse_flags = ACTION_RECURSE; \
