@@ -29,7 +29,8 @@ int uniq_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int uniq_main(int argc UNUSED_PARAM, char **argv)
 {
 	FILE *in, *out;
-	const char *s0, *e0, *s1, *e1, *input_filename;
+	const char *s0, *e0, *e1, *input_filename;
+	char *s1;
 	unsigned long dups;
 	unsigned skip_fields, skip_chars, max_chars;
 	unsigned opt;
@@ -62,7 +63,7 @@ int uniq_main(int argc UNUSED_PARAM, char **argv)
 		bb_show_usage();
 	}
 
-	s1 = e1 = NULL; /* prime the pump */
+	e1 = s1 = NULL; /* prime the pump */
 
 	do {
 		s0 = s1;
