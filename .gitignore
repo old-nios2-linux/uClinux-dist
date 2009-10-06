@@ -15,7 +15,9 @@ lib*.so
 /.config
 /.oldconfig
 /autoconf.h
+/ccache
 /config.arch
+/download
 /images
 /Kconfig
 /linux-2.6.x
