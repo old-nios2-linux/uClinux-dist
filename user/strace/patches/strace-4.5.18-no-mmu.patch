@@ -41,7 +41,7 @@
 +	__child_pid; \
 +})
 +#else
-+# define strace_vforked false
++# define strace_vforked true
 +# define strace_fork() vfork()
 +#endif
 +
