@@ -141,6 +141,18 @@ config USER_FPING
 	  different from ping in that you can specify any number of hosts on
 	  the command line, or specify a file containing the lists of hosts to ping. 
 	  http://fping.sourceforge.net/
+config USER_HTPDATE
+	bool htpdate
+	help
+	  Why would anybody need another time protocol, when ntp is already great?
+	  A simple answer is you do not, unless you do not have access to a ntp
+	  server, because you are behind a firewall and/or proxy server.
+
+	  In order for ntp to work, you need to have access to outgoing and
+	  incoming packets from UDP port 123. As long as HTTP or HTTPS
+	  connectivity is available, you can use HTPDATE to set up your system
+	  clocks.
+	  http://www.clevervest.com/twiki/bin/view/HTP
 config USER_HTTPING
 	bool httping
 	help

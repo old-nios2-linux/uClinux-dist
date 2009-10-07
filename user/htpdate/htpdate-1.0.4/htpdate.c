@@ -359,7 +359,7 @@ static int htpdate_adjtimex( double drift ) {
 
 	/* Read current kernel frequency */
 	tmx.modes = 0;
-	ntp_adjtime(&tmx);
+	adjtimex(&tmx);
 
 	/* Calculate new frequency */
 	freq = (long)(65536e6 * drift);
@@ -377,7 +377,7 @@ static int htpdate_adjtimex( double drift ) {
 		printlog( 1, "seteuid()" );
 		exit(1);
 	} else {
-		return( ntp_adjtime(&tmx) );
+		return( adjtimex(&tmx) );
 	}
 
 }
@@ -417,7 +417,6 @@ Usage: htpdate [-046abdhlqstxD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
 /* Run htpdate in daemon mode */
 static void runasdaemon( char *pidfile ) {
 	FILE				*pid_file;
-	pid_t				pid;
 
 	/* Check if htpdate is already running (pid exists)*/
 	pid_file = fopen(pidfile, "r");
@@ -426,57 +425,24 @@ static void runasdaemon( char *pidfile ) {
 		exit(1);
 	}
 
-	pid = fork();
-	if ( pid < 0 ) {
-		fputs( "fork()\n", stderr );
+	if ( daemon(0, 0) )
 		exit(1);
-	}
-
-	if ( pid > 0 ) {
-		exit(0);
-	}
-
-	/* Create a new SID for the child process */
-	if ( setsid () < 0 )
-		exit(1);
-
-	/* Close out the standard file descriptors */
-	close( STDIN_FILENO );
-	close( STDOUT_FILENO );
-	close( STDERR_FILENO );
 
 	signal(SIGHUP, SIG_IGN);
 
 	/* Change the file mode mask */
 	umask(0);
 
-	/* Change the current working directory */
-	if ( chdir("/") < 0 ) {
-		printlog( 1, "chdir()" );
+	/* Write a pid file */
+	pid_file = fopen( pidfile, "w" );
+	if ( !pid_file ) {
+		printlog( 1, "Error writing pid file" );
 		exit(1);
+	} else {
+		fprintf( pid_file, "%u\n", (unsigned short)getpid() );
+		fclose( pid_file );
 	}
-
-	/* Second fork, to become the grandchild */
-	pid = fork();
-	if ( pid < 0 ) {
-		printlog( 1, "fork()" );
-		exit(1);
-	}
-
-	if ( pid > 0 ) {
-		/* Write a pid file */
-		pid_file = fopen( pidfile, "w" );
-		if ( !pid_file ) {
-			printlog( 1, "Error writing pid file" );
-			exit(1);
-		} else {
-			fprintf( pid_file, "%u\n", (unsigned short)pid );
-			fclose( pid_file );
-		}
-		printlog( 0, "htpdate version "VERSION" started" );
-		exit(0);
-	}
-
+	printlog( 0, "htpdate version "VERSION" started" );
 }
 
 
