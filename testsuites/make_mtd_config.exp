@@ -40,8 +40,12 @@ while 1 {
 
 #################################################################################
 #################################################################################
+        # Disable this config to use copy command cp normally.
+        -re "Non-POSIX, but safer, copying to special nodes.*USER_BUSYBOX_FEATURE_NON_POSIX_CP.*\\\[.*]" {
+            send "N\r"
+        }
 
-       -re "mtd-utils.*USER_MTDUTILS.*\\\[.*]" {
+        -re "mtd-utils.*USER_MTDUTILS.*\\\[.*]" {
             send "Y\r"
         }
 
