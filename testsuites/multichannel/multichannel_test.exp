@@ -11,6 +11,7 @@ if { $argc < 2} {
     exit
 }
 set audio_dev [lindex $argv 1]
+append TITLE " ($audio_dev)"
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -29,8 +30,10 @@ step "Start testing"
 set case_num 0
 
 if { $audio_dev == "audio_ad1836" } {
+    set audio_mod "snd-ad1836"
     set channel_num 6
 } elseif { $audio_dev == "audio_ad1938" } {
+    set audio_mod "snd-ad1938"
     set channel_num 8
 }
 set test_file ${channel_num}_channels.wav
@@ -44,6 +47,26 @@ if [ catch {exec rcp $user/download/$test_file root@$targetip:/} ] {
     case_fail $case_num
 } else {
     case_pass $case_num
+}
+
+set timeout 30
+incr case_num
+send "modprobe $audio_mod\r"
+while 1 {
+    expect {
+        -re "(modprobe:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re "mapping ok.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send -s "\3"
+            send_log "timeout\n"
+            case_fail $case_num
+        }
+    }
 }
 
 set count_under_run 0

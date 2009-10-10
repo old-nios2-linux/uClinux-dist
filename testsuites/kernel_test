@@ -287,7 +287,7 @@ if [ $BOARD_CONFIG = "BF548-EZKIT-STD" ] ; then
 
    BOARD_TYPE=BF548-EZKIT
    
-   AUTO_RUN_STATUS[9]="1";AUTO_RUN_STATUS[12]="1"; AUTO_RUN_STATUS[25]="1"; AUTO_RUN_STATUS[42]="0" ; AUTO_RUN_STATUS[45]="0"; AUTO_RUN_STATUS[54]="1"; AUTO_RUN_STATUS[57]="1"; AUTO_RUN_STATUS[55]="1"; AUTO_RUN_STATUS[62]="1"; AUTO_RUN_STATUS[64]="1"; AUTO_RUN_STATUS[65]="1"; AUTO_RUN_STATUS[66]="1"; AUTO_RUN_STATUS[67]="1"; AUTO_RUN_STATUS[68]="1"; AUTO_RUN_STATUS[70]="1"; AUTO_RUN_STATUS[75]="1"; AUTO_RUN_STATUS[$(( n + 6 ))]="1";AUTO_RUN_STATUS[$(( n + 9 ))]="1"; AUTO_RUN_STATUS[$(( n + 11 ))]="1"; AUTO_RUN_STATUS[$(( n + 13 ))]="1"; AUTO_RUN_STATUS[$(( n + 14 ))]="0"; AUTO_RUN_STATUS[$(( n + 17 ))]="1"; AUTO_RUN_STATUS[$(( n + 21 ))]="1"
+   AUTO_RUN_STATUS[9]="1";AUTO_RUN_STATUS[12]="1"; AUTO_RUN_STATUS[25]="1"; AUTO_RUN_STATUS[42]="0" ; AUTO_RUN_STATUS[45]="0"; AUTO_RUN_STATUS[54]="1"; AUTO_RUN_STATUS[57]="1"; AUTO_RUN_STATUS[55]="1"; AUTO_RUN_STATUS[62]="1"; AUTO_RUN_STATUS[64]="1"; AUTO_RUN_STATUS[65]="1"; AUTO_RUN_STATUS[66]="1"; AUTO_RUN_STATUS[67]="1"; AUTO_RUN_STATUS[70]="1"; AUTO_RUN_STATUS[75]="1"; AUTO_RUN_STATUS[$(( n + 6 ))]="1";AUTO_RUN_STATUS[$(( n + 9 ))]="1"; AUTO_RUN_STATUS[$(( n + 11 ))]="1"; AUTO_RUN_STATUS[$(( n + 13 ))]="1"; AUTO_RUN_STATUS[$(( n + 14 ))]="0"; AUTO_RUN_STATUS[$(( n + 17 ))]="1"; AUTO_RUN_STATUS[$(( n + 21 ))]="1"
 
    MANUAL_RUN_STATUS=( [0]="1"    [1]="0"     [2]="0"    [3]="0"    [4]="0"  [5]="0"  [6]="1"  [7]="0" [8]="1"  [9]="0"  [10]="0"   [11]="1"  [12]="0"  [13]="0"  [14]="0"  [15]="0"  [16]="1" [17]="0" [18]="1"  [19]="1" [20]="1" [23]="1" [24]="1" [$(( n + 1 ))]="0"  [$(( n + 2 ))]="0" )
 
@@ -382,7 +382,7 @@ fi
 
 if [ $BINARY_FORMAT = "elf" ] ; then
 
-   AUTO_RUN_STATUS[11]="0"; AUTO_RUN_STATUS[12]="0"; AUTO_RUN_STATUS[47]="0"; MANUAL_RUN_STATUS[13]="1"; AUTO_RUN_STATUS[$(( n + 5 ))]="1"
+   AUTO_RUN_STATUS[11]="0"; AUTO_RUN_STATUS[12]="0"; AUTO_RUN_STATUS[47]="0"; AUTO_RUN_STATUS[68]="1"; MANUAL_RUN_STATUS[13]="1"; AUTO_RUN_STATUS[$(( n + 5 ))]="1"
 fi
 
 #########################   List the tests to be run on the machine  #########################
@@ -542,6 +542,13 @@ do
 	./kgdb_test.exp  $BOARD_TYPE ethernet SMP >/dev/null  2>&1    
         elif [ ${AUTO_TESTCASE[$i]} == "linphone_ad1981b" ] || [ ${AUTO_TESTCASE[$i]} == "linphone_ad73322" ] ; then
 	./linphone_test.exp  $BOARD_TYPE  >/dev/null  2>&1    
+        elif [ ${AUTO_TESTCASE[$i]} == "multichannel" ] ; then
+            if [ ${AUTO_RUN_STATUS[$(( n + 3 ))]} -eq 1  ] ; then
+                audio_dev="audio_ad1836"
+            elif [ ${AUTO_RUN_STATUS[$(( n + 5 ))]} -eq 1  ] ; then
+                audio_dev="audio_ad1938"
+            fi
+            ./multichannel_test.exp $BOARD_TYPE $audio_dev >/dev/null  2>&1
 	else
 	./${AUTO_TESTCASE[$i]}_test.exp  $BOARD_TYPE >/dev/null  2>&1    
 	fi
