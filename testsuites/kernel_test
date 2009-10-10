@@ -1252,6 +1252,8 @@ do
   cd $UCLINUX_DIST_TESTSUITES/snormtd
   ./build_snormtd_kernel.exp $BOARD_TYPE   >/dev/null  2>&1
   sleep 30
+  ./snormtd_test.exp $BOARD_TYPE >/dev/null  2>&1
+  sleep 30
   ./spi_flash_images.exp $BOARD_TYPE >/dev/null  2>&1
   if [ $? == 0 ] ; then
   sleep 30
@@ -1260,28 +1262,11 @@ do
   sleep 30
 
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.snormtd
+  cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.snormtd
   cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.snormtd
   cp $UCLINUX_DIST_PATH/images/rootfs.jffs2 $THIS_LOG/rootfs.jffs2.snormtd
   cp $UCLINUX_DIST_TESTSUITES/snormtd/*_log $THIS_LOG
 
-    
-  if [ $RESET_BOARD -eq 1  ] ; then
-   cd $UCLINUX_DIST_TESTSUITES
-   ./reset_board.exp  >/dev/null  2>&1 
-   sleep 10
-  fi
-
-  cd $UCLINUX_DIST_TESTSUITES/snormtd
-  ./build_snormtd_mount_kernel.exp $BOARD_TYPE   >/dev/null  2>&1
-  sleep 30
-  ./snormtd_test.exp $BOARD_TYPE >/dev/null  2>&1
-
-  cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.snormtd_mount
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.snormtd_mount  
-  cp $UCLINUX_DIST_TESTSUITES/snormtd/*_log $THIS_LOG  
-  
-  sleep 30
- 
   if [ $RESET_BOARD -eq 1  ] ; then
    cd $UCLINUX_DIST_TESTSUITES
    ./reset_board.exp  >/dev/null  2>&1 
