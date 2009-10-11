@@ -9,7 +9,7 @@ include $(CONFIG_CONFIG)
 ROMFS_DIRS-y = bin etc etc/dhcpc home lib mnt proc sys usr var root home tmp etc/config var/run var/lib/misc
 ETC_FILES-y = \
 	filesystems group issue mdev.conf mime.types modprobe.conf motd \
-	passwd profile rc TZ
+	passwd profile rc TZ nsswitch.conf
 WEB_FILES-y =
 
 ETC_FILES-$(CONFIG_NET) += hosts host.conf protocols services
