@@ -16,6 +16,10 @@ ETC_FILES-$(CONFIG_NET) += hosts host.conf protocols services
 ETC_FILES-$(CONFIG_USER_INETD_INETD) += inetd.conf
 ETC_FILES-$(CONFIG_USER_BUSYBOX_INETD) += inetd.conf
 
+ROMFS_DIRS-$(CONFIG_USER_BUSYBOX_FTPD) += home/ftpd
+ROMFS_DIRS-$(CONFIG_USER_BUSYBOX_TFTPD) += home/tftpboot
+ROMFS_DIRS-$(CONFIG_USER_BUSYBOX_HTTPD) += home/httpd home/httpd/cgi-bin
+WEB_FILES-$(CONFIG_USER_BUSYBOX_HTTPD) += index.html favicon.ico
 ROMFS_DIRS-$(CONFIG_USER_BOA_SRC_BOA) += home/httpd home/httpd/cgi-bin etc/boa var/log/boa
 ETC_FILES-$(CONFIG_USER_BOA_SRC_BOA) += boa.conf
 WEB_FILES-$(CONFIG_USER_BOA_SRC_BOA) += boa.conf index.html favicon.ico
@@ -39,6 +43,15 @@ romfs::
 	for f in $(WEB_FILES-y) ; do \
 		$(ROMFSINST) ../common/$$f /home/httpd/$$f ; \
 	done
+
+	$(ROMFSINST) -e CONFIG_USER_BUSYBOX_FTPD \
+		-a "21 stream tcp nowait root ftpd ftpd -w /home/ftpd" /etc/inetd.conf
+	$(ROMFSINST) -e CONFIG_USER_BUSYBOX_TELNETD \
+		-a "23 stream tcp nowait root telnetd telnetd -i" /etc/inetd.conf
+	$(ROMFSINST) -e CONFIG_USER_BUSYBOX_TFTPD \
+		-a "69 dgram  udp nowait root tftpd tftpd -c /home/tftpboot" /etc/inetd.conf
+	$(ROMFSINST) -e CONFIG_USER_BUSYBOX_HTTPD \
+		-a "80 stream tcp nowait root httpd httpd -i -h /home/httpd" /etc/inetd.conf
 
 	echo "$(VERSIONSTR) -- `date`" > $(ROMFSDIR)/etc/version
 ifeq ($(CONFIG_BLACKFIN_INSTALL_UCLINUX_CONFIG),y)
