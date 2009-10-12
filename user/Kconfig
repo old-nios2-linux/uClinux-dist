@@ -4145,14 +4145,13 @@ menu "MicroWindows"
 
 config USER_MICROWIN
 	bool "MicroWindows"
-	select LIB_FREETYPE
-	select LIB_TSLIB
 
 comment "Compiling Options"
 
 config USER_MICROWIN_OPTIMIZE
 	bool "Optimize"
 	depends on USER_MICROWIN
+	default y
 
 config USER_MICROWIN_DEBUG
 	bool "Debug"
@@ -4162,15 +4161,22 @@ config USER_MICROWIN_VERBOSE
 	bool "Verbose"
 	depends on USER_MICROWIN
 
+config USER_MICROWIN_THREADSAFE
+	bool "Thread safe"
+	depends on USER_MICROWIN
+	default y
+
 comment "Libraries"
 
 config USER_MICROWIN_MICROWIN
 	bool "Microwin"
 	depends on USER_MICROWIN
+	default y
 
 config USER_MICROWIN_NANOX
 	bool "NanoX"
 	depends on USER_MICROWIN
+	default y
 
 config USER_MICROWIN_SHAREDLIBS
 	bool "SharedLibs"
@@ -4193,16 +4199,19 @@ comment "Demos"
 config USER_MICROWIN_MICROWINDEMO
 	bool "MicrowinDemo"
 	depends on USER_MICROWIN
+	default y
 
 config USER_MICROWIN_NANOXDEMO
 	bool "NanoXDemo"
 	depends on USER_MICROWIN
+	default y
 
 comment "Applications"
 
 config USER_MICROWIN_NANOWM
 	bool "NanoWM"
 	depends on USER_MICROWIN
+	default y
 
 comment "Settings"
 
@@ -4238,6 +4247,7 @@ config USER_MICROWIN_LINK_APP_INTO_SERVER
 config USER_MICROWIN_HAVE_FILEIO
 	bool "Have File IO"
 	depends on USER_MICROWIN
+	default y
 
 config USER_MICROWIN_HAVE_BMP_SUPPORT
 	bool "Have BMP Support"
@@ -4258,10 +4268,12 @@ config USER_MICROWIN_HAVE_XPM_SUPPORT
 config USER_MICROWIN_HAVE_JPEG_SUPPORT
 	bool "Have JPEG Support"
 	depends on USER_MICROWIN
+	select LIB_LIBJPEG
 
 config USER_MICROWIN_HAVE_PNG_SUPPORT
 	bool "Have PNG Support"
 	depends on USER_MICROWIN
+	select LIB_LIBPNG
 
 config USER_MICROWIN_HAVE_T1LIB_SUPPORT
 	bool "Have T1LIB Support"
@@ -4270,6 +4282,8 @@ config USER_MICROWIN_HAVE_T1LIB_SUPPORT
 config USER_MICROWIN_HAVE_FREETYPE_SUPPORT
 	bool "Have FreeType Support"
 	depends on USER_MICROWIN
+	select LIB_FREETYPE
+	default y
 
 config USER_MICROWIN_HAVE_SHAREDMEM_SUPPORT
 	bool "Have SharedMemory Support"
@@ -4316,6 +4330,7 @@ config USER_MICROWIN_X11
 config USER_MICROWIN_FRAMEBUFFER
 	bool "Frame Buffer Display"
 	depends on USER_MICROWIN
+	default y
 
 config USER_MICROWIN_FBVGA
 	bool "Frame Buffer VGA"
@@ -4390,6 +4405,11 @@ config USER_MICROWIN_DE2TSMOUSE
 config USER_MICROWIN_CLEOMOUSE
 	bool "Cleopatra Mouse"
 	depends on USER_MICROWIN
+
+config USER_MICROWIN_TSLIBMOUSE
+	bool "Touchscreen using tslib"
+	depends on USER_MICROWIN
+	select LIB_TSLIB
 
 config USER_MICROWIN_NOMOUSE
 	bool "No Mouse"
