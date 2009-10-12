@@ -4,7 +4,7 @@
 #include <fstream>
 #include <sstream>
 
-#define TEST_FILE "/etc/config/smgrd.xml"
+#define TEST_FILE "/etc/motd"
 
 int main(int argc, char *argv[])
 {
