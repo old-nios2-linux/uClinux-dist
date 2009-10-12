@@ -874,7 +874,7 @@ config USER_BUSYBOX_FEATURE_TRACEROUTE_USE_ICMP
 	help
 	  Add option -I to use ICMP ECHO instead of UDP datagrams.
 
-source ../user/busybox/busybox-1.15.1/networking/udhcp/Kconfig
+source ../user/busybox/busybox-1.15.2/networking/udhcp/Kconfig
 
 config USER_BUSYBOX_IFUPDOWN_UDHCPC_CMD_OPTIONS
 	string "ifup udhcpc command line options"

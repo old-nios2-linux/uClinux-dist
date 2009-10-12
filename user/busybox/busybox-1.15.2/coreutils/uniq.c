@@ -29,8 +29,7 @@ int uniq_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int uniq_main(int argc UNUSED_PARAM, char **argv)
 {
 	FILE *in, *out;
-	const char *s0, *e0, *e1, *input_filename;
-	char *s1;
+	const char *s0, *e0, *s1, *e1, *input_filename;
 	unsigned long dups;
 	unsigned skip_fields, skip_chars, max_chars;
 	unsigned opt;
@@ -63,7 +62,7 @@ int uniq_main(int argc UNUSED_PARAM, char **argv)
 		bb_show_usage();
 	}
 
-	e1 = s1 = NULL; /* prime the pump */
+	s1 = e1 = NULL; /* prime the pump */
 
 	do {
 		s0 = s1;
@@ -85,7 +84,7 @@ int uniq_main(int argc UNUSED_PARAM, char **argv)
 				break;
 			}
 
-			free(s1);
+			free((char*)s1);
 			++dups;	 /* note: testing for overflow seems excessive. */
 		}
 
