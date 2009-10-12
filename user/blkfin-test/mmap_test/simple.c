@@ -33,6 +33,7 @@
 #include <linux/mm.h>
 #include <linux/kdev_t.h>
 #include <asm/page.h>
+#include <asm/sections.h>
 #include <linux/cdev.h>
 
 #include <linux/device.h>
