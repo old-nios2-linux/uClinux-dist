@@ -4011,7 +4011,6 @@ config USER_PCIUTILS_SETPCI
 comment "Test Applications"
 config USER_CXXTEST_CXXTEST
 	bool "C++ Test Applications"
-	select LIB_STLPORT
 	help
 	  Applications to test the c++ build environment.
 
