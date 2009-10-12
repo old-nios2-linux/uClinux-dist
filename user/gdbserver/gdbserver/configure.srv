@@ -77,6 +77,12 @@ case "${target}" in
 			srv_linux_usrregs=yes
 			srv_linux_thread_db=yes
 			;;
+  nios2-*-linux*)	srv_regobj=reg-nios2.o
+			srv_tgtobj="linux-low.o linux-nios2-low.o"
+                        srv_linux_regsets=yes
+			srv_linux_usrregs=yes
+			srv_linux_thread_db=yes
+			;;
   powerpc64-*-linux*)	srv_regobj=reg-ppc64.o
 			srv_tgtobj="linux-low.o linux-ppc64-low.o"
 			srv_linux_usrregs=yes
