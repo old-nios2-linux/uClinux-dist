@@ -1,4 +1,4 @@
-VER = libogg-1.1.3
+VER = libogg-1.1.4
 
 include $(ROOTDIR)/tools/autotools.mk
 
