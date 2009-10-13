@@ -17,9 +17,12 @@ CONF_OPTS-y := \
 	--user-config=user-config.jam \
 	--prefix=$(STAGEDIR)/usr \
 	$(LIBS-n:%=--without-%) \
-	threading=single,multi \
-	link=shared,static \
-	runtime-link=shared,static
+	threading=single,multi
+ifeq ($(CONFIGURE_SHARED_ENABLE),--enable-shared)
+CONF_OPTS-y += link=shared runtime-link=shared
+else
+CONF_OPTS-y += link=static runtime-link=static
+endif
 CONF_OPTS-y += \
 	-sNO_WCHAR=1 \
 	--disable-long-double
