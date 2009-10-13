@@ -1,4 +1,4 @@
-VER = curl-7.19.2
+VER = curl-7.19.6
 
 CONF_OPTS = --with-random=/dev/urandom
 
