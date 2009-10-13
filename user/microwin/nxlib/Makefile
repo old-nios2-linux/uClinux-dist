@@ -24,9 +24,7 @@ clean:
 	$(MAKE) -C $(NXLIB) clean
 
 romfs:	
-	set -e; \
-        cd $(NXLIB); \
-	$(ROMFSINST) -d libX11.so.6 /usr/lib/libX11.so.6
+	$(ROMFSINST) -e CONFIG_USER_MICROWIN_NXLIB -d $(NXLIB)/libX11.so.6 /usr/lib/libX11.so.6
 	$(ROMFSINST) -e CONFIG_USER_MICROWIN_NXLIB -d $(FLTK)/test/editor /usr/bin/editor
 
 .PHONY: all clean romfs fltk nxlib
