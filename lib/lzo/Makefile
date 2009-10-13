@@ -1,4 +1,4 @@
-VER = lzo-2.02
+VER = lzo-2.03
 
 CONF_OPTS = \
 	$(CONFIGURE_SHARED_ENABLE)
