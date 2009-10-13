@@ -47,7 +47,7 @@ while 1 {
         -re "\[eE]rror|\[fF]ail|Hardware Trace|SIGSEGV" {
             case_fail $case_num
         }
-        -re "detecting client.*V4L driver Blackfin CMOS Camera now ready.*i2c driver ready.*$kernel_prompt" {
+        -re "V4L driver Blackfin CMOS Camera now ready.*$kernel_prompt" {
             case_pass $case_num
             break
         }
