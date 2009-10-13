@@ -1184,7 +1184,7 @@ _dbus_spawn_async_with_babysitter (DBusBabysitter          **sitter_p,
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
   
-  pid = fork ();
+  pid = vfork ();
   
   if (pid < 0)
     {
@@ -1209,7 +1209,7 @@ _dbus_spawn_async_with_babysitter (DBusBabysitter          **sitter_p,
       close_and_invalidate (&babysitter_pipe[0]);
       
       /* Create the child that will exec () */
-      grandchild_pid = fork ();
+      grandchild_pid = vfork ();
       
       if (grandchild_pid < 0)
 	{

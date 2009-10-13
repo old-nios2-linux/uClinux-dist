@@ -3337,7 +3337,7 @@ _read_subprocess_line_argv (const char *progpath,
       goto out;
     }
 
-  pid = fork ();
+  pid = vfork ();
   if (pid < 0)
     {
       dbus_set_error (error, _dbus_error_from_errno (errno),

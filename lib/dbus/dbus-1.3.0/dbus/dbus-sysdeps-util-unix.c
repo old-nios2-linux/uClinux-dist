@@ -81,7 +81,6 @@ _dbus_become_daemon (const DBusString *pidfile,
                      dbus_bool_t       keep_umask)
 {
   const char *s;
-  pid_t child_pid;
   int dev_null_fd;
 
   _dbus_verbose ("Becoming a daemon...\n");
@@ -95,64 +94,29 @@ _dbus_become_daemon (const DBusString *pidfile,
     }
 
   _dbus_verbose ("forking...\n");
-  switch ((child_pid = fork ()))
+  if (daemon (0, 0))
     {
-    case -1:
-      _dbus_verbose ("fork failed\n");
+      _dbus_verbose ("daemon failed\n");
       dbus_set_error (error, _dbus_error_from_errno (errno),
-                      "Failed to fork daemon: %s", _dbus_strerror (errno));
+                      "Failed to daemon(): %s", _dbus_strerror (errno));
       return FALSE;
-      break;
-
-    case 0:
-      _dbus_verbose ("in child, closing std file descriptors\n");
-
-      /* silently ignore failures here, if someone
-       * doesn't have /dev/null we may as well try
-       * to continue anyhow
-       */
-      
-      dev_null_fd = open ("/dev/null", O_RDWR);
-      if (dev_null_fd >= 0)
-        {
-          dup2 (dev_null_fd, 0);
-          dup2 (dev_null_fd, 1);
-          
-          s = _dbus_getenv ("DBUS_DEBUG_OUTPUT");
-          if (s == NULL || *s == '\0')
-            dup2 (dev_null_fd, 2);
-          else
-            _dbus_verbose ("keeping stderr open due to DBUS_DEBUG_OUTPUT\n");
-        }
-
-      if (!keep_umask)
-        {
-          /* Get a predictable umask */
-          _dbus_verbose ("setting umask\n");
-          umask (022);
-        }
-
-      _dbus_verbose ("calling setsid()\n");
-      if (setsid () == -1)
-        _dbus_assert_not_reached ("setsid() failed");
-      
-      break;
-
-    default:
-      if (!_dbus_write_pid_to_file_and_pipe (pidfile, print_pid_pipe,
-                                             child_pid, error))
-        {
-          _dbus_verbose ("pid file or pipe write failed: %s\n",
-                         error->message);
-          kill (child_pid, SIGTERM);
-          return FALSE;
-        }
-
-      _dbus_verbose ("parent exiting\n");
-      _exit (0);
-      break;
     }
-  
+
+  if (!keep_umask)
+    {
+      /* Get a predictable umask */
+      _dbus_verbose ("setting umask\n");
+      umask (022);
+    }
+
+  if (!_dbus_write_pid_to_file_and_pipe (pidfile, print_pid_pipe,
+                                         getpid (), error))
+    {
+      _dbus_verbose ("pid file or pipe write failed: %s\n",
+                     error->message);
+      _exit (1);
+    }
+
   return TRUE;
 }
 

@@ -587,7 +587,7 @@ babysit (int   exit_with_session,
       /* continue, why not */
     }
   
-  ret = fork ();
+  ret = vfork ();
 
   if (ret < 0)
     {
@@ -961,7 +961,7 @@ main (int argc, char **argv)
       exit (1);
     }
 
-  ret = fork ();
+  ret = vfork ();
   if (ret < 0)
     {
       fprintf (stderr, "Failed to fork: %s\n",
@@ -987,7 +987,7 @@ main (int argc, char **argv)
 
       /* Fork once more to create babysitter */
       
-      ret = fork ();
+      ret = vfork ();
       if (ret < 0)
         {
           fprintf (stderr, "Failed to fork: %s\n",
