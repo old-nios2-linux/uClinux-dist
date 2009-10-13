@@ -1,6 +1,6 @@
 GITWEB = http://git.xiph.org/?p=$(GITREPO).git;a=summary
 GITREPO = speex
-VER = 29b1230c7fe8191ef128a6b59e6d9a633863d3bb
+VER = a6d05eb5ff9d5062852cdf7df574bec728921ef9
 
 CONF_OPTS = \
 	--without-ogg \
