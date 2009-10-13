@@ -1,4 +1,4 @@
-VER = libvorbis-1.2.0
+VER = libvorbis-1.2.3
 
 include $(ROOTDIR)/tools/autotools.mk
 
