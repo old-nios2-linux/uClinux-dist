@@ -181,15 +181,7 @@ while 1 {
         }
 
         -re "Disable DMA.*always use PIO.*MUSB_PIO_ONLY.*\\\[.*]" {
-	    if { $board_type == "BF527-EZKIT" } {
-		if { $revision == "0.0" || $revision == "0.1" } {
-		    send "Y\r"
-		} else {
-		    send "N\r"
-		}
-	    } else {
-		send "N\r"
-	    }
+            send "\r"
         }
 
         -re "USB Human Interface Device \\\(full HID\\\) support.*USB_HID.*\\\[.*]" {
