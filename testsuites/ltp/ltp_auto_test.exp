@@ -1496,7 +1496,6 @@ set result_matrix {
        { kill07     	     {kill07}                     	 notrun		UCLINUX } 
        { kill08     	     {kill08}                     	 notrun		UCLINUX } 
        { kill09     	     {kill09}                     	 notrun		UCLINUX } 
-       { kill10     	     {kill10}                     	 notrun		UCLINUX } 
        { kill11     	     {ulimit -c 1024;kill11}                     	 notrun		NA } 
        { kill12     	     {kill12}                     	 notrun		UCLINUX } 
        { lchown01     	     {lchown01}                     	 notrun		NA } 
