@@ -70,7 +70,7 @@ expect -re $kernel_prompt
 
 set timeout 5
 incr case_num
-send "echo enabled > /sys/class/tty/ttyBF0/power/wakeup\r"
+send "echo enabled > /sys/class/tty/ttyBF$def_uart_port/power/wakeup\r"
 while 1 {
     expect {
         -re $kernel_prompt {
@@ -85,7 +85,7 @@ while 1 {
 
 set timeout 5
 incr case_num
-send "cat /sys/class/tty/ttyBF0/power/wakeup\r"
+send "cat /sys/class/tty/ttyBF$def_uart_port/power/wakeup\r"
 while 1 {
     expect {
         -re "enabled.*$kernel_prompt" {

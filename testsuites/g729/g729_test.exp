@@ -32,6 +32,7 @@ send "ifconfig eth0 $targetip\n"
 expect -re $kernel_prompt
 expect -re "Up.*Full"
 
+set timeout 30
 send_user "exec $uclinux_path/testsuites/g729/cp_g729.sh\n"
 if [ catch { exec $uclinux_path/testsuites/g729/cp_g729.sh } ] {
     send_user "FAIL: copy test_data to test folder\n"
