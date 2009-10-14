@@ -227,8 +227,6 @@ proc recover {} {
 # Using a state variable for all of this helps
 # when we need to expand the functionality.
 #
-      send_log "wait some time after system boot up\r"
-      sleep 15
 
       if { $state_variable == 2 } {
          set timeout 3
@@ -261,6 +259,8 @@ proc recover {} {
             }
          }
       }
+
+      sleep 20
       if { $state_variable == 4 } {
         
 	send "export PATH=\$PATH:/bin\r"
@@ -392,8 +392,6 @@ proc force_reboot {} {
 # Using a state variable for all of this helps
 # when we need to expand the functionality.
 #
-        send_log "wait some time after system boot up\r"
-        sleep 15
 
         if { $state_variable == 2 } {
             set timeout 3
@@ -428,6 +426,7 @@ proc force_reboot {} {
             }
         }
 
+        sleep 20
         if { $state_variable == 4 } {
             send "export PATH=\$PATH:/bin\r"
             expect "/bin>"

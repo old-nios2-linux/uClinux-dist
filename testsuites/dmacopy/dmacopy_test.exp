@@ -60,7 +60,6 @@ while 1 {
 set spawn_id $kermit_spawn_id
 
 send "ifconfig eth0 $targetip up\r"
-set timeout 60
 while 1 {
     expect {
         -re "$kernel_prompt" {
@@ -75,7 +74,6 @@ while 1 {
 
 sleep 5
 send "ifconfig eth0\r"
-set timeout 60
 while 1 {
     expect {
         -re "$targetip.*$kernel_prompt" {
@@ -88,7 +86,6 @@ while 1 {
 }
 
 
-set timeout 100
 step "Copy testcase to target board\n"
 spawn rcp src/dmacopy root@$targetip:/
 while 1 {
@@ -130,7 +127,7 @@ while 1 {
     }
 }
 
-set timeout 60
+set timeout 120
 incr case_num
 send "taskset 1 ./dmacopy\r"
 while 1 {
