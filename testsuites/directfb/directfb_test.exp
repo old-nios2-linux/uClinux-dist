@@ -38,10 +38,25 @@ while 1 {
 
 set timeout 5
 incr case_num
+send "dmesg |grep initializ\r"
+while 1 {
+    expect {
+        -re "(lq035|lq043|t350mcqb).*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+set timeout 5
+incr case_num
 send "dmesg |grep -i frame\r"
 while 1 {
     expect {
-        -re "FrameBuffer initializing.*Console: switching to colour frame buffer device.*$kernel_prompt" {
+        -re "Console: switching to colour frame buffer device.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -71,7 +86,6 @@ incr case_num
 send "df_dok --noresults\r"
 while 1 {
     expect {
-        #-re "Benchmarking.*Stretch Blit colorkeyed.*$kernel_prompt" 
         -re "Stretch Blit colorkeyed.*$kernel_prompt" {
             case_pass $case_num
             break

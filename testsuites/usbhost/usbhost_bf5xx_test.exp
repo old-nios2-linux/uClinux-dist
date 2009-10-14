@@ -52,7 +52,7 @@ set timeout 5
 send "dmesg|grep -i sd\r"
 while 1 {
     expect {
-        -re "$usb_dev: $usb_dev1 $usb_dev2.*Attached SCSI removable disk.*$kernel_prompt" {
+        -re "$usb_dev.*$usb_dev1 $usb_dev2.*Attached SCSI removable disk.*$kernel_prompt" {
             case_pass $case_num
             break
         }
