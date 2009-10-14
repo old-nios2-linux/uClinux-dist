@@ -1333,14 +1333,14 @@ do
 
   ###############################################################################################
   ########################## TEST POWER #########################################################
-  
+
  if [ ${AUTO_RUN_STATUS[$(( n + 12 ))]} -eq 1  ] ; then
-  echo  "Testing power..."
+  echo  "Testing power with with ethernet/video drivers ..."
 
   rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
-  cd $UCLINUX_DIST_PATH/ 
+  cd $UCLINUX_DIST_PATH/
   cp -a  $UCLINUX_DIST_PATH_BAK/linux-2.6.x  .
-  cp $UCLINUX_DIST_PATH_BAK/config/.config config 
+  cp $UCLINUX_DIST_PATH_BAK/config/.config config
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
 
@@ -1370,20 +1370,6 @@ do
             sleep 10
         fi
 
-        if [ ${AUTO_RUN_STATUS[$(( n + 4 ))]} -eq 1  ] ; then
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad73311_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad73311_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-        fi
-
         if [ ${AUTO_RUN_STATUS[$(( n + 11 ))]} -eq 1  ] ; then
             cd $UCLINUX_DIST_TESTSUITES/power
             ./power_tftlcd_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
@@ -1398,62 +1384,6 @@ do
             sleep 10
         fi
 
-        if [ ${AUTO_RUN_STATUS[$(( n + 3 ))]} -eq 1  ] ; then
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1836_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1836_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-        fi
-
-        if [ ${AUTO_RUN_STATUS[$(( n + 14 ))]} -eq 1  ] ; then
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1980_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1980_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-        fi
-
-        if [ ${AUTO_RUN_STATUS[$(( n + 5 ))]} -eq 1  ] ; then
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1938_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ad1938_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-        fi
-
-        if [ ${AUTO_RUN_STATUS[$(( n + 17 ))]} -eq 1  ] ; then
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ssm2603_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-
-            cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_ssm2603_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-            cd $UCLINUX_DIST_TESTSUITES
-            ./reset_board.exp  >/dev/null  2>&1
-            sleep 10
-        fi
-
         cd $UCLINUX_DIST_TESTSUITES/power
         ./power_ethernet_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
         cd $UCLINUX_DIST_TESTSUITES
@@ -1462,12 +1392,125 @@ do
 
         cd $UCLINUX_DIST_TESTSUITES/power
         ./power_ethernet_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+        cd $UCLINUX_DIST_TESTSUITES
+        ./reset_board.exp  >/dev/null  2>&1
+        sleep 10
 
   fi
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.power
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.power
   cp $UCLINUX_DIST_TESTSUITES/power/*_log $THIS_LOG
+
+
+  echo  "Testing power with I2S Audio drivers..."
+  if [ ${AUTO_RUN_STATUS[$(( n + 4 ))]} -eq 1  ] || [ ${AUTO_RUN_STATUS[$(( n + 17 ))]} -eq 1  ] ; then
+
+      cd $UCLINUX_DIST_PATH/
+      make clean > /dev/null 2>&1
+
+      cp $UCLINUX_DIST_PATH_BAK/linux-2.6.x/.config linux-2.6.x/
+      cp $UCLINUX_DIST_PATH_BAK/config/.config config/
+
+      cd $UCLINUX_DIST_TESTSUITES/power
+      ./build_power_audio_i2s_kernel.exp $BOARD_TYPE >/dev/null  2>&1
+      sleep 30
+
+      if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
+      then
+          echo "$0:   Error, failed."
+          tail -50 ./build_power_audio_i2s_kernel_log
+      else
+          if [ ${AUTO_RUN_STATUS[$(( n + 4 ))]} -eq 1  ] ; then
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ad73311_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ad73311_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+          fi
+
+          if [ ${AUTO_RUN_STATUS[$(( n + 17 ))]} -eq 1  ] ; then
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ssm2603_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ssm2603_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+          fi
+      fi
+
+      cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.power.audio_i2s
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.power.audio_i2s
+      cp $UCLINUX_DIST_TESTSUITES/power/*_log $THIS_LOG
+
+  fi
+
+
+  if [ ${AUTO_RUN_STATUS[$(( n + 3 ))]} -eq 1  ] || [ ${AUTO_RUN_STATUS[$(( n + 5 ))]} -eq 1  ] ; then
+      echo  "Testing power with I2S TDM mode Audio drivers..."
+
+      cd $UCLINUX_DIST_PATH/
+      make clean > /dev/null 2>&1
+
+      cp $UCLINUX_DIST_PATH_BAK/linux-2.6.x/.config linux-2.6.x/
+      cp $UCLINUX_DIST_PATH_BAK/config/.config config/
+
+      cd $UCLINUX_DIST_TESTSUITES/power
+      ./build_power_audio_tdm_kernel.exp $BOARD_TYPE >/dev/null  2>&1
+      sleep 30
+
+      if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
+      then
+          echo "$0:   Error, failed."
+          tail -50 ./build_power_audio_tdm_kernel_log
+      else
+          if [ ${AUTO_RUN_STATUS[$(( n + 3 ))]} -eq 1  ] ; then
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ad1836_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ad1836_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+          fi
+
+          if [ ${AUTO_RUN_STATUS[$(( n + 5 ))]} -eq 1  ] ; then
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ad1938_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_ad1938_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+          fi
+
+      fi
+
+      cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.power.audio_tdm
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.power.audio_tdm
+      cp $UCLINUX_DIST_TESTSUITES/power/*_log $THIS_LOG
+
+  fi
+
 
   cd $UCLINUX_DIST_PATH/
   make clean > /dev/null 2>&1
