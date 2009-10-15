@@ -605,10 +605,12 @@ int main(int argc, char **argv)
 	}
 
 	retval = EXIT_SUCCESS;
+#ifndef __uClinux__
 	if (daemon_mode && daemon(0, 0) < 0) {
 		perror("inputattach");
 		retval = EXIT_FAILURE;
 	}
+#endif
 
 	read(fd, NULL, 0);
 
