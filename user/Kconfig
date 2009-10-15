@@ -2951,6 +2951,12 @@ config USER_HD_HD
 config USER_CAN_HORCH
 	bool "horch"
 
+config USER_INPUTATTACH_INPUTATTACH
+	bool "inputattach"
+	help
+	  Attach serial mice, keyboards and other input devices to the
+	  kernel input system.
+
 config USER_JAMVM_JAMVM
 	bool "jamvm"
 	help
