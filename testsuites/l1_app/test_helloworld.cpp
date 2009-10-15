@@ -4,7 +4,7 @@
 int main(int argc, char *argv[])
 {
 	int r;
-	class helloworld hw("hello\n");
+	class helloworld hw((char *)"hello\n");
 	r=hw.show_result();
 //	printf("get %d from helloworld(0x%x)\n", r, ((unsigned long *)hw.show_result)[0]);
 	printf("get %d from helloworld(0x%x)\n", r, hw.str);

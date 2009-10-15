@@ -61,10 +61,6 @@ while 1 {
             send "N\r"
         }
 
-        -re "rtcwake.*USER_BUSYBOX_RTCWAKE.*\\\[.*]" {
-            send "Y\r"
-        }
-
         "\\\(*) \\\[*]" {
             sleep .01
             send "\r"
