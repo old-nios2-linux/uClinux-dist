@@ -31,7 +31,7 @@ incr case_num
 send "modprobe bf537-lq035\r"
 while 1 {
     expect {
-        -re "FrameBuffer initializing.*Done.*>" {
+        -re "initializ.*$kernel_prompt" {
             case_pass $case_num
             break
         }

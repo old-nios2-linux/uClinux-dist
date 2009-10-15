@@ -39,7 +39,7 @@ incr case_num
 send "modprobe $video_module\r"
 while 1 {
     expect {
-        -re "FrameBuffer initializing.*$kernel_prompt" {
+        -re "initializ.*$kernel_prompt" {
             case_pass $case_num
             break
         }
