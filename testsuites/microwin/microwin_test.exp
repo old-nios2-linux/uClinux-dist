@@ -57,7 +57,7 @@ send -s "nano-X &\r"
 while 1 {
     expect {
         -re "\[0-9]" {
-            expect ">"
+            expect -re $kernel_prompt
             case_pass $case_num
             break
         }
@@ -74,7 +74,7 @@ send "nanowm &\r"
 while 1 {
     expect {
         -re "\[0-9]" {
-            expect ">"
+            expect -re $kernel_prompt
             case_pass $case_num
             break
         }
@@ -128,8 +128,6 @@ send -s "\3"
 while 1 {
     expect {
         -re "nano-X: client closed socket" {
-            send "\n"
-            expect -re $kernel_prompt
             case_pass $case_num
             break
         }
@@ -140,7 +138,7 @@ while 1 {
     }
 }
 
-send "\n"
+send "\r"
 expect -re $kernel_prompt
 sleep 1
 
@@ -187,8 +185,6 @@ send -s "\3"
 while 1 {
     expect {
         -re "nano-X: client closed socket" {
-            send "\n"
-            expect -re $kernel_prompt
             case_pass $case_num
             break
         }
