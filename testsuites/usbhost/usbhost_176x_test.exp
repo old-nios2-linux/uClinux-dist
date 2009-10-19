@@ -218,7 +218,7 @@ while 1 {
 
 set timeout 3600
 incr case_num
-send "bonnie++ -u root -d /mnt\r"
+send "time bonnie++ -u root -d /mnt\r"
 while 1 {
     expect {
         -re "Hardware Trace" {
