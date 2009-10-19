@@ -1,7 +1,6 @@
 #!/usr/bin/expect
 
 source  ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE "[title "$argv0"]"
@@ -34,7 +33,7 @@ incr case_num
 send "modprobe $module\r"
 while 1 {
     expect {
-        -re "FrameBuffer initializing.*$kernel_prompt" {
+        -re "initializ.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -92,7 +91,7 @@ incr case_num
 send "modprobe -r $module\r"
 while 1 {
     expect {
-        -re "Unregister LCD driver.*$kernel_prompt" {
+        -re "\[uU]nregister.*LCD driver.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -120,8 +119,7 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n" 
+all_pass
 
 send_user "Ending $argv0\n"
 
