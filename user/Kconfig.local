@@ -17,6 +17,11 @@ config USER_BLACKFIN_PFBUTTONS
 	bool "PFBUTTONS test program"
 config USER_BLACKFIN_TWI
 	bool "TWI test program"
+	depends on BF537_LQ035_MODULE
+	help
+	  This test is based on LQ035 LCD add-on board. Please configure
+	  bf537-lq035 driver as a module in kernel configuration before
+	  run build and run this test.
 config USER_BLACKFIN_SPITEST
 	bool "SPI test program"
 config USER_BLACKFIN_PPI
