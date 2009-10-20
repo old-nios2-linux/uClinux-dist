@@ -9,6 +9,8 @@ SUBDIRS = old-utils
 #CFLAGS += -Werror
 CPPFLAGS += -Iinclude -Isrc -I$(KERNELHDR)
 
+FLTFLAGS=-s 0x30000
+
 LIBS = libubi libmtd libubigen libiniparser libscan
 TARGETS = ubiupdatevol ubimkvol ubirmvol ubicrc32 ubinfo ubiattach \
           ubidetach ubinize ubiformat ubirename
