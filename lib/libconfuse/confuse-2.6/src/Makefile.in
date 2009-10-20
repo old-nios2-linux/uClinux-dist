@@ -196,7 +196,7 @@ lib_LTLIBRARIES = libconfuse.la
 libconfuse_la_SOURCES = confuse.c lexer.l
 libconfuse_la_LIBADD = $(LTLIBINTL)
 include_HEADERS = confuse.h
-@cc_is_gcc_TRUE@AM_CFLAGS = -Wall -Werror
+@cc_is_gcc_TRUE@AM_CFLAGS = -Wall 
 CLEANFILES = *~ \#*\#
 AM_LFLAGS = -Pcfg_yy -olex.yy.c
 all: all-am

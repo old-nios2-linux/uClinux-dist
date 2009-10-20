@@ -9,7 +9,7 @@ EXTRA_DIST=a.conf b.conf check_confuse.h
 CLEANFILES=*~
 
 if cc_is_gcc
-AM_CFLAGS=-Wall -Werror
+AM_CFLAGS=-Wall 
 endif
 
 celan: clean

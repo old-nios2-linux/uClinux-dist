@@ -244,7 +244,7 @@ TESTS = suite_single suite_dup suite_func suite_list \
 LDADD = -L../src ../src/libconfuse.la $(LTLIBINTL)
 EXTRA_DIST = a.conf b.conf check_confuse.h
 CLEANFILES = *~
-@cc_is_gcc_TRUE@AM_CFLAGS = -Wall -Werror
+@cc_is_gcc_TRUE@AM_CFLAGS = -Wall 
 all: all-am
 
 .SUFFIXES:
