@@ -285,7 +285,7 @@ again:
 	}
 	signal(SIGCHLD, ptysignaled);
 	signal(SIGINT, ptysignaled);
-	if ((pid = fork()) == -1) {
+	if ((pid = vfork()) == -1) {
 		fprintf(stderr, "No processes\n");
 		return -1;
 	}
