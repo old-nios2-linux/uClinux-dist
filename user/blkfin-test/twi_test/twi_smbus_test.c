@@ -5,7 +5,7 @@
 /* AD5280 vcomm */
 static unsigned char vcomm_value = 150;
 
-static char ad5280_drv_name[] = "bf537-lq035-ad5280";
+#define AD5280_NAME "bf537-lq035-ad5280"
 
 static int __devinit ad5280_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
@@ -19,13 +19,13 @@ static int __devinit ad5280_probe(struct i2c_client *client,
 		return -EIO;
 	}
 
-	ret = i2c_smbus_write_byte_data(&client, 0x00, vcomm_value);
+	ret = i2c_smbus_write_byte_data(client, 0x00, vcomm_value);
 	if(ret) {
-		printk("TWI_SMBUS_TEST: i2c_smbus_write_byte_data fail: %d\n", rc);
+		printk("TWI_SMBUS_TEST: i2c_smbus_write_byte_data fail: %d\n", ret);
 		return ret;
 	}
 
-	new_vcomm = i2c_smbus_read_byte_data(&client, 0x00);
+	new_vcomm = i2c_smbus_read_byte_data(client, 0x00);
 	if(new_vcomm != vcomm_value) {
 		printk("TWI_SMBUS_TEST: i2c_smbus_read_byte_data fails: %d\n", new_vcomm);
 		return -1;
@@ -36,7 +36,7 @@ static int __devinit ad5280_probe(struct i2c_client *client,
 }
 
 static const struct i2c_device_id ad5280_id[] = {
-	{ad5280_drv_name, 0},
+	{AD5280_NAME, 0},
 	{}
 };
 
@@ -44,7 +44,7 @@ MODULE_DEVICE_TABLE(i2c, ad5280_id);
 
 static struct i2c_driver ad5280_driver = {
 	.driver		= {
-		.name	= ad5280_drv_name,
+		.name	= AD5280_NAME,
 		.owner	= THIS_MODULE,
 	},
 	.probe = ad5280_probe,
