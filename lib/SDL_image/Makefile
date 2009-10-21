@@ -1,22 +1,11 @@
-VER = SDL_image-1.2.7
+VER = SDL_image-1.2.8
 
-all: build-$(VER)/Makefile
-	$(MAKE) -C build-$(VER)
-	$(MAKE) -C build-$(VER) install DESTDIR=$(STAGEDIR)
+CONF_OPTS = \
+	$(call USE_ENABLE,LIB_LIBJPEG,jpg) \
+	$(call USE_ENABLE,LIB_LIBPNG,png) \
+	$(call USE_ENABLE,LIB_TIFF,tif)
 
-build-$(VER)/Makefile:
-	find $(VER) -type f -print0 | xargs -0 touch -r $(VER)/configure
-	set -e ; \
-	rm -rf build-$(VER) ; \
-	mkdir build-$(VER) ; \
-	cd build-$(VER) ; \
-	SDL_CONFIG=$(STAGEDIR)/usr/bin/sdl-config \
-	../$(VER)/configure $(CONFIGURE_OPTS)
-
-clean:
-	rm -rf build*
+include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
 	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libSDL_image-1.2.so.0 /usr/lib/libSDL_image-1.2.so.0
-
-.PHONY: all clean romfs
