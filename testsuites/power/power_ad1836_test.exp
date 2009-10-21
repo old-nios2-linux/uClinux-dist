@@ -142,14 +142,14 @@ expect -re $kernel_prompt
 
 set timeout 20
 incr case_num
-send "modprobe spi_bfin5xx; modprobe snd-ad1836\r"
+send "modprobe snd_ad1836\r"
 while 1 {
     expect {
         -re "(modprobe:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             send_user "Install module failed!\r"
             case_fail $case_num
         }
-        -re "bfin-spi.*$kernel_prompt" {
+        -re "mapping ok.*$kernel_prompt" {
             break
         }
         timeout {
@@ -161,7 +161,7 @@ while 1 {
 send "lsmod\r"
 while 1 {
     expect {
-        -re "snd_ad1836.*spi_bfin5xx.*$kernel_prompt" {
+        -re "snd_ad1836.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -280,7 +280,7 @@ while 1 {
 
 set timeout 20
 incr case_num
-send "modprobe -r snd-ad1836; modprobe -r spi_bfin5xx\r"
+send "modprobe -r snd_ad1836\r"
 while 1 {
     expect {
         -re "(modprobe:|No such).*$kernel_prompt" {
