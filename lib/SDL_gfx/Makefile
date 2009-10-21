@@ -1,4 +1,4 @@
-VER = SDL_gfx-2.0.18
+VER = SDL_gfx-2.0.20
 
 export ac_cv_path_SDL_CONFIG = $(CROSS_COMPILE)sdl-config
 CONF_OPTS = \
