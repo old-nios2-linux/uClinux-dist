@@ -366,6 +366,7 @@ clean: modules_clean
 	rm -f $(LINUXDIR)/include/asm
 	rm -rf $(LINUXDIR)/net/ipsec/alg/libaes $(LINUXDIR)/net/ipsec/alg/perlasm
 	find ./tools/ -maxdepth 1 -type l | xargs rm -f
+	rm -rf tools/autotools-cache/build
 
 real_clean mrproper: clean
 	[ -d "$(LINUXDIR)" ] && $(MAKEARCH_KERNEL) -C $(LINUXSRC) mrproper || :

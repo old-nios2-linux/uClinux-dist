@@ -59,5 +59,3 @@ ac_cv_func_memcmp_working=yes
 ac_cv_func_strnlen_working=yes
 
 samba_cv_HAVE_C99_VSNPRINTF=yes
-
-export SITE_DIR=${SITE_DIR}/bfin

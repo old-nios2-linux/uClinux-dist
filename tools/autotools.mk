@@ -25,6 +25,19 @@ else
 echo-cmd = printf
 endif
 
+$(ROOTDIR)/tools/autotools-cache/build/config.cache:
+	set -e; \
+	mkdir -p $(dir $@); \
+	cd $(dir $@); \
+	CONFIG_SITE="" ../configure -C; \
+	gt=`../create-target-cache.sh $(CONFIGURE_HOST)`; \
+	cp $$gt $(ROOTDIR)/vendors/config/$$gt
+$(ROOTDIR)/vendors/config/config.site.build: $(ROOTDIR)/tools/autotools-cache/build/config.cache
+	grep -v ^ac_cv_env_ $^ > $@
+# disabled until this can be tested better
+#autotools-cache: $(ROOTDIR)/vendors/config/config.site.build
+.PHONY: autotools-cache
+
 if_changed = \
 	settings="build-$(3)$(VER)/.dist.settings" ; \
 	echo $(2) $(CFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(LDFLAGS) > .new.settings ; \
@@ -36,6 +49,7 @@ if_changed = \
 
 cmd_configure = \
 	set -e ; \
+	$(MAKE) autotools-cache ; \
 	chmod a+rx $(VER)/configure ; \
 	find $(VER) -type f -print0 | xargs -0 touch -r $(VER)/configure ; \
 	rm -rf build-$(3)$(VER) ; \
