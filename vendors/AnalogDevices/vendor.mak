@@ -140,6 +140,14 @@ ifeq ($(CONFIG_ROMFS_FS),y)
 image.rootfs.romfs: image.rootfs.romfs.force
 endif
 
+.PHONY: image.rootfs.squashfs image.rootfs.squashfs.force
+MKFS_SQUASHFS_FLAGS ?= -all-root -noappend
+image.rootfs.squashfs.force:
+	$(MKFS_SQUASHFS) $(ROMFSDIR) $(IMAGE_ROMFS_BASE).squashfs $(MKFS_SQUASHFS_FLAGS) -p $(DEVICE_TABLE)
+ifeq ($(CONFIG_SQUASHFS),y)
+image.rootfs.squashfs: image.rootfs.squashfs.force
+endif
+
 .PHONY: image.rootfs.ubifs image.rootfs.ubifs.force
 UBIFS_MIN_IO_SIZE ?= 2048
 UBIFS_LEB_SIZE    ?= 204800
@@ -178,6 +186,7 @@ image.rootfs.all: \
 	image.rootfs.jffs2 \
 	image.rootfs-summary.jffs2 \
 	image.rootfs.romfs \
+	image.rootfs.squashfs \
 	image.rootfs.ubifs \
 	image.rootfs.yaffs \
 	image.rootfs.yaffs2
