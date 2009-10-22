@@ -18,6 +18,7 @@ dir_$(CONFIG_USER_MACCHANGER)               += macchanger
 dir_$(CONFIG_USER_MPC)                      += mpc
 dir_$(CONFIG_USER_MPC2X)                    += mpc2x
 dir_$(CONFIG_USER_MPD)                      += mpd
+dir_$(CONFIG_USER_MPLAYER)                  += mplayer
 dir_$(CONFIG_USER_N2N)                      += n2n
 dir_$(CONFIG_USER_NANO)                     += nano
 dir_$(CONFIG_USER_OPENNTPD)                 += openntpd
@@ -26,6 +27,7 @@ dir_$(CONFIG_USER_PICOCOM)                  += picocom
 dir_$(CONFIG_USER_PICTUREFLOW)              += pictureflow
 dir_$(CONFIG_USER_SERCD)                    += sercd
 dir_$(CONFIG_USER_USBUTILS)                 += usbutils
+dir_$(CONFIG_USER_VLC)                      += vlc
 
 dir_$(CONFIG_CRAMFS)                        += cramfs
 dir_$(CONFIG_EXT2_FS)                       += genext2fs
