@@ -25,17 +25,22 @@ else
 echo-cmd = printf
 endif
 
+$(ROOTDIR)/tools/autotools-cache/build/$(CONFIGURE_HOST):
+	set -e; \
+	mkdir -p $(dir $@)/$$$$; \
+	cd $(dir $@)/$$$$; \
+	gt=`../../create-target-cache.sh $(CONFIGURE_HOST)`; \
+	cp $$gt $(ROOTDIR)/vendors/config/$$gt; \
+	touch $@
 $(ROOTDIR)/tools/autotools-cache/build/config.cache:
 	set -e; \
 	mkdir -p $(dir $@)/$$$$; \
 	cd $(dir $@)/$$$$; \
 	CONFIG_SITE="" ../../configure -C; \
-	gt=`../../create-target-cache.sh $(CONFIGURE_HOST)`; \
-	cp $$gt $(ROOTDIR)/vendors/config/$$gt; \
 	mv config.cache $@
 $(ROOTDIR)/vendors/config/config.site.build: $(ROOTDIR)/tools/autotools-cache/build/config.cache
-	grep -v ^ac_cv_env_ $^ > $@.$$$$ && mv $@.$$$$ $@
-autotools-cache: $(ROOTDIR)/vendors/config/config.site.build
+	grep -v ^ac_cv_env_ $< > $@.$$$$ && mv $@.$$$$ $@
+autotools-cache: $(ROOTDIR)/vendors/config/config.site.build $(ROOTDIR)/tools/autotools-cache/build/$(CONFIGURE_HOST)
 .PHONY: autotools-cache
 
 if_changed = \
