@@ -19,7 +19,6 @@ dir_$(CONFIG_USER_AWG)                           += ndso
 dir_$(CONFIG_USER_NDSO)                          += ndso
 dir_$(CONFIG_USER_PPIFPGACGI)                    += ndso
 dir_$(CONFIG_USER_NET_AUDIO)                     += net_audio
-dir_$(CONFIG_USER_UBOOT_TOOLS)                   += u-boot-tools
 dir_$(CONFIG_USER_SDLEXAMPLES)                   += sdl-examples
 dir_$(CONFIG_USER_FPGA_HSCONV)                   += fpga
 dir_$(CONFIG_USER_UVC_VIDEO)                     += uvc-video
