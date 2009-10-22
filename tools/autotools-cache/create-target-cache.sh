@@ -98,9 +98,11 @@ ac_cv_prog_cc_g=yes
 ac_cv_prog_cxx_g=yes
 ac_cv_prog_f77_g=yes
 
-lt_cv_deplibs_check_method=unknown
-lt_cv_file_magic_cmd='\$MAGIC_CMD'
-lt_cv_file_magic_test_file=
+# Magic detection changes over time and libtool versions.  This cache
+# works fine with newer libtool (2.x+), but breaks with older ones.
+#lt_cv_deplibs_check_method=unknown
+#lt_cv_file_magic_cmd='\$MAGIC_CMD'
+#lt_cv_file_magic_test_file=
 lt_cv_ld_reload_flag=-r
 lt_cv_nm_interface='BSD nm'
 lt_cv_objdir=.libs
