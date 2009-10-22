@@ -128,10 +128,15 @@ sstrip: tools/sstrip
 tools/sstrip: tools/sstrip.c
 	$(HOSTCC) -Wall -O2 -g -o $@ $<
 
-.PHONY: staging
+.PHONY: autotools-cache staging
 ifneq ($(CROSS_COMPILE),)
-all: staging
-tools: staging
+all: autotools-cache staging
+tools: autotools-cache staging
+
+# run this once at the top level to avoid parallel build issues in subdirs
+autotools-cache:
+	$(MAKE) -f tools/autotools.mk $@
+
 staging: \
 	tools/$(CROSS_COMPILE)gcc \
 	tools/$(CROSS_COMPILE)g++ \
@@ -142,8 +147,9 @@ tools/$(CROSS_COMPILE)%:
 	ln -sf staging-compiler $@
 tools/$(CROSS_COMPILE)pkg-config:
 	ln -sf cross-pkg-config $@
+
 else
-staging:
+autotools-cache staging:
 	@echo "Error: you have not configured things yet" ; false
 endif
 

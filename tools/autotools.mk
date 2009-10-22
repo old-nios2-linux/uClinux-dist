@@ -27,15 +27,15 @@ endif
 
 $(ROOTDIR)/tools/autotools-cache/build/config.cache:
 	set -e; \
-	mkdir -p $(dir $@); \
-	cd $(dir $@); \
-	CONFIG_SITE="" ../configure -C; \
-	gt=`../create-target-cache.sh $(CONFIGURE_HOST)`; \
-	cp $$gt $(ROOTDIR)/vendors/config/$$gt
+	mkdir -p $(dir $@)/$$$$; \
+	cd $(dir $@)/$$$$; \
+	CONFIG_SITE="" ../../configure -C; \
+	gt=`../../create-target-cache.sh $(CONFIGURE_HOST)`; \
+	cp $$gt $(ROOTDIR)/vendors/config/$$gt; \
+	mv config.cache $@
 $(ROOTDIR)/vendors/config/config.site.build: $(ROOTDIR)/tools/autotools-cache/build/config.cache
-	grep -v ^ac_cv_env_ $^ > $@
-# disabled until this can be tested better
-#autotools-cache: $(ROOTDIR)/vendors/config/config.site.build
+	grep -v ^ac_cv_env_ $^ > $@.$$$$ && mv $@.$$$$ $@
+autotools-cache: $(ROOTDIR)/vendors/config/config.site.build
 .PHONY: autotools-cache
 
 if_changed = \
@@ -49,17 +49,16 @@ if_changed = \
 
 cmd_configure = \
 	set -e ; \
-	$(MAKE) autotools-cache ; \
 	chmod a+rx $(VER)/configure ; \
 	find $(VER) -type f -print0 | xargs -0 touch -r $(VER)/configure ; \
 	rm -rf build-$(3)$(VER) ; \
 	mkdir build-$(3)$(VER) ; \
 	cd build-$(3)$(VER) ; \
 	../$(VER)/configure $(2)
-build-$(VER)/Makefile: build-host-$(VER)/Makefile FORCE
+build-$(VER)/Makefile: build-host-$(VER)/Makefile autotools-cache FORCE
 	@$(call if_changed,configure,$(CONFIGURE_OPTS) $(CONF_OPTS))
 
-build-host-$(VER)/Makefile: FORCE
+build-host-$(VER)/Makefile: autotools-cache FORCE
 ifeq ($(AUTOTOOLS_BUILD_HOST),true)
 	@export AR="" CC=$(HOSTCC) CXX="" LD="" RANLIB="" \
 		CPPFLAGS="" CFLAGS="-O2 -g" CXXFLAGS="-O2 -g" LDFLAGS="" CONFIG_SITE="" \

@@ -1,7 +1,7 @@
 #!/bin/sh
 # This assumes a linux target
 
-GNUCONFIG=../config.sub
+GNUCONFIG=${0%/*}/config.sub
 tuple=$1
 
 if [ -z "${tuple}" ] ; then
@@ -18,7 +18,9 @@ header_path() {
 }
 
 var_filter() { sed -e 's:[-/.+]:_:g' "$@" ; }
-ac_var_filter() { var_filter -e 's:^:ac_cv_header_:' ; }
+ac_var_filter() { var_filter -e "s:^:ac_cv_$1_:" ; }
+ac_header_filter() { ac_var_filter header "$@" ; }
+ac_func_filter() { ac_var_filter func "$@" ; }
 
 gnu_tuple="$(${GNUCONFIG} ${tuple})"
 cc="${tuple}-gcc"
@@ -29,7 +31,7 @@ inc_libc_path=$(header_path stdio.h)
 inc_gcc_path=$(header_path stddef.h)
 printf "Using inc dir for $tuple (${gnu_tuple}):\n\t%s\n\t%s\n" "$inc_libc_path" "$inc_gcc_path" 1>&2
 
-find $inc_libc_path $inc_gcc_path -name '*.h' -printf '%P=yes\n' | ac_var_filter > ${gnu_tuple}
+find $inc_libc_path $inc_gcc_path -name '*.h' -printf '%P=yes\n' | ac_header_filter > ${gnu_tuple}
 invalid=$(sed -e 's:[a-zA-Z0-9=_]::g' ${gnu_tuple})
 if [ -n "${invalid}" ] ; then
 	(
@@ -39,8 +41,19 @@ if [ -n "${invalid}" ] ; then
 	exit 1
 fi
 
-for header in dlfcn.h bits/dlfcn.h ; do
-	var=$(echo ${header} | ac_var_filter)
+headers="
+	dlfcn.h
+	ioctls.h
+	locale.h
+	stropts.h
+	wctype.h
+	asm/reg.h
+	bits/dlfcn.h
+	sys/reg.h
+	sys/stream.h
+"
+for header in ${headers} ; do
+	var=$(echo ${header} | ac_header_filter)
 	if ! grep -qs ${var}=yes ${gnu_tuple} ; then
 		echo "${var}=no" >> ${gnu_tuple}
 	fi
@@ -50,6 +63,13 @@ ${cc} -print-file-name=libc.a | \
 	xargs ${readelf} -s | \
 	awk '($4 == "FUNC" && $5 != "LOCAL" && $6 == "DEFAULT") { print $NF }' | \
 	sed -e 's:^:ac_cv_func:' -e 's:$:=yes:' >> ${gnu_tuple}
+
+for func in fork sys_siglist ; do
+	var=$(echo ${func} | ac_func_filter)
+	if ! grep -qs ${var}=yes ${gnu_tuple} ; then
+		echo "${var}=no" >> ${gnu_tuple}
+	fi
+done
 
 	cat <<-EOF >> ${gnu_tuple}
 ac_cv_host=${gnu_tuple}
