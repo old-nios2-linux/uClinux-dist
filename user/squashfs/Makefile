@@ -19,7 +19,7 @@ env_build =
 env_build-host = CFLAGS= CPPFLAGS= LDFLAGS= CC=cc
 build build-host:
 	mkdir -p $@
-	cp Makefile.subdir $@/Makefile
+	cp -p Makefile.subdir $@/Makefile
 	$(env_$@) $(MAKE) -C $@ VER=$(VER) $($@-y)
 
 clean:
