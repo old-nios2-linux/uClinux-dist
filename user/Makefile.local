@@ -33,3 +33,4 @@ dir_$(CONFIG_USER_VLC)                      += vlc
 dir_$(CONFIG_CRAMFS)                        += cramfs
 dir_$(CONFIG_EXT2_FS)                       += genext2fs
 dir_$(CONFIG_ROMFS_FS)                      += genromfs
+dir_$(CONFIG_SQUASHFS)                      += squashfs
