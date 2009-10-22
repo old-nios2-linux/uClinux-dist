@@ -143,7 +143,7 @@ endif
 .PHONY: image.rootfs.squashfs image.rootfs.squashfs.force
 MKFS_SQUASHFS_FLAGS ?= -all-root -noappend
 image.rootfs.squashfs.force:
-	$(MKFS_SQUASHFS) $(ROMFSDIR) $(IMAGE_ROMFS_BASE).squashfs $(MKFS_SQUASHFS_FLAGS) -p $(DEVICE_TABLE)
+	$(MKFS_SQUASHFS) $(ROMFSDIR) $(IMAGE_ROMFS_BASE).squashfs $(MKFS_SQUASHFS_FLAGS) -pf $(DEVICE_TABLE)
 ifeq ($(CONFIG_SQUASHFS),y)
 image.rootfs.squashfs: image.rootfs.squashfs.force
 endif
