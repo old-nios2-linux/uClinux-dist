@@ -1,12 +1,12 @@
-# To create your own version, just unpack ffmpeg tarball here
-# and update the VER variable.  Or export your own from their
-# svn via:
-# svn export -r <REV> svn://svn.mplayerhq.hu/ffmpeg/trunk ffmpeg-svn-<REV>
-VER = ffmpeg-svn-11114
+GITWEB = http://git.ffmpeg.org/?p=$(GITREPO);a=summary
+GITREPO = ffmpeg
+VER = ffmpeg-svn-20344
 
 all: build/Makefile
 	$(MAKE) -C build
 	$(MAKE) -C build DESTDIR=$(STAGEDIR) install
+
+include $(ROOTDIR)/tools/gitweb.mk
 
 build/Makefile:
 	find $(VER) -type f -print0 | xargs -0 touch -r $(VER)/configure
@@ -18,19 +18,17 @@ build/Makefile:
 	../$(VER)/configure \
 		--prefix=/usr \
 		--source-path=$$PWD/../$(VER) \
-		--target-os=Linux \
-		--cpu=bfin \
-		--arch=bfin \
+		--target-os=linux \
+		--arch=$(MACHINE) \
+		--sysinclude="$(STAGEDIR)/usr/include" \
 		--extra-ldflags="$(LDFLAGS)" \
 		--enable-static \
-		--enable-shared \
+		$(CONFIGURE_SHARED_ENABLE) \
 		--enable-gpl \
-		--enable-pp \
-		--disable-strip \
+		--enable-postproc \
+		--disable-ipv6 \
+		--disable-stripping \
 		--cross-prefix=$(CONFIGURE_HOST)-
-	sed -i '/^LDCONFIG/s:=.*:=true:' build/config.mak
-
-#		--enable-swscaler
 
 clean:
 	rm -rf build
@@ -38,7 +36,7 @@ clean:
 romfs:
 	set -e ; \
 	cd $(STAGEDIR)/usr/lib ; \
-	for l in libavcodec.so.?? libavdevice.so.?? libavformat.so.?? libavutil.so.?? libpostproc.so.?? vhook/* ; do \
+	for l in libavcodec.so.?? libavdevice.so.?? libavformat.so.?? libavutil.so.?? libpostproc.so.?? libswscale.so.? ; do \
 		$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $$l /usr/lib/$$l ; \
 	done
 	$(ROMFSINST) -d -e CONFIG_USER_FFMPEG_APPS $(STAGEDIR)/usr/bin/ffmpeg /usr/bin/ffmpeg
