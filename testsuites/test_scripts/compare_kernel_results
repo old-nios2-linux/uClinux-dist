@@ -1,12 +1,27 @@
 #!/bin/sh
 
-# exits with 0 if there is nothing of interest
-# exits with 1 if there is something interesting
-# exits with 2 if an error occurred
+# exits with 0 ,pass, 
+# exits with 1 ,fail.
+
+USER=/home/test/work/cruise
+LOG_DIR="$USER/test_scripts/uclinux-dist/logs"
+
+if [ -e $LOG_DIR/thisrun/test_summary/test_results ] && [ -e $LOG_DIR/lastrun/test_summary/test_results ] ; then 
+       thisrun_test_results=`cat $LOG_DIR/thisrun/test_summary/test_results | grep "exit=" | awk  'BEGIN { FS="[.=]" } {print $2 }'`
+       lastrun_test_results=`cat $LOG_DIR/lastrun/test_summary/test_results | grep "exit=" | awk  'BEGIN { FS="[.=]" } {print $2 }'`
+
+    if [ $thisrun_test_results -ge 1 ] ; then 
+       if [ $thisrun_test_results == $lastrun_test_results ] ; then
+           echo "test results are the same as last time!"
+           exit 0
+       else
+           echo "thisrun test results are $thisrun_test_results! lastrun test results are $lastrun_test_results."
+           exit 1    
+       fi
+   fi
+fi
 
 # Give two .sum files to compare them
-
-
 if [ "$2" = "" ]; then
 	echo "Usage: $0 lastrun/test_summary thisrun/test_summary" >&2
 	exit 2
@@ -18,7 +33,6 @@ if [ ! -d $1 ] || [ ! -d $2 ] ; then
 fi
 
 exit_status=0
-diff_status=0
 tmp1=/tmp/testing.$$a
 tmp2=/tmp/testing.$$b
 
@@ -38,7 +52,6 @@ if [ -s $1/$FILE ] && [ -s $2/$FILE ] ;then
    	cat $tmp2
         echo  " "
    	exit_status=1
-        diff_status=1
    fi
    
    cat $2/$FILE | sort | comm -23 $tmp1 - > $tmp2
@@ -49,7 +62,6 @@ if [ -s $1/$FILE ] && [ -s $2/$FILE ] ;then
            echo  " "
            cat $tmp2
            echo  " "
-           diff_status=1
    fi
 else
  [ -s $1/$FILE ] || { echo "Empty file: $1/$FILE ." && echo "No compare for $FILE .";} 
@@ -71,7 +83,6 @@ if [ -s $1/$FILE ] && [ -s $2/$FILE ] ;then
            cat $tmp2
            echo  " "
            exit_status=1
-           diff_status=1
    fi
    
    cat $1/$FILE | sort > $tmp1
@@ -84,7 +95,6 @@ if [ -s $1/$FILE ] && [ -s $2/$FILE ] ;then
            echo  " "
            cat $tmp2
            echo  " "
-           diff_status=1
    fi
 
 else
@@ -106,7 +116,6 @@ if [ -s $1/$FILE ] && [ -s $2/$FILE ] ;then
            echo  " "
            cat $tmp2
            echo  " "
-           diff_status=1
    fi
    
    cat $1/$FILE | sort > $tmp1
@@ -120,17 +129,16 @@ if [ -s $1/$FILE ] && [ -s $2/$FILE ] ;then
            cat $tmp2
            echo  " "
            exit_status=1
-           diff_status=1
    fi
 
 else
  [ -s $1/$FILE ] || { echo "Empty file: $1/$FILE ." && echo "No compare for $FILE .";}
- [ -s $2/$FILE ] || { echo "Empty file: $2/$FILE ." && exit_status=1;}
+ [ -s $2/$FILE ] || { echo "Empty file: $2/$FILE .";}
 fi
 
-if [ $diff_status = 0 ] ; then
-echo "No difference in test results."
+if [ $exit_status = 0 ] ; then
+echo "The difference needs no extra notice."
 fi
 
-#echo $exit_status
+echo $exit_status
 exit $exit_status
