@@ -49,7 +49,7 @@ proc spectrum_analysis { file_suffix sample_freq freq_range_up freq_range_down }
                 send_user "low power at freqency $sample_freq\n"
                 return
             }
-            -re "\r\n\[1-5]\r\n.*>" {
+            -re "\r\n\[1-9]\[0-9]*\r\n.*>" {
                 case_pass $case_num
                 break
             }
@@ -64,10 +64,10 @@ proc spectrum_analysis { file_suffix sample_freq freq_range_up freq_range_down }
 #make sure power is near sample freqency
     incr case_num
     set timeout 10
-    send "grep \"\[\[:space:]]\[5-9]\[0-9]\\{3\\}\.\[0-9]\\{6,\\}\" $file_suffix.dft.dat | grep -v \"^$freq_range_up.\\\.\" | grep -cv \"^$freq_range_down.\\\.\"\r"
+    send "grep \"\[\[:space:]]\[1-9]\[0-9]\\{3\\}\.\[0-9]\\{6,\\}\" $file_suffix.dft.dat | grep -v \"^$freq_range_up.\\\.\" | grep -cv \"^$freq_range_down.\\\.\"\r"
     while 1 {
         expect {
-            -re "\r\n(\[1-9])+(\[0-9])?\r\n.*>" {
+            -re "\r\n\[1-9]\[0-9]*\r\n.*>" {
                 lappend result "FAIL"
                 send_user "too much power at unwanted freqency\n"
                 return

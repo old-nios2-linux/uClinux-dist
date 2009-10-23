@@ -49,7 +49,7 @@ proc rec_at_pc { freq magnitude } {
 
     incr case_num
     set timeout 10
-    send "arecord -t wav -c 1 -f S16_LE -r 44100 -d 5 $output_dir/${freq}Hz_44100Hz_16bit_05sec_PC.wav\n"
+    send "arecord -t wav -c 1 -f S16_LE -r 44100 -d 5 $output_dir/${freq}Hz_BFIN2PC.wav\n"
     while 1 {
         expect {
             -re "Signed 16 bit Little Endian, Rate 44100 Hz, Mono.*>" {
@@ -117,7 +117,7 @@ proc rec_from_pc { freq magnitude } {
 
     incr case_num
     set timeout 10
-    send "arecord -t wav -c 1 -f S16_LE -r 44100 -d 5 ${freq}Hz_44100Hz_16bit_05sec_BFIN.wav\n"
+    send "arecord -t wav -c 1 -f S16_LE -r 44100 -d 5 ${freq}Hz_PC2BFIN.wav\n"
     while 1 {
         expect {
             -re "Signed 16 bit Little Endian, Rate 44100 Hz, Mono.*$kernel_prompt" {
@@ -151,7 +151,7 @@ proc rec_from_pc { freq magnitude } {
     }
 
     incr case_num
-    if [ catch {exec rcp root@$targetip:/${freq}Hz_44100Hz_16bit_05sec_BFIN.wav $output_dir} ] {
+    if [ catch {exec rcp root@$targetip:/${freq}Hz_PC2BFIN.wav $output_dir} ] {
         send_user "FAIL: copy recorded file to PC\n"
         case_fail $case_num
     } else {
