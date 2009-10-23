@@ -81,7 +81,23 @@ while 1 {
             send "Y\r"
         }
 
+        -re "HCILL protocol support.*BT_HCIUART_LL.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Enable UART1.*SERIAL_BFIN_UART1.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Bluez-utils.*USER_BLUEZ.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Bluez bccmd util.*USER_BLUEZ_BCCMD.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "BFBLUET-EZEXT Boot Mode Utility.*USER_BFBLUET_EZEXT_UTIL.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -105,7 +121,6 @@ while 1 {
         }
     }
 }
-exit
 
 cd $uclinux_path/testsuites
 
