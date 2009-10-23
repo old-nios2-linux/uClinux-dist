@@ -32,13 +32,16 @@ if { $board_type == "BF548-EZKIT" } {
     set audio_module "snd_ssm2602"
 } elseif {$board_type == "BF537-STAMP" } {
     set video_module "bf537_lq035"
-    set audio_module "snd_ad1980"
+    set audio_module "snd_ad73311"
 }
 
 incr case_num
 send "modprobe $video_module\r"
 while 1 {
     expect {
+        -re "(modprobe:|\[fF]ail|\[eE]rror).*$kernel_prompt" {
+            case_fail $case_num
+        }
         -re "initializ.*$kernel_prompt" {
             case_pass $case_num
             break
@@ -63,32 +66,32 @@ while 1 {
     }
 }
 
-if {$board_type == "BF527-EZKIT" } {
-    incr case_num
-    send "modprobe i2c-bfin-twi\r"
-    while 1 {
-        expect {
-            -re "I2C TWI Contoller.*$kernel_prompt" {
-                case_pass $case_num
-                break
-            }
-            timeout {
-                case_fail $case_num
-            }
+incr case_num
+send "modprobe $audio_module\r"
+while 1 {
+    expect {
+        -re "(modprobe:|\[fF]ail|\[eE]rror).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re "mapping ok.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
         }
     }
 }
 
 incr case_num
-send "modprobe $audio_module\r"
+send "lsmod\r" 
 while 1 {
     expect {
-        -re $kernel_prompt {
+        -re "$audio_module.*$kernel_prompt" {
             case_pass $case_num
             break
         }
         timeout {
-            send_user "Install module failed!\r"
             case_fail $case_num
         }
     }
@@ -108,6 +111,11 @@ incr case_num
 send "mplayer video.avi\r"
 while 1 {
     expect {
+        -re "Can\'t open audio device" {
+            expect -re $kernel_prompt
+            send_user "\nfail to open audio device\n"
+            case_fail $case_num
+        }
         -re "Exiting.*End of file.*$kernel_prompt" {
             case_pass $case_num
             break
