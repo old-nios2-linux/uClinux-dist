@@ -15,7 +15,6 @@ step "Start testing."
 set case_num 0
 sleep 2
 
-set MST_BD_ADDR	"00:07:80:89:8F:06"
 set SLV_BD_ADDR	"11:11:11:11:11:11"
 set uart_port   "ttyBF1"
 
@@ -77,7 +76,7 @@ set timeout 5
 send "hciconfig\r"
 while 1 {
     expect {
-        -re "(\[dD]one|\[fF]ail|\[eE]rror|DOWN|not found).*$kernel_prompt" {
+        -re "(\[dD]one|\[fF]ail|DOWN|not found).*$kernel_prompt" {
             case_fail $case_num
         }
         -re "hci0.*UART.*BD Address: (\[0-9A-F:]+) ACL MTU.*$kernel_prompt" {
