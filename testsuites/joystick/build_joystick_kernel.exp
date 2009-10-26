@@ -81,12 +81,20 @@ while 1 {
             send "N\r"
         }
 
-        -re "Joysticks.*INPUT_JOYSTICK.*\\\[.*]" {
+        -re "Miscellaneous devices.*INPUT_MISC.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "Analog Devices AD7142 Joystick support.*JOYSTICK_AD7142.*\\\[.*]" {
-            send "m\r"
+        -re "Analog Devices AD714x Capacitance Touch Sensor.*INPUT_AD714X.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "support I2C bus connection.*INPUT_AD714X_I2C.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "support SPI bus connection.*INPUT_AD714X_SPI.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "Input event device test.*EVENT_TEST.*\\\[.*]" {

@@ -17,46 +17,6 @@ set timeout 8
 set case_num 0
 
 incr case_num
-                       
-expect  -re $kernel_prompt
-send -s "modprobe ad7142\r"
-while 1 {
-expect {
--re "is attached at" {
-
-	puts "\nmodule insert success.\n"
-                case_pass $case_num
-	break
-}
-
-timeout {
-                case_fail $case_num
-	exit
-	}
-}
-}
-
-incr case_num
-
-expect  -re $kernel_prompt
-send -s "lsmod\r"
-while 1 {
-expect {
-"ad7142" {
-
-	puts "\nmodule ls success.\n"
-                case_pass $case_num
-	break
-}
-
-timeout {
-                case_fail $case_num
-	exit
-	}
-}
-}
-
-incr case_num
 
 send -s "cd /bin\r" 
 while 1 {
@@ -100,41 +60,63 @@ while 1 {
 }
 
 expect "root:/bin>"
+send -s "event_test /dev/input/event1\r" 
+while 1 {
+   expect {
+     -re "Input device name.*Testing" { 
+         puts "\nPlease touch the Joystick board...\n"	 
+	 expect {
+		-re "Event: time .* type .* code .* value " { 
+                case_pass $case_num
+			}
+		
+		timeout {                           
+                case_fail $case_num
+			exit
+			}
+		}
+	 sleep 5
+	 send "\003"
+         break
+      }
+
+      timeout {                           
+                case_fail $case_num
+	exit
+         }
+     }
+}
+
+expect "root:/bin>"
+send -s "event_test /dev/input/event2\r" 
+while 1 {
+   expect {
+     -re "Input device name.*Testing" { 
+         puts "\nPlease touch the Joystick board...\n"	 
+	 expect {
+		-re "Event: time .* type .* code .* value " { 
+                case_pass $case_num
+			}
+		
+		timeout {                           
+                case_fail $case_num
+			exit
+			}
+		}
+	 sleep 5
+	 send "\003"
+         break
+      }
+
+      timeout {                           
+                case_fail $case_num
+	exit
+         }
+     }
+}
+
+expect "root:/bin>"
 set timeout 50
-
-incr case_num
-
-send -s "rmmod ad7142\r" 
-while 1 {
-   expect {
-      "root:/bin>" {
-                case_pass $case_num
-         break
-      }
-
-      timeout { 
-                case_fail $case_num
-	exit
-         }
-     }
-}
-
-incr case_num
-
-send -s "lsmod\r" 
-while 1 {
-   expect {
-      "root:/bin>" {
-                case_pass $case_num
-         break
-      }
-
-      timeout { 
-                case_fail $case_num
-	exit
-         }
-     }
-}
 
 send_log "\n"
 send_log "\n$TITLE ............\[PASS\]\n"
