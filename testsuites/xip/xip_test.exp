@@ -22,7 +22,8 @@ step "Start testing."
 
 set romfs_image     img.romfs
 set max_image_size  0x4FFFF
-set end_addr [format "%08x" [expr 0x$rootfs_start_addr + $max_image_size]]
+set start_addr      0x$rootfs_start_addr
+set end_addr 0x[format "%08x" [expr $start_addr + $max_image_size]]
 set case_num 0
 
 incr case_num
@@ -112,7 +113,7 @@ send -s "tftpboot 0x1000000 $romfs_image\r"
 while 1 {
     expect {
         -re "Bytes transferred = \[0-9]+ \\\((\[0-9a-fA-F]+) hex\\\).*$uboot_prompt" {
-            set image_size $expect_out(1,string)
+            set image_size 0x$expect_out(1,string)
             send_user "Image size is $image_size\n"
             case_pass $case_num
             break
@@ -126,7 +127,7 @@ while 1 {
 
 incr case_num
 set timeout 80
-send -s "protect off 0x$rootfs_start_addr 0x$end_addr\r"
+send -s "protect off $start_addr $end_addr\r"
 while 1 {
     expect {
         -re "Un-Protected.*$uboot_prompt" {
@@ -142,7 +143,7 @@ while 1 {
 
 incr case_num
 set timeout 240	
-send -s "erase 0x$rootfs_start_addr 0x$end_addr\r"
+send -s "erase $start_addr $end_addr\r"
 while 1 {
     expect {
         -re "Erased.*$uboot_prompt" {
@@ -158,7 +159,7 @@ while 1 {
 
 incr case_num
 set timeout 60
-send -s "cp.b 0x1000000 $rootfs_start_addr 0x$image_size\r"
+send -s "cp.b 0x1000000 $start_addr $image_size\r"
 while 1 {
     expect {
         -re "done.*$uboot_prompt" {
@@ -206,7 +207,7 @@ set timeout 5
 send "/mnt/xip_test\r"
 while 1 {
     expect {
-        -re "pf is 0x(\[0-9a-f]+)!\r\n$kernel_prompt" {
+        -re "pf is (0x\[0-9a-f]+)!\r\n$kernel_prompt" {
             set func_addr $expect_out(1,string)
             send_user "Function address is $func_addr\n"
             case_pass $case_num
@@ -219,11 +220,11 @@ while 1 {
 }
 
 incr case_num
-if { $func_addr > $rootfs_start_addr && $func_addr < $end_addr } {
-    send_user "Function address 0x$func_addr is in romfs region: 0x$rootfs_start_addr - 0x$end_addr\n"
+if { $func_addr > $start_addr && $func_addr < $end_addr } {
+    send_user "Function address $func_addr is in romfs region: $start_addr - $end_addr\n"
     case_pass $case_num
 } else {
-    send_user "Function address 0x$func_addr is not in romfs region: 0x$rootfs_start_addr - 0x$end_addr\n"
+    send_user "Function address $func_addr is not in romfs region: $start_addr - $end_addr\n"
     case_fail $case_num
 }
 
