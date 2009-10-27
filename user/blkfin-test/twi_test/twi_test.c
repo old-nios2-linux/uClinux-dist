@@ -9,7 +9,7 @@
 #include <linux/i2c-dev.h>
 
 #define I2C_BUS		"/dev/i2c-0"
-#define I2C_SLAVE	0x0703	/* Change slave address */
+#define I2C_SLAVE_FORCE	0x0706	/* Change slave address */
 
 #define warn(fmt, args...) printf("%s: " fmt "\n", __func__, ## args)
 #define warnp(fmt, args...) warn(fmt ": %s", ## args, strerror(errno))
@@ -157,8 +157,8 @@ int main(int argc, char *argv[])
 
 	i2c_fd = open(I2C_BUS, O_RDWR);
 
-	print_case("Program with correct I2C_SLAVE address");
-	if (ioctl(i2c_fd, I2C_SLAVE, slave_addr) < 0) /* Correct address */
+	print_case("Program with correct I2C_SLAVE_FORCE address");
+	if (ioctl(i2c_fd, I2C_SLAVE_FORCE, slave_addr) < 0) /* Correct address */
 		err("Fail to set SLAVE address\n");
 
 	regaddr = 2;
@@ -198,8 +198,8 @@ int main(int argc, char *argv[])
 
 	printf("reg %d = 0x%x\n", regaddr, regval);
 
-	print_case("Program with incorrect I2C_SLAVE address");
-	ioctl(i2c_fd, I2C_SLAVE, wrong_addr);	/* Incorrect address */
+	print_case("Program with incorrect I2C_SLAVE_FORCE address");
+	ioctl(i2c_fd, I2C_SLAVE_FORCE, wrong_addr);	/* Incorrect address */
 
 	sleep(1);
 	regaddr = 2;
@@ -214,8 +214,8 @@ int main(int argc, char *argv[])
 	if (!rc)
 		err("Wrong addr is incorrect, write %d to reg %d\n", regval, regaddr);
 
-	print_case("Program with correct I2C_SLAVE address");
-	ioctl(i2c_fd, I2C_SLAVE, slave_addr);	/* Correct address */
+	print_case("Program with correct I2C_SLAVE_FORCE address");
+	ioctl(i2c_fd, I2C_SLAVE_FORCE, slave_addr);	/* Correct address */
 
 	sleep(1);
 	regaddr = 2;
