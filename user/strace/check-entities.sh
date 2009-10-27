@@ -99,7 +99,7 @@ get_header() {
 	fi
 }
 cpp_filter() {
-	${BUILD_CC} -E -P - | sed '/^[[:space:]]*$/d'
+	${CC} -E -P - | sed '/^[[:space:]]*$/d'
 }
 ebegin() { printf "$* ... "; }
 eend()
@@ -120,7 +120,8 @@ echo "Strace: $sarch in $ssrc"
 echo "Kernel: $karch in $ksrc"
 cd "${ssrc}"
 
-: ${BUILD_CC:=${CC:-gcc}}
+export CC=${BUILD_CC:-${CC:-gcc}}
+export CPP=${BUILD_CPP:-${BUILD_CC} -E}
 
 ret=0
 
@@ -141,9 +142,9 @@ eend $? errnoent.h errnoent.h.old
 # ioctls have been *added*.  we'll keep around the old ones forever
 # in case someone runs an old binary with the old ioctl.
 ebegin "ioctl list"
-sh ./linux/ioctlent.sh "$ksrc/include" "$arch_inc" | grep -v '^Looking for '
-${BUILD_CC} -E -dD -I. -Wall linux/ioctlsort.c -o ioctlsort.i
-${BUILD_CC} -Wall ioctlsort.i -o ioctlsort
+sh ./linux/ioctlent.sh "$ksrc/include" "$arch_inc" | grep -v -e '^Looking for' -e ' is a'
+${CPP} -dD -I. -Wall linux/ioctlsort.c -o ioctlsort.i
+${CC} -Wall ioctlsort.i -o ioctlsort
 ./ioctlsort > ioctlent.h
 ! diff -u ioctlent.h $(get_header ioctlent.h) | sed 1,2d | grep -qs '^\-'
 eend $? ioctlent.h ioctlsort ioctlsort.i ioctls.h ioctldefs.h
