@@ -60,13 +60,15 @@ site_msg "site_build        = ${site_build}"
 site_msg "site_host         = ${site_host}"
 site_msg "site_target       = ${site_target}"
 
-site_config="${SITE_DIR}/config.site.build"
-if [ -e "${site_config}" ] ; then
-	site_msg "loading build site script frag ${site_config}"
-	user_site_msg "loading build site script frag ${site_config}"
-	cat "${site_config}" >&5
-	. "${site_config}"
-fi
+for site_config in "${SITE_DIR}/config.site.build" ${CONFIG_SITE_EXTRA} ; do
+	site_msg "searching for extra site script ${site_config}"
+	if [ -e "${site_config}" ] ; then
+		site_msg "loading extra site script frag ${site_config}"
+		user_site_msg "loading extra site script frag ${site_config}"
+		cat "${site_config}" >&5
+		. "${site_config}"
+	fi
+done
 unset site_config
 
 if [ "${site_build}" != "${site_host}" ] ; then
