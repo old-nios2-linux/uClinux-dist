@@ -11,13 +11,6 @@
 
 #define passert(expr) ({ if (!(expr)) { perror(#expr); exit(1); } })
 
-enum {
-	BF_DMA_REQUEST = 0,
-	BF_DMA_FREE,
-	BF_DMA_RUN,
-	BF_DMA_ARUN,
-};
-
 struct dmasg {
 	void *next_desc_addr;
 	void *start_addr;
@@ -33,6 +26,11 @@ struct dma_state {
 	volatile int done;
 	struct dmasg dsc_src, dsc_dst;
 };
+
+#define BF_DMA_REQUEST _IOW('D', 0x00, struct dma_state)
+#define BF_DMA_FREE    _IOW('D', 0x01, struct dma_state)
+#define BF_DMA_RUN     _IOW('D', 0x02, struct dma_state)
+#define BF_DMA_ARUN    _IOW('D', 0x03, struct dma_state)
 
 #define SIZE 1024
 char src[SIZE], dst[SIZE];
