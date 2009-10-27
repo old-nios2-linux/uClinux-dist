@@ -98,6 +98,9 @@ get_header() {
 		echo linux/$1
 	fi
 }
+cpp_filter() {
+	${BUILD_CC} -E -P - | sed '/^[[:space:]]*$/d'
+}
 ebegin() { printf "$* ... "; }
 eend()
 {
@@ -117,6 +120,8 @@ echo "Strace: $sarch in $ssrc"
 echo "Kernel: $karch in $ksrc"
 cd "${ssrc}"
 
+: ${BUILD_CC:=${CC:-gcc}}
+
 ret=0
 
 [ -d "$ksrc/arch/$karch/include/asm" ] \
@@ -126,9 +131,10 @@ generic_inc="$ksrc/include/asm-generic"
 
 # easy: output is exactly what we want
 ebegin "errno list"
-sh ./errnoent.sh "$ksrc/include/linux"/*errno*.h "$ksrc/include/asm-generic"/*errno*.h "$arch_inc"/*errno*.h > errnoent.h
-cmp -s errnoent.h $(get_header errnoent.h)
-eend $? errnoent.h
+sh ./errnoent.sh "$ksrc/include/linux"/*errno*.h "$ksrc/include/asm-generic"/*errno*.h "$arch_inc"/*errno*.h | cpp_filter > errnoent.h
+cat $(get_header errnoent.h) | cpp_filter > errnoent.h.old
+cmp -s errnoent.h errnoent.h.old
+eend $? errnoent.h errnoent.h.old
 
 # painful: need to extract the list of ioctls, then use gcc to turn
 # it into a list of actual numbers, and then only complain when new
@@ -136,8 +142,8 @@ eend $? errnoent.h
 # in case someone runs an old binary with the old ioctl.
 ebegin "ioctl list"
 sh ./linux/ioctlent.sh "$ksrc/include" "$arch_inc" | grep -v '^Looking for '
-${BUILD_CC:-${CC:-gcc}} -E -dD -I. -Wall linux/ioctlsort.c -o ioctlsort.i
-${BUILD_CC:-${CC:-gcc}} -Wall ioctlsort.i -o ioctlsort
+${BUILD_CC} -E -dD -I. -Wall linux/ioctlsort.c -o ioctlsort.i
+${BUILD_CC} -Wall ioctlsort.i -o ioctlsort
 ./ioctlsort > ioctlent.h
 ! diff -u ioctlent.h $(get_header ioctlent.h) | sed 1,2d | grep -qs '^\-'
 eend $? ioctlent.h ioctlsort ioctlsort.i ioctls.h ioctldefs.h
@@ -153,7 +159,7 @@ eend $? signalent.h
 # the number of syscalls found as we'll assume that the syscall list is forever
 # locked in stone and thus will only ever increase over time.
 ebegin "syscall list"
-sh ./syscallent.sh "$arch_inc/unistd.h" > syscallent.h
+sh ./syscallent.sh "$arch_inc/unistd.h" | sed '/sys_syscall/,$d' > syscallent.h
 knr=$(set -- $(wc -l syscallent.h); echo $1)
 snr=$(grep '^[[:space:]]{' $(get_header syscallent.h) | wc -l)
 [ ${knr} -eq ${snr} ]
