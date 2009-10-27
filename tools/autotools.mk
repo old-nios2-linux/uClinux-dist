@@ -7,9 +7,13 @@
 # Then just add to your package Makefile:
 # include $(ROOTDIR)/tools/autotools.mk
 
-all: build-$(VER)/Makefile $(AUTOTOOLS_ALL_DEPS)
+BUILDDIR      = build-$(VER)
+BUILDDIR_HOST = build-host-$(VER)
+CONFIGURE     = $(VER)/configure
+
+all: $(BUILDDIR)/Makefile $(AUTOTOOLS_ALL_DEPS)
 	$(MAKE) pre-build
-	$(MAKE) -C build-$(VER) install DESTDIR=$(STAGEDIR)
+	$(MAKE) -C $(BUILDDIR) install DESTDIR=$(STAGEDIR)
 	$(MAKE) post-build
 
 	$(ROOTDIR)/tools/cross-fix-root
@@ -44,7 +48,7 @@ autotools-cache: $(ROOTDIR)/vendors/config/config.site.build $(ROOTDIR)/tools/au
 .PHONY: autotools-cache
 
 if_changed = \
-	settings="build-$(3)$(VER)/.dist.settings" ; \
+	settings="$(3)/.dist.settings" ; \
 	echo $(2) $(CFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(LDFLAGS) > .new.settings ; \
 	if ! cmp -s .new.settings $$settings ; then \
 		$(echo-cmd) "%s\n" "$(cmd_$(1))" ; \
@@ -54,20 +58,20 @@ if_changed = \
 
 cmd_configure = \
 	set -e ; \
-	chmod a+rx $(VER)/configure ; \
-	find $(VER) -type f -print0 | xargs -0 touch -r $(VER)/configure ; \
-	rm -rf build-$(3)$(VER) ; \
-	mkdir build-$(3)$(VER) ; \
-	cd build-$(3)$(VER) ; \
-	../$(VER)/configure $(2)
-build-$(VER)/Makefile: build-host-$(VER)/Makefile autotools-cache FORCE
-	@$(call if_changed,configure,$(CONFIGURE_OPTS) $(CONF_OPTS))
+	chmod a+rx $(CONFIGURE) ; \
+	find $(VER) -type f -print0 | xargs -0 touch -r $(CONFIGURE) ; \
+	rm -rf $(3) ; \
+	mkdir $(3) ; \
+	cd $(3) ; \
+	../$(CONFIGURE) $(2)
+$(BUILDDIR)/Makefile: $(BUILDDIR_HOST)/Makefile autotools-cache FORCE
+	@$(call if_changed,configure,$(CONFIGURE_OPTS) $(CONF_OPTS),$(BUILDDIR))
 
-build-host-$(VER)/Makefile: autotools-cache FORCE
+$(BUILDDIR_HOST)/Makefile: autotools-cache FORCE
 ifeq ($(AUTOTOOLS_BUILD_HOST),true)
 	@export AR="" CC=$(HOSTCC) CXX="" LD="" RANLIB="" \
 		CPPFLAGS="" CFLAGS="-O2 -g" CXXFLAGS="-O2 -g" LDFLAGS="" CONFIG_SITE="" \
-	$(call if_changed,configure,$(BUILD_CONFIGURE_OPTS) $(BUILD_CONF_OPTS),host-)
+	$(call if_changed,configure,$(BUILD_CONFIGURE_OPTS) $(BUILD_CONF_OPTS),$(BUILDDIR_HOST))
 	$(MAKE) host-build
 endif
 
