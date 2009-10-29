@@ -3,7 +3,7 @@
 # davidm@snapgear.com
 #
 
-SRCROOT := $(ROOTDIR)/lib/STLport/build
+SRCROOT := $(ROOTDIR)/lib/STLport/$(VER)/build
 COMPILER_NAME := gcc
 OSNAME := linux
 BUILD_OSNAME := $(shell uname -s | tr '[A-Z]' '[a-z]' | tr ', /\\()"' ',//////' | tr ',/' ',-')
@@ -16,7 +16,7 @@ ALL_TAGS      := all-static
 INSTALL_TAGS  := install-release-static
 endif
 
-STLPORT_INCLUDE_DIR = $(ROOTDIR)/include/STLport
+STLPORT_INCLUDE_DIR = $(SRCROOT)/../stlport
 include Makefile.inc
 #
 # override LIBNAME
