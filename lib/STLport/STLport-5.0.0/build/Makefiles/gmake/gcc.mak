@@ -25,7 +25,7 @@ CXX_VERSION := $(shell ${CXX} --version | grep GCC | awk '{ print $$3; }')
 
 ifeq ($(CXX_VERSION),)
 # 2.95 report only version
-CXX_VERSION := $(shell ${CXX} --version)
+CXX_VERSION := "$(shell ${CXX} --version)"
 endif
 
 CXX_VERSION_MAJOR := $(shell echo ${CXX_VERSION} | awk 'BEGIN { FS = "."; } { print $$1; }')
