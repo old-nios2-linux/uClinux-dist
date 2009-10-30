@@ -1,4 +1,4 @@
-VER = xenomai-2.4.91
+VER = xenomai-2.4.93
 
 ADEOS = $(ROOTDIR)/bfin_patch/adeos_patch/adeos-bfin.patch
 LINUX_DIR = $(ROOTDIR)/linux-2.6.x
@@ -31,7 +31,7 @@ romfs:
 	$(ROMFSINST) -d $(STAGEDIR)/usr/bin/clocktest /usr/bin/clocktest
 	$(ROMFSINST) -d $(STAGEDIR)/usr/bin/cyclictest /usr/bin/cyclictest
 	$(ROMFSINST) -d $(STAGEDIR)/usr/bin/irqloop /usr/bin/irqloop
-	$(ROMFSINST) -d $(STAGEDIR)/usr/bin/switchbench /usr/bin/switchbench
+	$(ROMFSINST) -d $(STAGEDIR)/usr/bin/klatency /usr/bin/klatency
 	$(ROMFSINST) -e CONFIG_FMT_USE_FDPIC_ELF -d $(STAGEDIR)/usr/lib/libnative.so /usr/lib/libnative.so
 	$(ROMFSINST) -e CONFIG_FMT_USE_FDPIC_ELF -d $(STAGEDIR)/usr/lib/librtdm.so /usr/lib/librtdm.so
 	$(ROMFSINST) -e CONFIG_FMT_USE_FDPIC_ELF -d $(STAGEDIR)/usr/lib/libpthread_rt.so /usr/lib/libpthread_rt.so
