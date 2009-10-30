@@ -1,8 +1,13 @@
 File: adeos-bfin.patch
 
-Last update: 2009-04-08
+Last update: 2009-10-30
 
 History:
+
+2009-10-30
+----------
+ipipe-blackfin-2.6.31.2-noarch.patch for Philippe.
+
 
 2009-06-30
 -----------
