@@ -7,15 +7,16 @@
  * Licensed under the GPL-2 or later.
  */
 
+#include <linux/gpio.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
 
+#include <linux/version.h>
 #include "drivers/lirc.h"
 #include "drivers/lirc_dev/lirc_dev.h"
 
-#include <asm/gpio.h>
 #include <asm/gptimers.h>
 #include <asm/portmux.h>
 
@@ -49,7 +50,7 @@ struct bfin_gptimer {
 	/* lirc pieces */
 	uint32_t last_width;
 	bool period_overflow, opened;
-	struct lirc_plugin plugin;
+	struct lirc_driver driver;
 	struct lirc_buffer lirc_buf;
 };
 
@@ -206,13 +207,16 @@ static void gptimer_set_use_dec(void *data)
 /* XXX: move this to platform data in a boards file */
 static struct bfin_gptimer timer5 = {
 	.name   = DRIVER_NAME "5",
-	.irq    = IRQ_TMR5,
+	.irq    = IRQ_TIMER5,
 	.id     = TIMER5_id,
 	.bit    = TIMER5bit,
 	.mux    = P_TMR5,
 	.gpio   = GPIO_PF4,
 };
-static struct lirc_plugin __initdata plugin_template = {
+static struct file_operations timer_fops = {
+	.ioctl        = gptimer_ioctl,
+};
+static struct lirc_driver __initdata driver_template = {
 	.name         = DRIVER_NAME,
 	.minor        = -1,
 	.code_length  = sizeof(lirc_t) * 8,
@@ -224,8 +228,7 @@ static struct lirc_plugin __initdata plugin_template = {
 	.rbuf         = NULL,
 	.set_use_inc  = gptimer_set_use_inc,
 	.set_use_dec  = gptimer_set_use_dec,
-	.ioctl        = gptimer_ioctl,
-	.fops         = NULL,
+	.fops         = &timer_fops,
 	.dev          = NULL,
 	.owner        = THIS_MODULE,
 };
@@ -237,21 +240,21 @@ static int __init lirc_bfin_timer_init(void)
 
 	pr_stamp();
 
-	/* init the plugin data */
+	/* init the driver data */
 	g->opened = false;
-	g->plugin = plugin_template;
-	g->plugin.data = g;
-	g->plugin.rbuf = &g->lirc_buf;
+	g->driver = driver_template;
+	g->driver.data = g;
+	g->driver.rbuf = &g->lirc_buf;
 	ret = lirc_buffer_init(&g->lirc_buf, sizeof(lirc_t), 64);
 	if (ret) {
 		printk(KERN_NOTICE DRIVER_NAME ": lirc_buffer_init() failed\n");
 		return ret;
 	}
 
-	/* register the lirq plugin */
-	ret = lirc_register_plugin(&g->plugin);
+	/* register the lirq driver */
+	ret = lirc_register_driver(&g->driver);
 	if (ret < 0) {
-		printk(KERN_NOTICE DRIVER_NAME ": lirc_register_plugin() failed\n");
+		printk(KERN_NOTICE DRIVER_NAME ": lirc_register_driver() failed\n");
 		lirc_buffer_free(&g->lirc_buf);
 		return ret;
 	}
@@ -267,7 +270,7 @@ static void __exit lirc_bfin_timer_exit(void)
 	pr_stamp();
 
 	lirc_buffer_free(&g->lirc_buf);
-	lirc_unregister_plugin(g->plugin.minor);
+	lirc_unregister_driver(g->driver.minor);
 }
 module_exit(lirc_bfin_timer_exit);
 
