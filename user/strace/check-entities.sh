@@ -120,8 +120,9 @@ echo "Strace: $sarch in $ssrc"
 echo "Kernel: $karch in $ksrc"
 cd "${ssrc}"
 
-export CC=${BUILD_CC:-${CC:-gcc}}
-export CPP=${CPP:-${CC} -E}
+CC=${BUILD_CC:-${CC:-gcc}}
+CPP=${CPP:-${CC} -E}
+export CC CPP
 
 ret=0
 
