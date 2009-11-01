@@ -121,7 +121,7 @@ echo "Kernel: $karch in $ksrc"
 cd "${ssrc}"
 
 export CC=${BUILD_CC:-${CC:-gcc}}
-export CPP=${BUILD_CPP:-${BUILD_CC} -E}
+export CPP=${BUILD_CPP:-${CC} -E}
 
 ret=0
 
