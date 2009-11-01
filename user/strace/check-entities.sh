@@ -99,7 +99,7 @@ get_header() {
 	fi
 }
 cpp_filter() {
-	${CC} -E -P - | sed '/^[[:space:]]*$/d'
+	${CPP} -P - | sed '/^[[:space:]]*$/d'
 }
 ebegin() { printf "$* ... "; }
 eend()
@@ -121,7 +121,7 @@ echo "Kernel: $karch in $ksrc"
 cd "${ssrc}"
 
 export CC=${BUILD_CC:-${CC:-gcc}}
-export CPP=${BUILD_CPP:-${CC} -E}
+export CPP=${CPP:-${CC} -E}
 
 ret=0
 
