@@ -87,11 +87,24 @@ while 1 {
 incr case_num
 send "echo 0 > value\r"
 expect  ">"
-send_user "Check if the LED1 is going off.\n "
+send_user "Check if the following happens as expected: \n "
+
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
+send_user "the LED1 is going OFF for BF537-STAMP,BF548-EZKIT,BF527-EZKIT.\n "
+} elseif { $board_type == "BF533-STAMP" } {
+send_user "the LED1 is going ON  for BF533-STAMP.\n "
+}
+
 sleep 5
 send "echo 1 > value\r"
 expect  ">"
-send_user "\nCheck if the LED1 is going on.\n "
+send_user "Check if the following happens as expected: \n "
+
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
+send_user "the LED1 is going ON for BF537-STAMP,BF548-EZKIT,BF527-EZKIT. \n "
+} elseif { $board_type == "BF533-STAMP" } {
+send_user "the LED1 is going OFF  for BF533-STAMP.\n "
+}
 sleep 5
 
 
@@ -151,6 +164,7 @@ incr case_num
 send_user "Please push the BTN1.\n "
 sleep 5 
 send "cat value\r"
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
 while 1 {
    expect {
       -re "1.*>" {
@@ -164,9 +178,8 @@ while 1 {
          }
      }
 }
-send_user "Please release the BTN1.\n "
-sleep 5 
-send "cat value\r"
+} elseif { $board_type == "BF533-STAMP" } {
+
 while 1 {
    expect {
       -re "0.*>" {
@@ -180,7 +193,40 @@ while 1 {
          }
      }
 }
+}
+send_user "Please release the BTN1.\n "
+sleep 5 
+send "cat value\r"
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
+while 1 {
+   expect {
+      -re "0.*>" {
+         case_pass $case_num
+         break
+      }
 
+      timeout {
+         case_fail $case_num
+         exit
+         }
+     }
+}
+} elseif { $board_type == "BF533-STAMP" } {
+
+while 1 {
+   expect {
+      -re "1.*>" {
+         case_pass $case_num
+         break
+      }
+
+      timeout {
+         case_fail $case_num
+         exit
+         }
+     }
+}
+}
 send_user "Ending $argv0\n"
 log_file
 
