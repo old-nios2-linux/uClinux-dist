@@ -1444,6 +1444,20 @@ do
               sleep 10
           fi
 
+          if [ ${AUTO_RUN_STATUS[$(( n + 14 ))]} -eq 1  ] ; then
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_adau1371_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+
+              cd $UCLINUX_DIST_TESTSUITES/power
+              ./power_adau1371_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+              cd $UCLINUX_DIST_TESTSUITES
+              ./reset_board.exp  >/dev/null  2>&1
+              sleep 10
+          fi
+
           if [ ${AUTO_RUN_STATUS[$(( n + 17 ))]} -eq 1  ] ; then
               cd $UCLINUX_DIST_TESTSUITES/power
               ./power_ssm2603_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
@@ -1457,6 +1471,7 @@ do
               ./reset_board.exp  >/dev/null  2>&1
               sleep 10
           fi
+
       fi
 
       cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.power.audio_i2s
