@@ -271,15 +271,12 @@ while 1 {
         -re "(kill:|Usage:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "Done" {
+        -re $kernel_prompt {
+            sleep 1
             send "\r"
-            expect -re $kernel_prompt
+            expect -nocase "Done"
             case_pass $case_num
             break
-        }
-        -re $kernel_prompt {
-            send "\r"
-            continue
         }
         timeout {
             case_fail $case_num
