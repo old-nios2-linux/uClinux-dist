@@ -122,18 +122,14 @@ corresponding Unix manual entries for more information on calls.");
 /* Everything needed is defined in PC/os2emx/pyconfig.h or vms/pyconfig.h */
 #else			/* all other compilers */
 /* Unix functions that the configure script doesn't check for */
-#define HAVE_EXECV      1
-#define HAVE_FORK       1
 #if defined(__USLC__) && defined(__SCO_VERSION__)	/* SCO UDK Compiler */
 #define HAVE_FORK1      1
 #endif
-#define HAVE_GETCWD     1
 #define HAVE_GETEGID    1
 #define HAVE_GETEUID    1
 #define HAVE_GETGID     1
 #define HAVE_GETPPID    1
 #define HAVE_GETUID     1
-#define HAVE_KILL       1
 #define HAVE_OPENDIR    1
 #define HAVE_PIPE       1
 #ifndef __rtems__
