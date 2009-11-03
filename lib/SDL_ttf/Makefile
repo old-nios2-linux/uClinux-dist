@@ -1,6 +1,6 @@
 VER = SDL_ttf-2.0.9
 
-CONF_OPTS = --without-x
+CONF_OPTS = --without-x --with-freetype-prefix=$(STAGEDIR)/usr
 
 all: build-$(VER)/Makefile
 	$(MAKE) -C build-$(VER)
