@@ -412,7 +412,7 @@ int main( int argc, char *argv[] ) {
     return 1;
 #endif
 }
-], have_flac_ver=yes, have_flac_ver=no)
+], have_flac_ver=yes, have_flac_ver=no, [echo $ac_n "cross compiling; assumed OK... $ac_c"; have_flac_ver=yes])
         LIBS="$LIBS_SAVED"
         AC_MSG_RESULT($have_flac_ver)
     fi
