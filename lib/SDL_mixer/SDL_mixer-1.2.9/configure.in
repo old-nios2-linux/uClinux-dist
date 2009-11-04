@@ -412,12 +412,12 @@ int main( int argc, char *argv[] ) {
     return 1;
 #endif
 }
-], have_flac_ver=yes, have_flac_ver=no, [echo $ac_n "cross compiling; assumed OK... $ac_c"; have_flac_ver=yes])
+], have_flac_ver=yes, have_flac_ver=no, [have_flac_ver="cross compiling, assumed OK"])
         LIBS="$LIBS_SAVED"
         AC_MSG_RESULT($have_flac_ver)
     fi
 
-    if test x$have_flac_ver = xyes; then
+    if test x"$have_flac_ver" != xno; then
         AC_CHECK_HEADER([FLAC/stream_decoder.h], [have_flac_hdr=yes])
         AC_CHECK_LIB([FLAC], [FLAC__stream_decoder_new], [have_flac_lib=yes])
         if test x$have_flac_hdr = xyes -a x$have_flac_lib = xyes; then    

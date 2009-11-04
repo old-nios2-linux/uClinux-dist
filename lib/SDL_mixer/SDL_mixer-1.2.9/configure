@@ -11931,7 +11931,7 @@ fi
         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libflac so-name version >= $libflac_ver" >&5
 $as_echo_n "checking for libflac so-name version >= $libflac_ver... " >&6; }
         if test "$cross_compiling" = yes; then :
-  echo $ac_n "cross compiling; assumed OK... $ac_c"; have_flac_ver=yes
+  have_flac_ver="cross compiling, assumed OK"
 else
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -11961,7 +11961,7 @@ fi
 $as_echo "$have_flac_ver" >&6; }
     fi
 
-    if test x$have_flac_ver = xyes; then
+    if test x"$have_flac_ver" != xno; then
         ac_fn_c_check_header_mongrel "$LINENO" "FLAC/stream_decoder.h" "ac_cv_header_FLAC_stream_decoder_h" "$ac_includes_default"
 if test "x$ac_cv_header_FLAC_stream_decoder_h" = x""yes; then :
   have_flac_hdr=yes
