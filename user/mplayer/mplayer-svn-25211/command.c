@@ -2884,7 +2884,11 @@ int run_command(MPContext * mpctx, mp_cmd_t * cmd)
 
 	case MP_CMD_RUN:
 #ifndef __MINGW32__
+# ifdef __uClinux__
+	    if (!vfork()) {
+# else
 	    if (!fork()) {
+# endif
 		execl("/bin/sh", "sh", "-c", cmd->args[0].v.s, NULL);
 		exit(0);
 	    }

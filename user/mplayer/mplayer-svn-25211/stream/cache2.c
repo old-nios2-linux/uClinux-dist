@@ -275,7 +275,9 @@ int stream_enable_cache(stream_t *stream,int size,int min,int seek_limit){
      min = s->buffer_size - s->fill_limit;
   }
   
-#ifndef WIN32  
+#if defined(__uClinux__)
+  if((stream->cache_pid=vfork())){
+#elif !defined(WIN32)
   if((stream->cache_pid=fork())){
 #else
   {
