@@ -62,6 +62,7 @@ dir_$(CONFIG_USER_CAL_CAL)                  += cal
 dir_$(CONFIG_USER_CAL_DATE)                 += cal
 dir_$(CONFIG_USER_CAMSERV)                  += camserv
 dir_$(CONFIG_USER_CAN_EXAMPLES)             += can4linux
+dir_$(CONFIG_USER_CAN_UTILS)                += canutils
 dir_$(CONFIG_USER_CTORRENT_CTORRENT)        += ctorrent
 dir_$(CONFIG_USER_CAN_HORCH)                += horch
 dir_$(CONFIG_USER_CGI_GENERIC)              += cgi_generic

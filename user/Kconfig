@@ -965,6 +965,11 @@ config USER_BRCTL_BRCTL
 	  Program for configuring the bridge.  Use this on 2.4 kernels for
 	  generic bridging (not ATM-ethernet) and for GRE bridges.
 
+config USER_CAN_UTILS
+	bool "SocketCAN utilities"
+	help
+	  SocketCAN utilities.
+
 config USER_CLAMAV_CLAMAV
 	bool "clamav"
 	select LIB_LIBBZ2
