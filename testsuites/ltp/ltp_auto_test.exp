@@ -844,6 +844,15 @@ proc run_LTP_test { filename command torun mode} {
       return $result_flag
    }
 
+#mount and umount related test now only run on bf548-ezkit
+   if { [string match "mount*" $filename] || [string match "umount*" $filename] } {
+       if { $board_type != "BF548-EZKIT" } {
+           set result_flag $LTP_NA
+           step "Test NA on uClinux"
+           return $result_flag
+       }
+   }
+
    if { $filename == "munlock01" || $filename == "semget05"} {
        force_reboot
    }
@@ -1508,6 +1517,10 @@ set result_matrix {
        { mmap09     	     {mmap09}                     	 notrun		NA }
        { modify_ldt01        {modify_ldt01}                      notrun		NA }
        { modify_ldt02        {modify_ldt02}                      notrun		NA }
+       { mount01             {mount01 -D /dev/sdb1}              notrun		UCLINUX }
+       { mount02             {mount02 -D /dev/sdb1}              notrun		UCLINUX }
+       { mount03             {mount03 -D /dev/sdb1}              notrun		UCLINUX }
+       { mount04             {mount04 -D /dev/sdb1}              notrun		UCLINUX }
        { mprotect01          {mprotect01}                     	 notrun		NA }
        { mprotect02          {mprotect02}                     	 notrun		NA }
        { mprotect03          {mprotect03}                     	 notrun		NA }
@@ -1859,6 +1872,9 @@ set result_matrix {
        { umask01     	     {umask01}                     	 notrun		UCLINUX }
        { umask02     	     {umask02}                     	 notrun		UCLINUX }
        { umask03     	     {umask03}                     	 notrun		UCLINUX }
+       { umount01            {umount01 -D /dev/sdb1}             notrun		UCLINUX }
+       { umount02            {umount02 -D /dev/sdb1}             notrun		UCLINUX }
+       { umount03            {umount03 -D /dev/sdb1}             notrun		UCLINUX }
        { uname01     	     {uname01}                     	 notrun		UCLINUX }
        { uname02     	     {uname02}                     	 notrun		NA }
        { uname03     	     {uname03}                     	 notrun		UCLINUX }
