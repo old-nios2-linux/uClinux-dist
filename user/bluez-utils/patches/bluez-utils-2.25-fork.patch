@@ -1,0 +1,45 @@
+Index: bluez-utils-2.25/hidd/main.c
+===================================================================
+--- bluez-utils-2.25/hidd/main.c	(revision 9093)
++++ bluez-utils-2.25/hidd/main.c	(working copy)
+@@ -752,7 +752,11 @@
+ 	}
+ 
+ 	if (daemon) {
++#ifdef __uClinux__
++		if (vfork())
++#else
+ 		if (fork())
++#endif
+ 			exit(0);
+ 
+ 		fd = open("/dev/null", O_RDWR);
+Index: bluez-utils-2.25/pand/main.c
+===================================================================
+--- bluez-utils-2.25/pand/main.c	(revision 9093)
++++ bluez-utils-2.25/pand/main.c	(working copy)
+@@ -187,8 +187,11 @@
+ 			syslog(LOG_ERR, "Accept failed. %s(%d)", strerror(errno), errno);
+ 			continue;
+ 		}
+-
++#ifdef __uClinux__
++		switch (vfork()) {
++#else
+ 		switch (fork()) {
++#endif
+ 		case 0:
+ 			break;
+ 		case -1:
+@@ -211,7 +214,11 @@
+ 		}
+ 
+ 		close(nsk);
++#ifdef __uClinux__
++		_exit(0);
++#else
+ 		exit(0);
++#endif
+ 	}
+ 
+ 	if (use_sdp)

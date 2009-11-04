@@ -752,7 +752,11 @@ int main(int argc, char *argv[])
 	}
 
 	if (daemon) {
+#ifdef __uClinux__
+		if (vfork())
+#else
 		if (fork())
+#endif
 			exit(0);
 
 		fd = open("/dev/null", O_RDWR);

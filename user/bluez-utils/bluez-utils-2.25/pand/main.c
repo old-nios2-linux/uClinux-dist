@@ -187,8 +187,11 @@ static int do_listen(void)
 			syslog(LOG_ERR, "Accept failed. %s(%d)", strerror(errno), errno);
 			continue;
 		}
-
+#ifdef __uClinux__
+		switch (vfork()) {
+#else
 		switch (fork()) {
+#endif
 		case 0:
 			break;
 		case -1:
@@ -211,7 +214,11 @@ static int do_listen(void)
 		}
 
 		close(nsk);
+#ifdef __uClinux__
+		_exit(0);
+#else
 		exit(0);
+#endif
 	}
 
 	if (use_sdp)
