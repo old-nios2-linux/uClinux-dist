@@ -182,7 +182,11 @@ static rsRetVal wallmsg(uchar* pMsg, instanceData *pData)
 	 * Might as well fork instead of using nonblocking I/O
 	 * and doing notty().
 	 */
+#ifdef __uClinux__
+	if (vfork() == 0) {
+#else
 	if (fork() == 0) {
+#endif
 		memset(&sigAct, 0, sizeof(sigAct));
 		sigemptyset(&sigAct.sa_mask);
 		sigAct.sa_handler = SIG_DFL;
@@ -254,7 +258,11 @@ static rsRetVal wallmsg(uchar* pMsg, instanceData *pData)
 			}
 			(void) alarm(0);
 		}
+#ifdef __uClinux__
+		_exit(0);
+#else
 		exit(0); /* "good" exit - this terminates the child forked just for message delivery */
+#endif
 	}
 	/* close the user login file */
 	endutent();

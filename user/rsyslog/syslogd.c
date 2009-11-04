@@ -3260,7 +3260,11 @@ int realMain(int argc, char **argv)
 			sigAct.sa_handler = doexit;
 			sigaction(SIGTERM, &sigAct, NULL);
 
+#ifdef __uClinux__
+			if (vfork()) {
+#else
 			if (fork()) {
+#endif
 				/*
 				 * Parent process
 				 */

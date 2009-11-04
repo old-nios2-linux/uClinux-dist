@@ -230,7 +230,11 @@ int execProg(uchar *program, int bWait, uchar *arg)
 	struct sigaction sigAct;
 
 	dbgprintf("exec program '%s' with param '%s'\n", program, arg);
+#ifdef __uClinux__
+        pid = vfork();
+#else
         pid = fork();
+#endif
         if (pid < 0) {
                 return 0;
         }
