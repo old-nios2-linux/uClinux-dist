@@ -115,7 +115,11 @@ void player_sigChldHandler(int pid, int status)
 int playerInit(void)
 {
 	blockSignals();
+#ifdef __uClinux__
+	player_pid = vfork();
+#else
 	player_pid = fork();
+#endif
 	if (player_pid==0)
 	{
 		clock_t start = clock();
@@ -163,7 +167,11 @@ int playerInit(void)
 				my_usleep(10000);
 		}
 
+#ifdef __uClinux__
+		_exit(EXIT_SUCCESS);
+#else
 		exit(EXIT_SUCCESS);
+#endif
 	} 
 	else if (player_pid < 0) 
 	{

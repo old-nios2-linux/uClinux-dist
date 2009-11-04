@@ -172,7 +172,11 @@ int updateInit(int fd, List * pathList)
 	/* need to block CHLD signal, cause it can exit before we
 	   even get a chance to assign directory_updatePID */
 	blockSignals();
+#ifdef __uClinux__
+	directory_updatePid = vfork();
+#else
 	directory_updatePid = fork();
+#endif
 	if (directory_updatePid == 0) {
 		/* child */
 		int dbUpdated = 0;
@@ -215,7 +219,11 @@ int updateInit(int fd, List * pathList)
 		if (writeDirectoryDB() < 0) {
 			exit(DIRECTORY_UPDATE_EXIT_ERROR);
 		}
+#ifdef __uClinux__
+		_exit(DIRECTORY_UPDATE_EXIT_UPDATE);
+#else
 		exit(DIRECTORY_UPDATE_EXIT_UPDATE);
+#endif
 	} else if (directory_updatePid < 0) {
 		unblockSignals();
 		ERROR("updateInit: Problems forking()'ing\n");

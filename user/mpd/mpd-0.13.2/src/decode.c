@@ -406,7 +406,11 @@ static int decoderInit(PlayerControl * pc, OutputBuffer * cb,
 {
 	blockSignals();
 	getPlayerData()->playerControl.decode_pid = 0;
+#ifdef __uClinux__
+	decode_pid = vfork();
+#else
 	decode_pid = fork();
+#endif
 
 	if (decode_pid == 0) {
 		/* CHILD */
@@ -425,7 +429,11 @@ static int decoderInit(PlayerControl * pc, OutputBuffer * cb,
 				my_usleep(10000);
 		}
 
+#ifdef __uClinux__
+		_exit(EXIT_SUCCESS);
+#else
 		exit(EXIT_SUCCESS);
+#endif
 		/* END OF CHILD */
 	} else if (decode_pid < 0) {
 		unblockSignals();

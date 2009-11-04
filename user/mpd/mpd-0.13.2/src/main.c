@@ -319,13 +319,16 @@ static void daemonize(Options * options)
 		int pid;
 
 		fflush(NULL);
+#ifdef __uClinux__
+		daemon(1, 1);
+#else
 		pid = fork();
 		if (pid > 0)
 			_exit(EXIT_SUCCESS);
 		else if (pid < 0) {
 			FATAL("problems fork'ing for daemon!\n");
 		}
-
+#endif
 		if (chdir("/") < 0) {
 			FATAL("problems changing to root directory\n");
 		}
@@ -335,13 +338,16 @@ static void daemonize(Options * options)
 		}
 
 		fflush(NULL);
+#ifdef __uClinux__
+		daemon(0, 0);
+#else
 		pid = fork();
 		if (pid > 0)
 			_exit(EXIT_SUCCESS);
 		else if (pid < 0) {
 			FATAL("problems fork'ing for daemon!\n");
 		}
-
+#endif
 		DEBUG("daemonized!\n");
 	}
 
