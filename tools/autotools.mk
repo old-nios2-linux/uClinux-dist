@@ -9,7 +9,8 @@
 
 BUILDDIR      = build-$(VER)
 BUILDDIR_HOST = build-host-$(VER)
-CONFIGURE     = $(VER)/configure
+# relative to $(VER)/
+CONFIGURE     = configure
 
 all: $(BUILDDIR)/Makefile $(AUTOTOOLS_ALL_DEPS)
 	$(MAKE) pre-build
@@ -51,19 +52,20 @@ if_changed = \
 	settings="$(3)/.dist.settings" ; \
 	echo $(2) $(CFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(LDFLAGS) > .new.settings ; \
 	if ! cmp -s .new.settings $$settings ; then \
-		$(echo-cmd) "%s\n" "$(cmd_$(1))" ; \
+		$(echo-cmd) "%s\n" '$(cmd_$(1))' ; \
 		( $(cmd_$(1)) ) || exit $$? ; \
 	fi ; \
 	mv .new.settings $$settings
 
 cmd_configure = \
 	set -e ; \
-	chmod a+rx $(CONFIGURE) ; \
-	find $(VER) -type f -print0 | xargs -0 touch -r $(CONFIGURE) ; \
+	conf="$$PWD/$(VER)/$(CONFIGURE)" ; \
+	chmod a+rx "$$conf" ; \
+	find $(VER) -type f -print0 | xargs -0 touch -r "$$conf" ; \
 	rm -rf $(3) ; \
-	mkdir $(3) ; \
+	mkdir -p $(3) ; \
 	cd $(3) ; \
-	../$(CONFIGURE) $(2)
+	"$$conf" $(2)
 $(BUILDDIR)/Makefile: $(BUILDDIR_HOST)/Makefile autotools-cache FORCE
 	@$(call if_changed,configure,$(CONFIGURE_OPTS) $(CONF_OPTS),$(BUILDDIR))
 
