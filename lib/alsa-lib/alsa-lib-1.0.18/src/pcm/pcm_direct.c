@@ -425,12 +425,20 @@ int snd_pcm_direct_server_create(snd_pcm_direct_t *dmix)
 		return ret;
 	}
 	
+#ifdef __uClinux__
+	ret = vfork();
+#else
 	ret = fork();
+#endif
 	if (ret < 0) {
 		close(dmix->server_fd);
 		return ret;
 	} else if (ret == 0) {
+#ifdef __uClinux__
+		ret = vfork();
+#else
 		ret = fork();
+#endif
 		if (ret == 0)
 			server_job(dmix);
 		_exit(EXIT_SUCCESS);
