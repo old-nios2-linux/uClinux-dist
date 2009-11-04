@@ -98,7 +98,11 @@ int main(int argc, char *argv[])
 			exit(1);
 		}
 #else
+# ifdef __uClinux__
+		switch(pid=vfork())
+# else
 		switch(pid=fork())
+# endif
 		{
 		case -1:
 			perror("fork");
