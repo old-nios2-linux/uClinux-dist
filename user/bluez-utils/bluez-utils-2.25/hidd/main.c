@@ -751,21 +751,9 @@ int main(int argc, char *argv[])
 		exit(0);
 	}
 
-	if (daemon) {
-#ifdef __uClinux__
-		if (vfork())
-#else
-		if (fork())
-#endif
-			exit(0);
-
-		fd = open("/dev/null", O_RDWR);
-		dup2(fd, 0); dup2(fd, 1); dup2(fd, 2);
-		close(fd);
-
-		setsid();
-		chdir("/");
-	} else
+	if (daemon)
+		daemon(0, 0);
+	else
 		log_option |= LOG_PERROR;
 
 	openlog("hidd", log_option, LOG_DAEMON);
