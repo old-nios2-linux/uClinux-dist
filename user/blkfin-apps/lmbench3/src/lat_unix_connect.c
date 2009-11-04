@@ -41,7 +41,7 @@ int main(int ac, char **av)
 	if (ac == 2) {
 		if (!strcmp(av[1], "-s")) {
 #ifdef CONFIG_NOMMU
-			if (fork() == 0) {
+			if (vfork() == 0) {
 				server_main();
 				_exit(0);
 			}
