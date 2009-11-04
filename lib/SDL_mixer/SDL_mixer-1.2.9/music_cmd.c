@@ -143,7 +143,11 @@ static char **parse_args(char *command, char *last_arg)
 /* Start playback of a given music stream */
 void MusicCMD_Start(MusicCMD *music)
 {
+#ifdef __uClinux__
+	music->pid = vfork();
+#else
 	music->pid = fork();
+#endif
 	switch(music->pid) {
 	    /* Failed fork() system call */
 	    case -1:
