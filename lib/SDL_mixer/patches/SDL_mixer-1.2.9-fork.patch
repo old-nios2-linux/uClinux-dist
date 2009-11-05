@@ -1,16 +1,88 @@
-Index: SDL_mixer-1.2.9/music_cmd.c
-===================================================================
---- SDL_mixer-1.2.9/music_cmd.c	(revision 9085)
-+++ SDL_mixer-1.2.9/music_cmd.c	(working copy)
-@@ -143,7 +143,11 @@
+--- SDL_mixer-1.2.9/music_cmd.c
++++ SDL_mixer-1.2.9/music_cmd.c
+@@ -23,7 +23,7 @@
+ 
+ /* This file supports an external command for playing music */
+ 
+-#if defined(unix) || defined(__MACOSX__) /* This is a UNIX-specific hack */
++#ifdef CMD_MUSIC
+ 
+ #include <sys/types.h>
+ #include <sys/wait.h>
+@@ -143,6 +143,10 @@ static char **parse_args(char *command, 
  /* Start playback of a given music stream */
  void MusicCMD_Start(MusicCMD *music)
  {
-+#ifdef __uClinux__
-+	music->pid = vfork();
-+#else
++#ifdef HAVE_FORK
  	music->pid = fork();
++#else
++	music->pid = vfork();
 +#endif
  	switch(music->pid) {
  	    /* Failed fork() system call */
- 	    case -1:
+@@ -239,4 +239,4 @@ int MusicCMD_Active(MusicCMD *music)
+ 	return(active);
+ }
+ 
+-#endif /* unix */
++#endif /* CMD_MUSIC */
+--- SDL_mixer-1.2.9/configure.in
++++ SDL_mixer-1.2.9/configure.in
+@@ -177,10 +177,22 @@ dnl Check command-line options
+ 
+ AC_ARG_ENABLE([music-cmd],
+ AC_HELP_STRING([--enable-music-cmd], [support an external music player [[default=yes]]]),
+-              [], [enable_music_cmd=yes])
+-if test x$enable_music_cmd = xyes; then
+-    SOURCES="$SOURCES $srcdir/music_cmd.c"
+-    EXTRA_CFLAGS="$EXTRA_CFLAGS -DCMD_MUSIC"
++              [], [enable_music_cmd=detect])
++if test "x$enable_music_cmd" != xno; then
++    AC_CHECK_FUNCS([fork vfork])
++    if test "x$ac_cv_func_fork" = "xyes"; then
++        EXTRA_CFLAGS="$EXTRA_CFLAGS -DHAVE_FORK"
++    elif test "x$ac_cv_func_vfork" = "xyes"; then
++        EXTRA_CFLAGS="$EXTRA_CFLAGS -DHAVE_VFORK"
++    elif test "x$enable_music_cmd" = "xyes"; then
++        AC_MSG_ERROR([external music player not available on your platform])
++    else
++        enable_music_cmd=no
++    fi
++    if test "x$enable_music_cmd" != xno; then
++        SOURCES="$SOURCES $srcdir/music_cmd.c"
++        EXTRA_CFLAGS="$EXTRA_CFLAGS -DCMD_MUSIC"
++    fi
+ fi
+ 
+ AC_ARG_ENABLE([music-wave],
+--- SDL_mixer-1.2.9/music.c
++++ SDL_mixer-1.2.9/music.c
+@@ -32,11 +32,6 @@
+ 
+ #include "SDL_mixer.h"
+ 
+-/* The music command hack is UNIX specific */
+-#ifndef unix
+-#undef CMD_MUSIC
+-#endif
+-
+ #ifdef CMD_MUSIC
+ #include "music_cmd.h"
+ #endif
+--- SDL_mixer-1.2.9/music_cmd.h
++++ SDL_mixer-1.2.9/music_cmd.h
+@@ -22,7 +22,7 @@
+ 
+ /* This file supports an external command for playing music */
+ 
+-#if defined(unix) || defined(__MACOSX__) /* This is a UNIX-specific hack */
++#ifdef CMD_MUSIC
+ 
+ #include <sys/types.h>
+ #include <limits.h>
+@@ -60,4 +60,4 @@ extern void MusicCMD_FreeSong(MusicCMD *
+ /* Return non-zero if a stream is currently playing */
+ extern int MusicCMD_Active(MusicCMD *music);
+ 
+-#endif /* unix */
++#endif /* CMD_MUSIC */
