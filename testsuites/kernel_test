@@ -1953,7 +1953,7 @@ fi
 
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbdev
-      ./gadget_audio_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
+      #./gadget_audio_test.exp $BOARD_TYPE $CONFIG >/dev/null  2>&1
       cd $UCLINUX_DIST_TESTSUITES
       ./reset_board.exp  >/dev/null  2>&1
 
