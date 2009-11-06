@@ -397,7 +397,15 @@ static inline int get_module_devices(char *	modname)
 					after_names[i]);
 				/* Create a new instance for this other
 				 * interface */
+#ifdef __uClinux__
+				/*
+				 * uClinux not implemented fork(),
+				 * ignore the additional interfaces for uCinux
+				 */
+				pid = -1;
+#else
 				pid = fork();
+#endif
 				/* If in the child */
 				if(!pid) {
 					/* Get the interface name */
