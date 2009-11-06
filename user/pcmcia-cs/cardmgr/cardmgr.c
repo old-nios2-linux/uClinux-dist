@@ -1301,15 +1301,7 @@ static int cleanup_files = 0;
 
 static void fork_now(void)
 {
-    int ret;
-    if ((ret = fork()) > 0) {
-	cleanup_files = 0;
-	exit(0);
-    }
-    if (ret == -1)
-	syslog(LOG_ERR, "forking: %m");
-    if (setsid() < 0)
-	syslog(LOG_ERR, "detaching from tty: %m");
+    daemon(1, 1);
 }    
 
 static void done(void)

@@ -486,11 +486,7 @@ int main(int argc, char *argv[])
     setuid(getuid());
 #endif
 
-    if ((ret = fork()) > 0) exit(0);
-    if (ret == -1)
-	perror("forking");
-    if (setsid() < 0)
-	perror("detaching from tty");
+    daemon(1, 0);
 
 #if (FL_REVISION >= 80)
     fl_flip_yorigin();
