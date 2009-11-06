@@ -25,7 +25,7 @@ while 1 {
         # The following two conflicting items could have already been unselected by make_cut_fs_config.exp.
         -re "SPI support.*SPI.*\\\[.*]" {
             if { $board_type == "BF518F-EZBRD" } {
-                send "N\r"
+                send -s "N\r"
             } else {
                 send -s "\r"
             }
@@ -33,7 +33,7 @@ while 1 {
 
         -re "Distributed Switch Architecture support.*NET_DSA.*\\\[.*]" {
             if { $board_type == "BF518F-EZBRD" } {
-                send "N\r"
+                send -s "N\r"
             } else {
                 send -s "\r"
             }
@@ -41,6 +41,14 @@ while 1 {
 
         -re "Detect flash chips by Common Flash Interface \\\(CFI\\\) probe \\\(MTD_CFI\\\).*\\\[.*]" {
             send -s "Y\r"
+        }
+
+        -re "Detect non-CFI AMD/JEDEC-compatible flash chips \\\(MTD_JEDECPROBE\\\).*\\\[.*]" {
+            if { $board_type == "BF518F-EZBRD" } {
+                send -s "Y\r"
+            } else {
+                send -s "\r"
+            }
         }
 
         -re "Support for AMD/Fujitsu/Spansion.* flash chips \\\(MTD_CFI_AMDSTD\\\).*\\\[.*]" {
