@@ -1430,7 +1430,6 @@ config USER_IPREDIR_IPREDIR
 
 config USER_IPROUTE2
 	bool "iproute2"
-	depends on FMT_USE_FDPIC_ELF
 
 config USER_IPROUTE2_TC_TC
 	bool "tc"
