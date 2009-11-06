@@ -514,7 +514,7 @@ void server_loop(int fd)
 				pid_t pid;
 				if (children >= 5) {
 					close(clnt);
-				} else if ((pid = fork()) != 0) {
+				} else if ((pid = vfork()) != 0) {
 					if (pid>0)
 						children++;
 					close(clnt);
@@ -663,10 +663,7 @@ int main(int argc, char *argv[])
 			perror("ifstat: listen");
 			exit(-1);
 		}
-		if (fork())
-			exit(0);
-		chdir("/");
-		close(0); close(1); close(2); setsid();
+		daemon(0, 0);
 		signal(SIGPIPE, SIG_IGN);
 		signal(SIGCHLD, sigchild);
 		server_loop(fd);
