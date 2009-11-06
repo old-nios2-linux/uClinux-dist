@@ -835,6 +835,7 @@ proc run_LTP_test { filename command torun mode} {
    global LTP_TESTCASES_DIR
    global ipaddr
    global kernel_prompt
+   global board_type
 
    step "Start to test \[$filename\]"
 
