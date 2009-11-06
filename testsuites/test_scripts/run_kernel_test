@@ -84,7 +84,7 @@ elif [ $compare_result_status -eq 1 ] ; then
 
   elif [ $test_status -eq 1 ] || [ $test_status -eq 2 ] ; then    
     echo -e "Test $BOARD_CONFIG on $HOST_IP fails!\ncompare_result_exit=$compare_result_status." >> $LOG_DIR/$THISRUN/test_summary/test_results
-    send_mail "Test $BOARD_CONFIG on $HOST_IP fails!\n" $LOG_DIR/$THISRUN/test_summary/test_results
+    send_mail "Test $BOARD_CONFIG on $HOST_IP fails!" $LOG_DIR/$THISRUN/test_summary/test_results
 
   elif [ $test_status -eq 3 ] ; then    
     echo -e "Test $BOARD_CONFIG on $HOST_IP fails!\ncompare_result_exit=$compare_result_status." >> $LOG_DIR/$THISRUN/test_summary/test_results
@@ -92,11 +92,11 @@ elif [ $compare_result_status -eq 1 ] ; then
     send_mail "Build policy kernel on $HOST_IP fails! " $LOG_DIR/$THISRUN/test_summary/test_results  /tmp/build_policy_kernel_log 
   else
     echo -e "Test $BOARD_CONFIG on $HOST_IP fails oddly!\ncompare_result_exit=$compare_result_status." >> $LOG_DIR/$THISRUN/test_summary/test_results
-    send_mail "Test $BOARD_CONFIG on $HOST_IP fails for unknown reason!\n." $LOG_DIR/$THISRUN/test_summary/test_results
+    send_mail "Test $BOARD_CONFIG on $HOST_IP fails for unknown reason!." $LOG_DIR/$THISRUN/test_summary/test_results
   fi  
 else
     echo -e "Compare test results fails in $TIMESTAMP\ncompare_result_exit=$compare_result_status." >> $LOG_DIR/$THISRUN/test_summary/test_results
-    send_mail "Compare test results of $BOARD_CONFIG fails in $TIMESTAMP on $HOST_IP !\n" $LOG_DIR/$THISRUN/test_summary/test_results
+    send_mail "Compare test results of $BOARD_CONFIG fails in $TIMESTAMP on $HOST_IP !" $LOG_DIR/$THISRUN/test_summary/test_results
 fi
 
 cd $UCLINUX_DIST_PATH 
