@@ -1,7 +1,7 @@
-Index: libeXosip2-3.3.0/tools/sip_reg.c
-===================================================================
---- libeXosip2-3.3.0/tools/sip_reg.c	(revision 9116)
-+++ libeXosip2-3.3.0/tools/sip_reg.c	(working copy)
+https://savannah.nongnu.org/patch/index.php?6970
+
+--- libeXosip2-3.3.0/tools/sip_reg.c
++++ libeXosip2-3.3.0/tools/sip_reg.c
 @@ -270,10 +270,8 @@
  #ifndef _WIN32_WCE
    if (!nofork)
