@@ -8,7 +8,12 @@ MANDIR=/share/man
 # Path to db_185.h include
 DBM_INCLUDE:=/usr/include
 
+SHARED_LIBS = y
+
 DEFINES= -DRESOLVE_HOSTNAMES -DLIBDIR=\"$(LIBDIR)\"
+ifneq ($(SHARED_LIBS),y)
+DEFINES+= -DNO_SHARED_LIBS
+endif
 
 #options if you have a bind>=4.9.4 libresolv (or, maybe, glibc)
 LDLIBS=-lresolv
