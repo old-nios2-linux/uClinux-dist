@@ -1322,7 +1322,11 @@ static pid_t mypid = (pid_t)-1;
 
 pid_t sys_fork(void)
 {
+#ifdef __uClinux__
+	pid_t forkret = vfork();
+#else
 	pid_t forkret = fork();
+#endif
 
 	if (forkret == (pid_t)0) /* Child - reset mypid so sys_getpid does a system call. */
 		mypid = (pid_t) -1;

@@ -30,7 +30,11 @@ void start_smbd(void)
 
 	if (geteuid() != 0) return;
 
+#ifdef __uClinux__
+	if (vfork()) {
+#else
 	if (fork()) {
+#endif
 		return;
 	}
 
@@ -50,7 +54,11 @@ void start_nmbd(void)
 
 	if (geteuid() != 0) return;
 
+#ifdef __uClinux__
+	if (vfork()) {
+#else
 	if (fork()) {
+#endif
 		return;
 	}
 
@@ -70,7 +78,11 @@ void start_winbindd(void)
 
 	if (geteuid() != 0) return;
 
+#ifdef __uClinux__
+	if (vfork()) {
+#else
 	if (fork()) {
+#endif
 		return;
 	}
 

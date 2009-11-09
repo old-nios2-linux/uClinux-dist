@@ -102,13 +102,21 @@ int sock_exec(const char *prog)
 		DEBUG(0,("socketpair_tcp failed (%s)\n", strerror(errno)));
 		return -1;
 	}
+#ifdef __uClinux__
+	if (vfork() == 0) {
+#else
 	if (fork() == 0) {
+#endif
 		close(fd[0]);
 		close(0);
 		close(1);
 		dup(fd[1]);
 		dup(fd[1]);
+#ifdef __uClinux__
+		_exit(system(prog));
+#else
 		exit(system(prog));
+#endif
 	}
 	close(fd[1]);
 	return fd[0];
