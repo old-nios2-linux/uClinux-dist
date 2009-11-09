@@ -12,6 +12,7 @@ OBJS2 = oggenc.o
 
 CFLAGS += -Wall
 CPPFLAGS += -I$(DIRS)
+LDFLAGS += -lpthread
 
 all: $(DIRS) $(EXEC) $(EXEC2)
 

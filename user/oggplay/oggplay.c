@@ -55,6 +55,10 @@
 #include <netdb.h>
 #include <math.h>
 
+#ifdef __uClinux__
+#include <pthread.h>
+#endif
+
 #ifdef CONFIG_USER_SETKEY_SETKEY
 #include <key/key.h>
 #endif
@@ -668,11 +672,16 @@ retry:	if (ov_open_callbacks(trk_fd, &vf, NULL, 0, ovcb) < 0) {
 		lcdtitle(user_comments);
 
 	if (npip) {
+#ifndef __uClinux__
 	  pid_t np_pid;
 	  np_pid = fork();
 	  if( np_pid == 0) {
 	    exit(now_playing(user_comments));
 	  }
+#else
+	  pthread_t tid;
+	  pthread_create(&tid, NULL, now_playing, (void *)user_comments);
+#endif
 	  /* Let init automatically clean up our child processes */
 	  signal(SIGCHLD, SIG_IGN);
 	}
@@ -893,9 +902,15 @@ nextfile:
 			startargnr;
 	}
 
+#ifndef __uClinux__
 	pid = fork();
 	if (pid == 0) {
 		exit(play_one(argv[argnr]));
+#else
+	pid = vfork();
+	if (pid == 0) {
+		_exit(play_one(argv[argnr]));
+#endif
 	} else if (pid > 0) {
 		int status;
 
