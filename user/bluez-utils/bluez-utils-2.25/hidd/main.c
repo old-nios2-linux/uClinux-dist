@@ -633,7 +633,7 @@ int main(int argc, char *argv[])
 	char addr[18];
 	int log_option = LOG_NDELAY | LOG_PID;
 	int opt, fd, ctl, csk, isk;
-	int mode = SHOW, daemon = 1, nosdp = 0, nocheck = 0;
+	int mode = SHOW, nodaemon = 0, nosdp = 0, nocheck = 0;
 	int fakehid = 1, encrypt = 0, timeout = 30, lm = 0;
 
 	bacpy(&bdaddr, BDADDR_ANY);
@@ -647,7 +647,7 @@ int main(int argc, char *argv[])
 				str2ba(optarg, &bdaddr);
 			break;
 		case 'n':
-			daemon = 0;
+			nodaemon = 1;
 			break;
 		case 't':
 			timeout = atoi(optarg);
@@ -751,7 +751,7 @@ int main(int argc, char *argv[])
 		exit(0);
 	}
 
-	if (daemon)
+	if (!nodaemon)
 		daemon(0, 0);
 	else
 		log_option |= LOG_PERROR;

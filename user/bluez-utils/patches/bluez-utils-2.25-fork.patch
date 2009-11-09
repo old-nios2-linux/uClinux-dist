@@ -2,6 +2,24 @@ Index: bluez-utils-2.25/hidd/main.c
 ===================================================================
 --- bluez-utils-2.25/hidd/main.c	(revision 9093)
 +++ bluez-utils-2.25/hidd/main.c	(working copy)
+@@ -633,7 +633,7 @@
+ 	char addr[18];
+ 	int log_option = LOG_NDELAY | LOG_PID;
+ 	int opt, fd, ctl, csk, isk;
+-	int mode = SHOW, daemon = 1, nosdp = 0, nocheck = 0;
++	int mode = SHOW, nodaemon = 0, nosdp = 0, nocheck = 0;
+ 	int fakehid = 1, encrypt = 0, timeout = 30, lm = 0;
+ 
+ 	bacpy(&bdaddr, BDADDR_ANY);
+@@ -647,7 +647,7 @@
+ 				str2ba(optarg, &bdaddr);
+ 			break;
+ 		case 'n':
+-			daemon = 0;
++			nodaemon = 1;
+ 			break;
+ 		case 't':
+ 			timeout = atoi(optarg);
 @@ -751,17 +751,9 @@
  		exit(0);
  	}
@@ -17,7 +35,7 @@ Index: bluez-utils-2.25/hidd/main.c
 -		setsid();
 -		chdir("/");
 -	} else
-+	if (daemon)
++	if (!nodaemon)
 +		daemon(0, 0);
 +	else
  		log_option |= LOG_PERROR;
