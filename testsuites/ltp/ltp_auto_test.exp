@@ -1444,7 +1444,7 @@ set result_matrix {
        { kill02     	     {kill02}                     	 notrun		UCLINUX }
        { kill03     	     {kill03}                     	 notrun		UCLINUX }
        { kill04     	     {kill04}                     	 notrun		UCLINUX }
-       { kill05     	     {kill05}                     	 notrun		UCLINUX }
+       { kill05     	     {chmod +x /bin/kill05; kill05}      notrun		UCLINUX }
        { kill06     	     {kill06}                     	 notrun		UCLINUX }
        { kill07     	     {kill07}                     	 notrun		UCLINUX }
        { kill08     	     {kill08}                     	 notrun		UCLINUX }
