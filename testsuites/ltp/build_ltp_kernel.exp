@@ -54,6 +54,14 @@ while 1 {
             send "y\r"
         }
 
+        -re "Enable timerfd\\\(\\\) system call.*TIMERFD.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -re "Enable eventfd\\\(\\\) system call.*EVENTFD.*\\\[.*]" {
+            send "y\r"
+        }
+
         -re "Write through \\\(BFIN_EXTMEM_WRITETHROUGH\\\).*choice\\\[1-2\\\]:" {
             if { $high_res_timer_preempt == 0 } {
                 send "$wt_wb\r"

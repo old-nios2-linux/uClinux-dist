@@ -1001,6 +1001,14 @@ proc run_LTP_test { filename command torun mode} {
             }
          }
 
+         # Someone wrote timerfd01 with a non-standard passing response.
+         "success\r\n*success\r\n" {
+            if {$result_flag == $LTP_NOT_RUN} {
+               report "---pass"
+               set result_flag $LTP_PASS
+            }
+         }
+
          $LTP_WARN {
             if {$result_flag != $LTP_BROKEN && $result_flag != $LTP_FAIL} {
                report "---warn"
@@ -1280,6 +1288,7 @@ set result_matrix {
        { dup203     	     {dup203}                     	 notrun		UCLINUX }
        { dup204     	     {dup204}                     	 notrun		UCLINUX }
        { dup205     	     {dup205}                     	 notrun		UCLINUX }
+       { eventfd01     	     {eventfd01}                     	 notrun		UCLINUX }
        { execl01     	     {execl01}                     	 notrun		UCLINUX }
        { execle01     	     {execle01}                     	 notrun		UCLINUX }
        { execlp01     	     {execlp01}                     	 notrun		UCLINUX }
@@ -1812,7 +1821,6 @@ set result_matrix {
        { socketpair01        {socketpair01}                    	 notrun		UCLINUX }
        { sockioctl01         {sockioctl01}                     	 notrun		UCLINUX }
        { splice01     	     {splice01}                     	 notrun		NA }
-       { tee01     	     {tee01}                     	 notrun		NA }
        { stat01     	     {stat01}                     	 notrun		UCLINUX }
        { stat02     	     {stat02}                     	 notrun		UCLINUX }
        { stat03     	     {stat03}                     	 notrun		UCLINUX }
@@ -1863,6 +1871,8 @@ set result_matrix {
        { syslog10     	     {syslog10}                     	 notrun		NA }
        { syslog11     	     {syslog11}                     	 notrun		NA }
        { syslog12     	     {syslog12}                     	 notrun		NA }
+       { tee01     	     {tee01}                     	 notrun		NA }
+       { timerfd01     	     {timerfd01}                     	 notrun		UCLINUX }
        { times01     	     {times01}                     	 notrun		UCLINUX }
        { times02     	     {times02}                     	 notrun		NA }
        { times03     	     {times03}                     	 notrun		UCLINUX }
