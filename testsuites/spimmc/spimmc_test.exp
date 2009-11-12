@@ -1,9 +1,15 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-log_file [log_file_name "$argv0"]
+
+set spi_mode "poll"
+if { $argc >= 2} {
+    set spi_mode [lindex $argv 1]
+}
+
+log_file [log_file_name $argv0.$spi_mode ]
 send_user "Starting $argv0\n"
-set TITLE [title "$argv0"]
+set TITLE [title "$argv0 ($spi_mode)"]
 
 #if { $argc < 2} {
 #    puts "Please input size of the first partition, in units of Megabytes. Eg: 256M\r"

@@ -5,9 +5,20 @@
 #
 
 source ../kernel_config.exp
-source  ../board_info.exp
-log_file [log_file_name "$argv0"]
+
+set spi_mode "poll"
+if { $argc >= 2} {
+    set spi_mode [lindex $argv 1]
+}
+
+log_file [log_file_name $argv0.$spi_mode ]
 send_user "Starting $argv0\n"
+
+if { $spi_mode == "interrupt" } {
+    if [ catch {exec sed -i "/pio_interrupt/ s/0/1/" $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c} ] {
+        send_user "\nfail to modify board file\n"
+    }
+}
 
 set env(EXT2_BLOCKS) "10240"
 set HAVE_KERNEL_ONLY_IMAGE 1
