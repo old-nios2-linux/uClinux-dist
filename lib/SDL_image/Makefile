@@ -1,4 +1,4 @@
-VER = SDL_image-1.2.8
+VER = SDL_image-1.2.9
 
 CONF_OPTS = \
 	$(call USE_ENABLE,LIB_LIBJPEG,jpg) \
