@@ -37,6 +37,7 @@ while 1 {
 
 if [ catch { exec make clean } ] {
     send_user "\nFAIL: Clean src directory\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "\nPASS: Clean src directory\n"
@@ -44,6 +45,7 @@ if [ catch { exec make clean } ] {
 
 if [ catch { exec make } ] {
     send_user "\nFAIL: Build test program\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "\nPASS: Build test program\n"
@@ -51,6 +53,7 @@ if [ catch { exec make } ] {
 
 if [ catch { exec rcp libhelloworld.so root@$targetip:/lib/. } ] {
     send_user "\nFAIL: Copy libhelloworld.so to target board\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "\nPASS: Copy libhelloworld.so to target board\n"
@@ -58,6 +61,7 @@ if [ catch { exec rcp libhelloworld.so root@$targetip:/lib/. } ] {
 
 if [ catch { exec rcp libhelloworldcpp.so root@$targetip:/lib/. } ] {
     send_user "\nFAIL: Copy libhelloworldcpp.so to target board\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "\nPASS: Copy libhelloworldcpp.so to target board\n"
@@ -65,6 +69,7 @@ if [ catch { exec rcp libhelloworldcpp.so root@$targetip:/lib/. } ] {
 
 if [ catch { exec rcp test_helloworld root@$targetip:/. } ] {
     send_user "\nFAIL: Copy test_helloworld to target board\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "\nPASS: Copy test_helloworld to target board\n\n"

@@ -130,6 +130,7 @@ if { $file_num == 0 } {
 incr case_num
 if [ catch {exec make clean -C snd2fftw/src/} ] {
     send_user "FAIL: Make clean of snd2fftw/src\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Make clean of snd2fftw/src\n"
@@ -137,6 +138,7 @@ if [ catch {exec make clean -C snd2fftw/src/} ] {
 
 if [ catch {exec make -C snd2fftw/src/} ] {
     send_user "FAIL: Make snd2fftw/src\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Make snd2fftw/src\n"

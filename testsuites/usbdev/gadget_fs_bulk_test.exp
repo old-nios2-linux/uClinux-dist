@@ -39,6 +39,7 @@ expect -re $kernel_prompt
 
 if [ catch {exec make clean -f Makefile.testusb -C src} ] {
     send_user "FAIL: Make clean of testusb\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Make clean of testusb\n"
@@ -46,6 +47,7 @@ if [ catch {exec make clean -f Makefile.testusb -C src} ] {
 
 if [ catch {exec make -f Makefile.testusb -C src} ] {
     send_user "FAIL: Build testusb\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Build testusb\n"
@@ -53,6 +55,7 @@ if [ catch {exec make -f Makefile.testusb -C src} ] {
 
 if [ catch {exec make clean -f Makefile.usb -C src} ] {
     send_user "FAIL: Make clean of usb\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Make clean of usb done\n"
@@ -60,6 +63,7 @@ if [ catch {exec make clean -f Makefile.usb -C src} ] {
 
 if [ catch {exec make -f Makefile.usb -C src} ] {
     send_user "FAIL: Build testusb\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Build usb\n"
@@ -67,6 +71,7 @@ if [ catch {exec make -f Makefile.usb -C src} ] {
 
 if [ catch {exec rcp src/usb root@$targetip:/ } ] {
     send_user "FAIL: Copy target to board\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Copy target to board\n"

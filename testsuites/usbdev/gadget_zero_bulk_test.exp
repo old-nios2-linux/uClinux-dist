@@ -36,6 +36,7 @@ set case_num 0
 
 if [ catch {exec make clean -f Makefile.testusb -C src} ] {
     send_user "FAIL: Make clean of testusb\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Make clean of testusb\n"
@@ -43,6 +44,7 @@ if [ catch {exec make clean -f Makefile.testusb -C src} ] {
 
 if [ catch {exec make -f Makefile.testusb -C src} ] {
     send_user "FAIL: Build testusb\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Build testusb\n"

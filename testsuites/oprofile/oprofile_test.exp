@@ -172,6 +172,7 @@ if {$format == "FLAT"} {
     send_user "rcp ../../user/whetstone/whetstone.gdb root@$targetip:/bin/\n"
     if [ catch {exec rcp ../../user/whetstone/whetstone.gdb root@$targetip:/bin/} ] {
         send_user "FAIL: rcp whetstone.gdb to host PC\n"
+        send_user "$errorInfo\n"
         case_fail $case_num
     } else {
         send_user "PASS: rcp whetstone.gdb to host PC\n"

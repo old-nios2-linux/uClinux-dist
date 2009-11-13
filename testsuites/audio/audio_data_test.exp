@@ -178,6 +178,7 @@ expect ">"
 
 if [ catch {exec rm -fr $output_dir} ] {
     send_user "FAIL: Remove the old DIRECTORY\n"
+    send_user "$errorInfo\n"
 } else {
     send_user "PASS: Remove the old DIRECTORY\n"
 }
@@ -185,6 +186,7 @@ if [ catch {exec rm -fr $output_dir} ] {
 incr case_num
 if [ catch {exec mkdir -p $output_dir} ] {
     send_user "FAIL: Create the DIRECTORY\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: Create the DIRECTORY\n"

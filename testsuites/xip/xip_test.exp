@@ -34,6 +34,7 @@ incr case_num
 send_user "$uclinux_path/user/genromfs/genromfs -f ../../images/img.romfs -d $uclinux_path/user/blkfin-test/xip_test\n"
 if [ catch {exec $uclinux_path/user/genromfs/genromfs -f ../../images/img.romfs -d $uclinux_path/user/blkfin-test/xip_test} ] {
     send_user "FAIL: generate romfs\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: generate romfs\n"
@@ -44,6 +45,7 @@ incr case_num
 send_user "cp $uclinux_path/images/img.romfs /tftpboot\n"
 if [ catch {exec cp $uclinux_path/images/img.romfs /tftpboot} ] {
     send_user "FAIL: copy img.romfs to /tftpboot\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: copy img.romfs to /tftpboot\n"

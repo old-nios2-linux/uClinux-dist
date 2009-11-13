@@ -50,12 +50,14 @@ expect -re $kernel_prompt
 send_user "cp $uclinux_path/staging/usr/qt/examples/widgets/calendarwidget/calendarwidget ./qt_sample\n"
 if [ catch {exec cp $uclinux_path/staging/usr/qt/examples/widgets/calendarwidget/calendarwidget ./qt_sample} ] {
     send_user "FAIL: no qt sample\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 }
 
 send_user "rcp ./qt_sample root@$targetip:/bin\n"
 if [ catch {exec rcp ./qt_sample root@$targetip:/bin} ] {
     send_user "FAIL: rcp qt sample to target board\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: rcp qt sample to target board\n"
@@ -140,6 +142,7 @@ while 1 {
 send_user "rcp -r $user/download/media root@$targetip:/\n"
 if [ catch {exec rcp -r $user/download/media root@$targetip:/} ] {
     send_user "FAIL: copy sample pictures to target board\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: copy sample pictures to target board\n"

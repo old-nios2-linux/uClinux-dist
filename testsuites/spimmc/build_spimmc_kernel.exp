@@ -17,6 +17,7 @@ send_user "Starting $argv0\n"
 if { $spi_mode == "interrupt" } {
     if [ catch {exec sed -i "/pio_interrupt/ s/0/1/" $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c} ] {
         send_user "\nfail to modify board file\n"
+        send_user "$errorInfo\n"
     }
 }
 

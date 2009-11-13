@@ -101,6 +101,7 @@ set timeout 30
 incr case_num
 if [ catch {exec rcp video.avi root@$targetip:/} ] {
     send_user "\nfail to copy video.avi\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     case_pass $case_num

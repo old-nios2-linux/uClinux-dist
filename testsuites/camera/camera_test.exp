@@ -141,6 +141,7 @@ while 1 {
 
 if [ catch {exec rcp root@$targetip:/var/camera.avi ./} ] {
     send_user "FAIL: rcp camera.avi host PC\n"
+    send_user "$errorInfo\n"
     case_fail $case_num
 } else {
     send_user "PASS: rcp camera.avi host PC\n"
