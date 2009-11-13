@@ -722,7 +722,7 @@ while 1 {
 sleep 5
 
 set timeout 20
-send -s "setenv mmcargs setenv bootargs root=/dev/$mmc_dev1 rw\r"
+send -s "setenv mmcargs setenv bootargs root=/dev/$mmc_dev1 rw console=ttyBF$def_uart_port,$baud_rate\r"
 expect ">"
 send -s "setenv mmcboot \'tftpboot 0x1000000 $compressed_kernel_only_image; run mmcargs; run addip; bootm\'\r"
 expect ">"
