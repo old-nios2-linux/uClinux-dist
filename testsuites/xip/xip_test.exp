@@ -20,8 +20,12 @@ source ../spawn_kermit.exp
 
 step "Start testing."
 
+if { $board_type == "BF548-EZKIT" } {
+    set max_image_size  0x5FFFF
+} else {
+    set max_image_size  0x4FFFF
+}
 set romfs_image     img.romfs
-set max_image_size  0x4FFFF
 set start_addr      0x$rootfs_start_addr
 set end_addr 0x[format "%08x" [expr $start_addr + $max_image_size]]
 set case_num 0
