@@ -1720,55 +1720,57 @@ if [ ${AUTO_RUN_STATUS[$(( n + 2 ))]} -eq 1 ] ; then
   cd $UCLINUX_DIST_PATH/user/busybox
   make clean  > /dev/null 2>&1
 
+  echo "Test ltp with option ${ltp_suf[i]}"
   cd $UCLINUX_DIST_TESTSUITES/ltp
-  echo "change dir to $UCLINUX_DIST_TESTSUITES/ltp"
-
   ./build_ltp_kernel.exp $BOARD_TYPE $UCLINUX_DIST_PATH ${ltp_args[i]}> /dev/null 2>&1
-  if [ $? == 1 ] ; then
-    echo "ltp build uclinux-dist failed for ${ltp_suf[i]}"
-    cp $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]}
-    echo "ltp copy build_ltp_kernel_log done"
+
+  if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
+  then
+      echo "ltp build uclinux-dist failed for ${ltp_suf[i]}"
+      tail -50 ./build_ltp_kernel_log
+      cp $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]}
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.ltp_${ltp_suf[i]}
   else	
-    # do if build uclinux-dist succeed
-    echo "build_ltp_kernel.exp done"
-    sleep 30
-    ./ltp_auto_test.exp $BOARD_TYPE /dev/ttyS0 2 > /dev/null 2>&1
-    echo "ltp_auto_test.exp done"
-    ./ltp_compare_results_all.sh config/summary.base $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new >> ltp_test_log
-    #./ltp_decide_standard.pl config/summary.base $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new
-    if [ $? == 1 ] ; then
-      echo "ltp test fail"
-      echo "LTP Test ............[FAIL]" >> ltp_test_log
-    else
-      echo "ltp test pass"
-      echo "LTP Test ............[PASS]" >> ltp_test_log
-    fi
-  
-    cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.ltp_${ltp_suf[i]}
-    echo "ltp copy linux.ltp done"
-    cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.ltp_${ltp_suf[i]}
-    echo "ltp copy config.ltp done"
-    cp $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]}
-    if [ -e $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]} ]; then
-        rm -fr $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log
-    fi
-    echo "ltp copy build_ltp_kernel_log done"
-    mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new $THIS_LOG/ltp-summary_test_log_${ltp_suf[i]}
-    echo "ltp copy summary done"
-    mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/detailed.new $THIS_LOG/ltp-detailed_test_log_${ltp_suf[i]}
-    echo "ltp copy detailed done"
-    mv $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_log $THIS_LOG/build_ltp_log_${ltp_suf[i]}
-    mv $UCLINUX_DIST_TESTSUITES/ltp/ltp_test_log $THIS_LOG/ltp_test_log_${ltp_suf[i]}
-    echo "copy log files done"
-   
-    sleep 30    
-   
-    if [ $RESET_BOARD -eq 1  ] ; then
-     cd $UCLINUX_DIST_TESTSUITES
-     ./reset_board.exp   >/dev/null  2>&1       
-     sleep 10
-    fi
-    # end, do if build uclinux-dist succeed
+      # do if build uclinux-dist succeed
+      echo "build_ltp_kernel.exp done"
+      sleep 30
+      ./ltp_auto_test.exp $BOARD_TYPE /dev/ttyS0 2 > /dev/null 2>&1
+      echo "ltp_auto_test.exp done"
+      ./ltp_compare_results_all.sh config/summary.base $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new >> ltp_test_log
+      #./ltp_decide_standard.pl config/summary.base $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new
+      if [ $? == 1 ] ; then
+          echo "ltp test fail"
+          echo "LTP Test ............[FAIL]" >> ltp_test_log
+      else
+          echo "ltp test pass"
+          echo "LTP Test ............[PASS]" >> ltp_test_log
+      fi
+
+      cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.ltp_${ltp_suf[i]}
+      echo "ltp copy linux.ltp done"
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.ltp_${ltp_suf[i]}
+      echo "ltp copy config.ltp done"
+      cp $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]}
+      if [ -e $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]} ]; then
+          rm -fr $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log
+      fi
+      echo "ltp copy build_ltp_kernel_log done"
+      mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new $THIS_LOG/ltp-summary_test_log_${ltp_suf[i]}
+      echo "ltp copy summary done"
+      mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/detailed.new $THIS_LOG/ltp-detailed_test_log_${ltp_suf[i]}
+      echo "ltp copy detailed done"
+      mv $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_log $THIS_LOG/build_ltp_log_${ltp_suf[i]}
+      mv $UCLINUX_DIST_TESTSUITES/ltp/ltp_test_log $THIS_LOG/ltp_test_log_${ltp_suf[i]}
+      echo "copy log files done"
+
+      sleep 30    
+
+      if [ $RESET_BOARD -eq 1  ] ; then
+          cd $UCLINUX_DIST_TESTSUITES
+          ./reset_board.exp   >/dev/null  2>&1       
+          sleep 10
+      fi
+      # end, do if build uclinux-dist succeed
   fi
 
   cd $UCLINUX_DIST_PATH/user/busybox
