@@ -26,7 +26,7 @@ expect -re $kernel_prompt
 
 if { $board_type == "BF548-EZKIT" } {
     set video_module "bf54x_lq043fb"
-    set audio_module "snd_ad1980"
+    set audio_module "snd_ssm2602"
 } elseif {$board_type == "BF527-EZKIT" } {
     set video_module "bfin_t350mcqb_fb"
     set audio_module "snd_ssm2602"
