@@ -36,7 +36,7 @@ send -s "event_test /dev/input/event0\r"
 while 1 {
    expect {
      -re "Input device name.*Testing" { 
-         puts "\nPlease touch the Joystick board...\n"	 
+         puts "\nPlease touch the board...\n"	 
 	 expect {
 		-re "Event: time .* type .* code .* value " { 
                 case_pass $case_num
@@ -64,7 +64,7 @@ send -s "event_test /dev/input/event1\r"
 while 1 {
    expect {
      -re "Input device name.*Testing" { 
-         puts "\nPlease touch the Joystick board...\n"	 
+         puts "\nPlease touch the board...\n"	 
 	 expect {
 		-re "Event: time .* type .* code .* value " { 
                 case_pass $case_num
@@ -92,7 +92,7 @@ send -s "event_test /dev/input/event2\r"
 while 1 {
    expect {
      -re "Input device name.*Testing" { 
-         puts "\nPlease touch the Joystick board...\n"	 
+         puts "\nPlease touch the board...\n"	 
 	 expect {
 		-re "Event: time .* type .* code .* value " { 
                 case_pass $case_num
