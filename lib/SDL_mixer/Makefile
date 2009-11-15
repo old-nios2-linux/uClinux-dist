@@ -1,4 +1,4 @@
-VER = SDL_mixer-1.2.10
+VER = SDL_mixer-1.2.11
 
 export ac_cv_path_SDL_CONFIG = $(CROSS_COMPILE)sdl-config
 
