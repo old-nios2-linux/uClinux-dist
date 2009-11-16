@@ -144,6 +144,7 @@ proc recover {} {
    global LTP_SCRIPT_DIR
    global LTP_TESTCASES_DIR
    global kernel_prompt
+   global errorInfo
 
    set MAX_ATTEMPTS  2
 
@@ -267,28 +268,26 @@ proc recover {} {
 	expect "/bin>"
 	send "echo \$PATH\r"
 	expect "/bin>"
-#	sleep 5
-         send -s "chmod 777 /tmp\r"
+        send -s "chmod 777 /tmp\r"
 	# Add network configuration.
-	#sleep 2
 	send -s "ifconfig eth0 $ipaddr up\r"
-#	sleep 5
 	expect "/bin>"
         catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc}
-#        sleep 2
+        send_user "$errorInfo\n"
 	catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc}
-#        sleep 2
-	 #sleep 5
-	 catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin}
-	 catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin}
-	 catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin}
-	 catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin}
-	#sleep 5
-         set timeout 4
-         set flag 0
-         while 1 {
+        send_user "$errorInfo\n"
+        catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin}
+        send_user "$errorInfo\n"
+        catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin}
+        send_user "$errorInfo\n"
+        catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin}
+        send_user "$errorInfo\n"
+        catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin}
+        send_user "$errorInfo\n"
+        set timeout 4
+        set flag 0
+        while 1 {
             expect {
-
                "No such file or directory" {
                   set flag 1
                }
@@ -346,6 +345,7 @@ proc force_reboot {} {
     global LTP_SCRIPT_DIR
     global LTP_TESTCASES_DIR
     global kernel_prompt
+    global errorInfo
 
 
     report "!!!! force rebooting"
@@ -434,11 +434,17 @@ proc force_reboot {} {
             send -s "ifconfig eth0 $ipaddr up\r"
             expect "/bin>"
             catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc}
+            send_user "$errorInfo\n"
             catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc}
+            send_user "$errorInfo\n"
             catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin}
+            send_user "$errorInfo\n"
             catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin}
+            send_user "$errorInfo\n"
             catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin}
+            send_user "$errorInfo\n"
             catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin}
+            send_user "$errorInfo\n"
             set timeout 4
             set flag 0
 
@@ -2036,6 +2042,7 @@ puts "\nStart to build ltp...\n"
 #exec $LTP_SCRIPT_DIR/build_ltp.sh 10.99.22.20
 if [ catch {exec ./build_ltp.sh $cvs_server_addr > build_ltp_log} ] {
     send_log "\nfail to build ltp source\n"
+    send_user "$errorInfo\n"
     exit
 }
 
@@ -2355,20 +2362,22 @@ sleep 2
 set timeout 2
 send -s "ifconfig eth0 $ipaddr up\r"
 expect  -re $kernel_prompt
-#sleep 5
 
 step "additional setup for tests"
 catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc}
-#sleep 2
+send_user "$errorInfo\n"
 step "copy /etc/passwd"
 catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc}
-#sleep 2
+send_user "$errorInfo\n"
 step "copy /etc/group"
-#sleep 5
 catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin}
+send_user "$errorInfo\n"
 catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin}
+send_user "$errorInfo\n"
 catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin}
+send_user "$errorInfo\n"
 catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin}
+send_user "$errorInfo\n"
 
 send "export PATH=\$PATH:/bin\r"
 expect "/bin>"
