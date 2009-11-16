@@ -359,6 +359,24 @@ while 1 {
     }
 }
 
+incr case_num
+set timeout 4
+send "mount\r"
+while 1 {
+    expect {
+        -re "none on /proc/bus/usb type usbfs.*#" {
+            case_fail $case_num
+        }
+        -re "#" {
+            case_pass $case_num
+                break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
 set spawn_id $kermit_spawn_id
 
 incr case_num
