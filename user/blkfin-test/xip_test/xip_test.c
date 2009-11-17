@@ -7,10 +7,17 @@ int test_func(void)
 
 int main(void)
 {
+#ifdef __BFIN_FDPIC__
+    int (**pf)(void);
+
+    pf = test_func;
+    printf("Code is at 0x%08x!\n", (int)*pf);
+#else
     int (*pf)(void);
 
     pf = test_func;
-    printf("pf is 0x%08x!\n", (int)pf);
+    printf("Code is at 0x%08x!\n", (int)pf);
+#endif
 
     return 0;
 }

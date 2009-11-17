@@ -213,7 +213,7 @@ set timeout 5
 send "/mnt/xip_test\r"
 while 1 {
     expect {
-        -re "pf is (0x\[0-9a-f]+)!\r\n$kernel_prompt" {
+        -re "Code is at (0x\[0-9a-f]+)!\r\n$kernel_prompt" {
             set func_addr $expect_out(1,string)
             send_user "Function address is $func_addr\n"
             case_pass $case_num
