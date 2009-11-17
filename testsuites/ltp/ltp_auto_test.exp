@@ -272,18 +272,24 @@ proc recover {} {
 	# Add network configuration.
 	send -s "ifconfig eth0 $ipaddr up\r"
 	expect "/bin>"
-        catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc}
-        send_user "$errorInfo\n"
-	catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc}
-        send_user "$errorInfo\n"
-        catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin}
-        send_user "$errorInfo\n"
-        catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin}
-        send_user "$errorInfo\n"
-        catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin}
-        send_user "$errorInfo\n"
-        catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin}
-        send_user "$errorInfo\n"
+        if [ catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc} ] {
+            send_user "$errorInfo\n"
+        }
+	if [ catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc} ] {
+            send_user "$errorInfo\n"
+        }
+        if [ catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin} ] {
+            send_user "$errorInfo\n"
+        }
+        if [ catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin} ] {
+            send_user "$errorInfo\n"
+        }
+        if [ catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin} ] {
+            send_user "$errorInfo\n"
+        }
+        if [ catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin} ] {
+            send_user "$errorInfo\n"
+        }
         set timeout 4
         set flag 0
         while 1 {
@@ -433,18 +439,24 @@ proc force_reboot {} {
             send -s "chmod 777 /tmp\r"
             send -s "ifconfig eth0 $ipaddr up\r"
             expect "/bin>"
-            catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc}
-            send_user "$errorInfo\n"
-            catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc}
-            send_user "$errorInfo\n"
-            catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin}
-            send_user "$errorInfo\n"
-            catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin}
-            send_user "$errorInfo\n"
-            catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin}
-            send_user "$errorInfo\n"
-            catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin}
-            send_user "$errorInfo\n"
+            if [ catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc} ] {
+                send_user "$errorInfo\n"
+            }
+            if [ catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc} ] {
+                send_user "$errorInfo\n"
+            }
+            if [ catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin} ] {
+                send_user "$errorInfo\n"
+            }
+            if [ catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin} ] {
+                send_user "$errorInfo\n"
+            }
+            if [ catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin} ] {
+                send_user "$errorInfo\n"
+            }
+            if [ catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin} ] {
+                send_user "$errorInfo\n"
+            }
             set timeout 4
             set flag 0
 
@@ -2364,20 +2376,26 @@ send -s "ifconfig eth0 $ipaddr up\r"
 expect  -re $kernel_prompt
 
 step "additional setup for tests"
-catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc}
-send_user "$errorInfo\n"
+if [ catch {exec rcp $LTP_SCRIPT_DIR/config/passwd root@$ipaddr:/etc} ] {
+    send_user "$errorInfo\n"
+}
 step "copy /etc/passwd"
-catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc}
-send_user "$errorInfo\n"
+if [ catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc} ] {
+    send_user "$errorInfo\n"
+}
 step "copy /etc/group"
-catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin}
-send_user "$errorInfo\n"
-catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin}
-send_user "$errorInfo\n"
-catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin}
-send_user "$errorInfo\n"
-catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin}
-send_user "$errorInfo\n"
+if [ catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin} ] {
+    send_user "$errorInfo\n"
+}
+if [ catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin} ] {
+    send_user "$errorInfo\n"
+}
+if [ catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin} ] {
+    send_user "$errorInfo\n"
+}
+if [ catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin} ] {
+    send_user "$errorInfo\n"
+}
 
 send "export PATH=\$PATH:/bin\r"
 expect "/bin>"

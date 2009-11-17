@@ -127,8 +127,10 @@ step "Make"
 
 source  make_kernel.exp
 
-catch {exec cp $uclinux_path/images/$ubifs_rootfs_image  $uclinux_path/romfs}
-send_user "$errorInfo\n"
+if [ catch {exec cp $uclinux_path/images/$ubifs_rootfs_image  $uclinux_path/romfs} ] {
+    send_user "copy file to romfs fail\n"
+    send_user "$errorInfo\n"
+}
 
 step "Make images again."
 
