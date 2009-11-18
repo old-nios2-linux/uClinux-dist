@@ -11,6 +11,8 @@ source ../spawn_kermit.exp
 step "Reboot the kernel."
 source ../reboot_kernel.exp
 
+set module_name hello.ko
+
 step "Start testing."
 
 set case_num 0
@@ -61,6 +63,9 @@ while 1 {
    }
 }
 
+if [ file exists $module_name ] {
+send_user "$module_name has been built out.\n "
+}
 
 set spawn_id $kermit_spawn_id
 
@@ -73,30 +78,46 @@ while 1 {
    sleep 3
    expect {
       ">" {
-         puts "ifconfig set success.\n"
+         send_log "ifconfig set.\n"
          break
       }
 
       timeout {
-            puts "Fail ifconfig. "
-            break
+         send_log "Fail ifconfig. "
+         break
+         }
+     }
+}
+
+send "ifconfig \r"
+while 1 {
+   sleep 3
+   expect {
+      "$targetip" {
+         send_log "ifconfig set success.\n"
+         break
+      }
+
+      timeout {
+         send_log "Fail ifconfig. "
+         break
          }
      }
 }
 
 set timeout 10
 step "Copy testcase to target board\n"
-spawn rcp hello.ko root@$targetip:/
+spawn rcp $module_name root@$targetip:/
 while 1 {
    expect {
 
       "*connect*" {
-         send_log "\nCopy libhelloworld.so to target board failed\n"
+         send_log "\nCopy $module_name to target board failed\n"
          case_fail $case_num
       }
 
       eof {
-         send_log "\nCopy libhelloworld.so to target board done\n"
+         send_log "\nCopy $module_name to target board done\n"
          break
       }
 
@@ -106,17 +127,17 @@ while 1 {
    }
 }
 
-set insert_hello_output      "code function addr = 0xffa0\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f].*\[\r\n]"
-append insert_hello_output ".*data variable addr = 0xff80\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], data value is 0.*\[\r\n]"
-append insert_hello_output ".*bss  variable addr = 0xff80\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], bss value is 0.*\[\r\n]"
-append insert_hello_output ".*data variable addr = 0xff90\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], data value is 0.*\[\r\n]"
-append insert_hello_output ".*bss  variable addr = 0xff90\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], bss value is 0"
+set insert_output      "code function addr = 0xffa0\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f].*\[\r\n]"
+append insert_output ".*data variable addr = 0xff80\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], data value is 0.*\[\r\n]"
+append insert_output ".*bss  variable addr = 0xff80\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], bss value is 0.*\[\r\n]"
+append insert_output ".*data variable addr = 0xff90\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], data value is 0.*\[\r\n]"
+append insert_output ".*bss  variable addr = 0xff90\[0-9a-f]\[0-9a-f]\[0-9a-f]\[0-9a-f], bss value is 0"
 
 set spawn_id $kermit_spawn_id
-send "insmod hello.ko\r" 
+send "insmod $module_name\r" 
 while 1 {   
          expect {
-	 -re "$insert_hello_output" {
+	 -re "$insert_output" {
                 case_pass $case_num
 		break
 	 }
@@ -150,7 +171,7 @@ while 1 {
 incr case_num
 
 expect  -re $kernel_prompt
-send "rmmod hello\r" 
+send "rmmod $module_name \r" 
 
 set timeout 5
 expect  -re $kernel_prompt
