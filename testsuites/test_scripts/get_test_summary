@@ -1,6 +1,5 @@
 #!/bin/bash 
 THIS_LOG=$1
-i=0
 cd $THIS_LOG
 
 if [ ! -d test_summary ] ; then
@@ -46,6 +45,6 @@ echo -e "\n############ Fail Num is: $num.#############\n" >> test_summary/summa
 cat test_summary/fail_summary  >> test_summary/summary
 
 rm -f summary
-ln -s `pwd`/test_summary/summary summary
+ln -s test_summary/summary summary
 
 ../../get_performance_result

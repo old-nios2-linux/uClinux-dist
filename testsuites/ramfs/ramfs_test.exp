@@ -79,7 +79,7 @@ while 1 {
       }
    }
 }
-
+sleep 3
 send -s "\r"
 expect -re $kernel_prompt
 send -s "\r"

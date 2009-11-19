@@ -68,8 +68,7 @@ for {set case_num 1} {$case_num <= $count} {incr case_num} {
              send_log "\n$TITLE ............\[FAIL\]\n"
              exit
             }
-            -re $kernel_prompt {
-                case_pass $case_num
+            -re "Linux version" {
                 break
             }
             timeout {
@@ -78,6 +77,27 @@ for {set case_num 1} {$case_num <= $count} {incr case_num} {
         }
     }
 
+sleep 5
+send -s "\r"
+expect -re $kernel_prompt
+send -s "\r"
+
+set timeout 30
+while 1 {
+   expect {
+           -re "$kernel_prompt" {
+                case_pass $case_num
+                break
+           }
+
+          timeout {
+                case_fail $case_num
+                exit
+          }
+       }
+}
+
+
     send_user "Wait for 1 minutes before reboot.\r"
     sleep 60
 
@@ -85,7 +105,7 @@ for {set case_num 1} {$case_num <= $count} {incr case_num} {
     send -s "\r\r"
     while 1 {
         expect {
-            ">" {
+            -re "$kernel_prompt" {
                 break
             }
             timeout {
