@@ -29,7 +29,7 @@ comm -3 test_summary/all_test_log_list test_summary/test_log_with_result > test_
 
 grep "T[Ee][Ss][Tt] .*\.\.\.\[PASS]" *log* --binary-files=text |  sed 's/.*log:/ /' | sed 's/\..*\[PASS\]/ /g' > test_summary/pass_summary
 grep "T[Ee][Ss][Tt] .*\.\.\.\[FAIL]" *log* --binary-files=text |  sed 's/.*log:/ /' | sed 's/\..*\[FAIL\]/ /g' > test_summary/fail_summary
-cat test_summary/test_log_without_result >> test_summary/fail_summary
+cat test_summary/test_log_without_result | grep -v spi_flash.*log >> test_summary/fail_summary
 
 rm -f test_summary/all_test_log_list
 rm -f test_summary/test_log_with_result
