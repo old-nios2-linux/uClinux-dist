@@ -1,23 +1,9 @@
-DIRS = $(dir $(wildcard */configure))
+VER = madplay-0.15.2b
 
-DIRS_makefiles = $(patsubst %,build-%/Makefile,$(DIRS))
+CONF_OPTS = \
+	--without-x
 
-all: $(DIRS_makefiles)
-	for d in $(DIRS) ; do $(MAKE) -C build-$$d || exit $$? ; done
-
-%/Makefile:
-	set -e ; \
-	VER=$(patsubst build-%/Makefile,%,$@) ; \
-	find $${VER} -type f -print0 | xargs -0 touch -r $${VER}/configure ; \
-	rm -rf build-$${VER} ; \
-	mkdir build-$${VER} ; \
-	cd build-$${VER} ; \
-	../$${VER}/configure $(CONFIGURE_OPTS) --without-x
-
-clean:
-	rm -rf build-*
+include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
-	$(ROMFSINST) -d ./build-madplay-0.15.2b/madplay /usr/bin/madplay
-
-.PHONY: all clean romfs
+	$(ROMFSINST) -d $(STAGEDIR)/usr/bin/madplay /usr/bin/madplay
