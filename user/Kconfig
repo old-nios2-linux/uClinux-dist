@@ -3647,6 +3647,8 @@ comment "Audio tools"
 
 config USER_MADPLAY_MADPLAY
 	bool "madplay"
+	select LIB_LIBMAD
+	select LIB_LIBID3TAG
 	help
 	  Play MP3 files
 
