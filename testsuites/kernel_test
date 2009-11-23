@@ -1330,7 +1330,7 @@ do
 #  fi
 
   cd $UCLINUX_DIST_TESTSUITES/snormtd
-  ./build_snormtd_mount_kernel.exp $BOARD_TYPE df  >/dev/null  2>&1
+  ./build_snormtd_kernel.exp $BOARD_TYPE df  >/dev/null  2>&1
   sleep 30
   ./snormtd_test.exp $BOARD_TYPE df >/dev/null  2>&1
 
