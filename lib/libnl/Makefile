@@ -1,70 +1,31 @@
-#
-# Makefile
-#
-# 	This library is free software; you can redistribute it and/or
-#	modify it under the terms of the GNU Lesser General Public
-#	License as published by the Free Software Foundation version 2.1
-#	of the License.
-#
-# Copyright (c) 2003-2006 Thomas Graf <tgraf@suug.ch>
-#
+ifeq (1,1)
+VER = libnl-1.1
 
-ifeq ($(shell [ ! -r Makefile.opts ] && echo 1),)
-    include Makefile.opts
+all: $(VER)/Makefile.opts
+	$(MAKE) -C $(VER)
+	$(MAKE) -C $(VER) install DESTDIR=$(STAGEDIR)
+
+$(VER)/Makefile.opts:
+	cd $(VER) && ./configure $(CONFIGURE_OPTS)
+
+clean:
+	-$(MAKE) -C $(VER) distclean
+
+romfs:
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libnl.so.1 /usr/lib/libnl.so.1
+
+else
+
+# This is for newer releases
+
+GITWEB = http://git.kernel.org/?p=$(GITREPO).git
+GITREPO = libs/netlink/libnl
+VER = 8d2bb90726f75dfaf752de599886cb8bf15391bd
+
+include $(ROOTDIR)/tools/autotools.mk
+include $(ROOTDIR)/tools/gitweb.mk
+
+romfs:
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libnl.so.2 /usr/lib/libnl.so.2
+
 endif
-
-SUBDIRS := lib include doc src tests
-
-ALLSUBDIRS := $(SUBDIRS)
-ifdef CONFIG_LIB_LIBNL_COMPONENTS
-SUBDIRS := lib include doc
-endif
-
-.PHONY: all clean distclean install gendoc $(SUBDIRS)
-
-all: Makefile.opts
-	@for dir in $(SUBDIRS); do \
-		echo "Entering $$dir" && $(MAKE) -C $$dir || exit $$?; \
-	done
-
-clean: Makefile.opts
-	rm -f cscope.*
-	@for dir in $(ALLSUBDIRS); do \
-		echo "Entering $$dir" && $(MAKE) -C $$dir clean || exit $$?; \
-	done
-
-distclean: clean
-	@$(RM) -rf Makefile.opts autom4te.cache config.log config.status
-	@for dir in $(ALLSUBDIRS); do \
-		echo "Entering $$dir" && $(MAKE) -C $$dir distclean || exit $$?; \
-	done
-
-install: Makefile.opts
-	@for dir in $(SUBDIRS); do \
-		echo "Entering $$dir" && cd $$dir && $(MAKE) install && cd ..; \
-	done
-	mkdir -p $(DESTDIR)$(libdir)/pkgconfig/
-	install -m 0644 libnl-1.pc $(DESTDIR)$(libdir)/pkgconfig/
-
-gendoc:
-	$(MAKE) -C doc gendoc
-
-show: Makefile.opts
-	@echo "CC:          $(CC)"
-	@echo "RM:          $(RM)"
-	@echo "CFLAGS:      $(CFLAGS)"
-	@echo "DEPFLAGS:    $(DEPFLAGS)"
-	@echo "LDFLAGS:     $(LDFLAGS)"
-	@echo "DESTDIR:     $(DESTDIR)"
-	@echo "prefix:      $(prefix)"
-	@echo "libdir:      $(libdir)"
-	@echo "includedir:  $(includedir)"
-
-cscope:
-	cscope -b -q -R -Iinclude -slib -ssrc
-
-
-$(SUBDIRS):
-	cd $@ && $(MAKE)
-
--include Makefile.rules
