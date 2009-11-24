@@ -1,4 +1,4 @@
-VER = lowpan-tools-0.2-rc3
+VER = lowpan-tools-0.2-rc2
 
 CONF_OPTS = --disable-manpages
 
