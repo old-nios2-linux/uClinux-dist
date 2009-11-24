@@ -289,6 +289,15 @@ config USER_SERCD
 	  sercd is an RFC 2217-compliant serial port redirector.
 	  see http://sourceforge.net/projects/sercd
 
+config USER_LOWPANTOOLS
+	bool "loWPAN-tools"
+	select LIB_LIBNL
+	help
+	  This is a set of utils to manage the Linux LoWPAN stack.
+	  Such as iz, izcoordinator, izconfig, izchat, etc.
+	  The LoWPAN stack aims for IEEE 802.15.4-2003 (and for lesser extent
+	  IEEE 802.15.4-2006) compatibility.
+	  If you want to learn more, please go to http://linux-zigbee.sf.net/
 endmenu
 
 
