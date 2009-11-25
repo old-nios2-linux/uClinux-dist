@@ -9,5 +9,5 @@ clean:
 romfs:
 	$(ROMFSINST) -d $(VER)/rcp/rcp /bin/rcp
 	$(ROMFSINST) -d $(VER)/rsh/rsh /bin/rsh
-	$(ROMFSINST) -d $(VER)/rshd/rshd /bin/rshd
-	-a "shell       stream tcp nowait root /bin/rshd" /etc/inetd.conf
+	$(ROMFSINST) -d $(VER)/rshd/rshd /bin/rshd \
+	    -a "shell       stream tcp nowait root /bin/rshd" /etc/inetd.conf
