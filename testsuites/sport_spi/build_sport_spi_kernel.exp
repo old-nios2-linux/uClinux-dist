@@ -7,6 +7,11 @@ source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
+step "Apply patch."
+
+cd $uclinux_path/linux-2.6.x/
+exec patch -p0   < ../testsuites/sport_spi/stamp.diff
+
 cd $uclinux_path/testsuites
 
 step "Make config."
@@ -103,6 +108,11 @@ cd $uclinux_path/testsuites
 step "Copy linux"
 
 source   copy_image.exp
+
+step "Reverse  patch."
+
+cd $uclinux_path/linux-2.6.x/
+exec patch -p0 -R < ../testsuites/sport_spi/stamp.diff
 
 send_user "Ending $argv0\n"
 log_file
