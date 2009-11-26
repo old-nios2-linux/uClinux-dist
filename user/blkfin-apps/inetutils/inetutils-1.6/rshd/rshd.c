@@ -306,7 +306,9 @@ extern char **environ;
 void
 doit (int sockfd, struct sockaddr_in *fromp)
 {
+#ifndef __uClinux__
   extern char *__rcmd_errstr;	/* syslog hook from libc/net/rcmd.c. */
+#endif
   struct hostent *hp;
   struct passwd *pwd;
   u_short port;
@@ -778,11 +780,13 @@ doit (int sockfd, struct sockaddr_in *fromp)
 	&& (iruserok (fromp->sin_addr.s_addr, pwd->pw_uid == 0,
 			remuser, locuser)) < 0)
     {
+#ifndef __uClinux__
       if (__rcmd_errstr)
 	syslog (LOG_INFO | LOG_AUTH,
 		"%s@%s as %s: permission denied (%s). cmd='%.80s'",
 		remuser, hostname, locuser, __rcmd_errstr, cmdbuf);
       else
+#endif
 	syslog (LOG_INFO | LOG_AUTH,
 		"%s@%s as %s: permission denied. cmd='%.80s'",
 		remuser, hostname, locuser, cmdbuf);
@@ -844,7 +848,12 @@ doit (int sockfd, struct sockaddr_in *fromp)
 	}
 # endif
 #endif
+
+#ifdef __uClinux__
+      pid = vfork ();
+#else
       pid = fork ();
+#endif
       if (pid == -1)
 	{
 	  rshd_error ("Can't fork; try again.\n");
