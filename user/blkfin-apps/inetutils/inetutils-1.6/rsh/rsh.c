@@ -236,7 +236,6 @@ usage ()
   pusage (stderr);
   try_help ();
 }
-
 
 int
 main (int argc, char **argv)
@@ -574,7 +573,11 @@ try_connect:
 
   if (!nflag)
     {
+#ifdef __uClinux__
+      pid = vfork ();
+#else
       pid = fork ();
+#endif
       if (pid < 0)
 	error (1, errno, "fork");
     }
@@ -671,7 +674,11 @@ talk (int nflag, sigset_t * osigs, pid_t pid, int rem)
       goto rewrite;
     done:
       shutdown (rem, 1);
+#ifdef __uClinux__
+      _exit (0);
+#else
       exit (0);
+#endif
     }
 
 #ifdef HAVE_SIGACTION
