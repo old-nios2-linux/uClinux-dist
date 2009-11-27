@@ -44,8 +44,8 @@ cp  $UCLINUX_DIST_PATH/testsuites/kernel_test $UCLINUX_DIST_SCRIPTS
 cd $UCLINUX_DIST_SCRIPTS
 ./test_runtime_control & 
 
-echo -e "Testing on $HOST_IP :\n ./kernel_test  $BOARD_CONFIG $CPU default $UCLINUX_DIST_PATH $BINARY_FORMAT $ALLOCATOR ICACHE($ICACHE) DCACHE($DCACHE) $POLICY $UART_MODE SMP($SMP) MPU($MPU) $THIS_LOG "     > kernel_test_log
-./kernel_test  $BOARD_CONFIG $CPU default $UCLINUX_DIST_PATH  $BINARY_FORMAT $ALLOCATOR $ICACHE $DCACHE $POLICY $UART_MODE $SMP $MPU $THIS_LOG \
+echo -e "Testing on $HOST_IP :\n ./kernel_test  $BOARD_CONFIG $CPU default $UCLINUX_DIST_PATH $BINARY_FORMAT $ALLOCATOR ICACHE($ICACHE) DCACHE($DCACHE) $POLICY $UART_MODE SMP($SMP) MPU($MPU) XENOMAI($XENOMAI) $THIS_LOG "     > kernel_test_log
+./kernel_test  $BOARD_CONFIG $CPU default $UCLINUX_DIST_PATH  $BINARY_FORMAT $ALLOCATOR $ICACHE $DCACHE $POLICY $UART_MODE $SMP $MPU $XENOMAI $THIS_LOG \
 >> kernel_test_log 2>&1
 test_status=$?
 mkdir -p $LOG_DIR/$THISRUN/test_summary
@@ -85,7 +85,7 @@ elif [ $compare_result_status -eq 1 ] ; then
 
   elif [ $test_status -eq 3 ] ; then    
     echo -e "Test $BOARD_CONFIG on $HOST_IP  fails!\ncompare_result_exit=$compare_result_status." >> $LOG_DIR/$THISRUN/test_summary/test_results
-    grep -nr  "Error"  $THIS_LOG/build_policy_kernel_log  -A 20 -B 30 | dos2unix  > /tmp/build_policy_kernel_log
+    grep -nr  "Error"  $THIS_LOG/build_policy_kernel_log -A 20 -B 30 | dos2unix  > /tmp/build_policy_kernel_log
     send_mail "Build policy kernel on $HOST_IP  fails! " $LOG_DIR/$THISRUN/test_summary/test_results  /tmp/build_policy_kernel_log 
   else
     echo -e "Test $BOARD_CONFIG on $HOST_IP  fails oddly!\ncompare_result_exit=$compare_result_status." >> $LOG_DIR/$THISRUN/test_summary/test_results

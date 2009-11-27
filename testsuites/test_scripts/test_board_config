@@ -11,3 +11,4 @@ POLICY=write_back
 UART_MODE=dma
 SMP=off
 MPU=off
+XENOMAI=off
