@@ -1,68 +1,52 @@
 /*
- * File:         cycles.c
- * Based on:
- * Author:       Mike Frysinger
+ * cycles.c - example module for playing with the cycle counters
  *
- * Created:      Aug 2006
- * Description:  Example module for playing with the cycle counters
+ * Enter bugs at http://blackfin.uclinux.org/
  *
- * Rev:          $Id$
- *
- * Modified:
- *               Copyright 2006 Analog Devices Inc.
- *
- * Bugs:         Enter bugs at http://blackfin.uclinux.org/
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see the file COPYING, or write
- * to the Free Software Foundation, Inc.,
- * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Copyright 2006-2009 Analog Devices Inc.
+ * Licensed under the GPL-2 or later.
  */
 
+#define pr_fmt(fmt) "cycles: " fmt
+
+#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/delay.h>
-
-#define PRINTK(x...) printk(KERN_DEBUG "cycles: " x);
+#include <linux/timex.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Mike Frysinger");
 MODULE_DESCRIPTION("Example Blackfin cycles code");
 
 /*
- * Return the 64bit cycle counter
+ * Return the 64bit cycle counter -- better to use the get_cycles()
+ * from the common Blackfin header (timex.h) rather than defining your
+ * own function.  But we show you how here for info.
  */
+#if 1
+# define cycles_get() (unsigned long long)get_cycles()
+#else
 static inline unsigned long long cycles_get(void)
 {
 	unsigned long ret_high, ret_low;
-	__asm__(
+	__asm__ __volatile__(
 		"%0 = CYCLES;"
 		"%1 = CYCLES2;"
-		: "=d" (ret_low), "=d" (ret_high)
+		: "=d"(ret_low), "=d"(ret_high)
 	);
 	return ((unsigned long long)ret_high << 32) + ret_low;
 }
+#endif
 
 /*
  * Reset the 64bit cycle counter to 0
  */
 static inline void cycles_clear(void)
 {
-	__asm__(
-		"R1 = 0;"
-		"CYCLES = R1;"
-		"CYCLES2 = R1;"
-		: : : "R1"
+	__asm__ __volatile__(
+		"CYCLES = %0;"
+		"CYCLES2 = %0;"
+		: : "d"(0)
 	);
 }
 
@@ -71,13 +55,14 @@ static inline void cycles_clear(void)
  */
 static inline void cycles_turn_off(void)
 {
-	__asm__(
-		"R1 = SYSCFG;"
-		"BITCLR(R1,1);"
-		"SYSCFG = R1;"
-		"CSYNC;"
-		: : : "R1"
+	unsigned long scratch;
+	__asm__ __volatile__(
+		"%0 = SYSCFG;"
+		"BITCLR(%0, 1);"
+		"SYSCFG = %0;"
+		: "=d"(scratch)
 	);
+	CSYNC();
 }
 
 /*
@@ -85,13 +70,14 @@ static inline void cycles_turn_off(void)
  */
 static inline void cycles_turn_on(void)
 {
-	__asm__(
-		"R1 = SYSCFG;"
-		"BITSET(R1,1);"
-		"SYSCFG = R1;"
-		"CSYNC;"
-		: : : "R1"
+	unsigned long scratch;
+	__asm__ __volatile__(
+		"%0 = SYSCFG;"
+		"BITSET(%0, 1);"
+		"SYSCFG = %0;"
+		: "=d"(scratch)
 	);
+	CSYNC();
 }
 
 /*
@@ -101,19 +87,19 @@ static int __init cycles_module_init(void)
 {
 	int cnt;
 
-	PRINTK("turned off:\n");
+	pr_info("turned off:\n");
 	cycles_turn_off();
 	cycles_clear();
-	for (cnt=0; cnt<10; ++cnt) {
+	for (cnt = 0; cnt < 10; ++cnt) {
 		mdelay(100);
-		PRINTK(" %llu\n", cycles_get());
+		pr_info(" %llu\n", cycles_get());
 	}
 
-	PRINTK("turned on:\n");
+	pr_info("turned on:\n");
 	cycles_turn_on();
-	for (cnt=0; cnt<10; ++cnt) {
+	for (cnt = 0; cnt < 10; ++cnt) {
 		mdelay(100);
-		PRINTK(" %llu\n", cycles_get());
+		pr_info(" %llu\n", cycles_get());
 	}
 
 	return 0;
