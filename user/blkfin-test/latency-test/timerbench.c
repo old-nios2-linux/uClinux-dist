@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2005 Jan Kiszka <jan.kiszka@web.de>.
- * 
- * Modified by Yi Li (yi.li@analog.com) for non-rt Linux  
+ *
+ * Modified by Yi Li (yi.li@analog.com) for non-rt Linux
  *
  * You should have received a copy of the GNU General Public License
  * along with Xenomai; if not, write to the Free Software Foundation,
@@ -15,13 +15,14 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/semaphore.h>
 #include <linux/string.h>
 #include <linux/interrupt.h>
+#include <linux/timex.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/blackfin.h>
-#include <asm/semaphore.h>
 #include <asm/uaccess.h>
 #include <asm/div64.h>
 
@@ -29,7 +30,6 @@
 
 static void tb_timer_start (long period_tsc);
 static void tb_timer_stop (void);
-static int tb_timer_init (int (*f) (int, void *, struct pt_regs *), void *);
 
 struct rt_tmbench_context
 {
@@ -45,7 +45,7 @@ struct rt_tmbench_context
   int bucketsize;
 
   int warmup;
-  volatile unsigned long long start_time;
+  unsigned long long start_time;
   unsigned long long date;
   struct rttst_bench_res curr;
 
@@ -56,24 +56,7 @@ struct rt_tmbench_context
   int done;
 } tb_ctx;
 
-static long tb_cclk;
-static long tb_sclk;
-
-
-#define read_tsc(t)					\
-	({							\
-	volatile unsigned long __cy2;					\
-	__asm__ __volatile__ (	"1: %0 = CYCLES2\n"		\
-				"%1 = CYCLES\n"			\
-				"%2 = CYCLES2\n"		\
-				"CC = %2 == %0\n"		\
-				"if ! CC jump 1b\n"		\
-				:"=r" (((unsigned long *)&t)[1]),	\
-				"=r" (((unsigned long *)&t)[0]),	\
-				"=r" (__cy2)				\
-				: /*no input*/ : "CC");			\
-	t;								\
-	})
+static unsigned long tb_cclk, tb_sclk;
 
 static DECLARE_WAIT_QUEUE_HEAD (tb_wq);
 
@@ -189,17 +172,17 @@ eval_outer_loop (struct rt_tmbench_context *ctx)
 }
 
 static irqreturn_t
-timer_proc (int irq, void *dev_id, struct pt_regs *regs)
+timer_proc (int irq, void *dev_id)
 {
   struct rt_tmbench_context *ctx = (struct rt_tmbench_context *) dev_id;
-  volatile unsigned long long tsc;
+  unsigned long long tsc;
 
-  read_tsc (tsc);
+  tsc = get_cycles();
   eval_inner_loop (ctx, (long) (tsc - ctx->date));
 
   tb_timer_stop ();
 
-  read_tsc (ctx->start_time);
+  ctx->start_time = get_cycles();
 
   tb_timer_start ((long) (ctx->date - ctx->start_time));
 
@@ -213,7 +196,7 @@ timer_proc (int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static irqreturn_t
-user_timer_proc (int irq, void *dev_id, struct pt_regs *regs)
+user_timer_proc (int irq, void *dev_id)
 {
   struct rt_tmbench_context *ctx = (struct rt_tmbench_context *) dev_id;
 
@@ -241,7 +224,7 @@ tb_open (struct inode *inode, struct file *filp)
 }
 
 int
-tb_timer_init (int (*handler) (int, void *, struct pt_regs *), void *arg)
+tb_timer_init (irq_handler_t handler, void *arg)
 {
   int ret = 0;
   ret = request_irq (IRQ_WATCH, handler, IRQF_DISABLED, "Timerbench", arg);
@@ -297,7 +280,7 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
 {
   struct rt_tmbench_context *ctx;
   int ret = 0;
-  volatile unsigned long long tsc = 0;
+  unsigned long long tsc = 0;
 
   ctx = (struct rt_tmbench_context *) filp->private_data;
 
@@ -308,8 +291,9 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
 	struct rttst_tmbench_config config_buf;
 	struct rttst_tmbench_config *config;
 
-	copy_from_user (&config_buf, (void *) arg,
-			sizeof (struct rttst_tmbench_config));
+	if (copy_from_user (&config_buf, (void *) arg,
+			sizeof (struct rttst_tmbench_config)))
+		return -EFAULT;
 	config = &config_buf;
 
 	down (&ctx->nrt_mutex);
@@ -356,13 +340,13 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
 	ctx->curr.test_loops = 0;
 
 	ctx->mode = RTTST_TMBENCH_HANDLER;
-	read_tsc (tsc);
+	tsc = get_cycles();
 	ctx->start_time = tsc + 1000000;
 	ctx->date = ctx->start_time + ctx->period;
 
 	tb_timer_init (timer_proc, &tb_ctx);
 
-	read_tsc (tsc);
+	tsc = get_cycles();
 	tb_timer_start ((long) (ctx->date - tsc));
 
 	up (&ctx->nrt_mutex);
@@ -393,16 +377,19 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
 		  (((ctx->result.overall.test_loops) > 1 ?
 		    ctx->result.overall.test_loops : 2) - 1));
 
-	copy_to_user (&usr_res->result,
-		      &ctx->result.overall, sizeof (struct rttst_bench_res));
+	if (copy_to_user (&usr_res->result,
+		      &ctx->result.overall, sizeof (struct rttst_bench_res)))
+	  ret = -EFAULT;
 
 	if (ctx->histogram_size)
 	  {
 	    int size = ctx->histogram_size * sizeof (long);
 
-	    copy_to_user (usr_res->histogram_min, ctx->histogram_min, size);
-	    copy_to_user (usr_res->histogram_max, ctx->histogram_max, size);
-	    copy_to_user (usr_res->histogram_avg, ctx->histogram_avg, size);
+	    ret |= copy_to_user (usr_res->histogram_min, ctx->histogram_min, size);
+	    ret |= copy_to_user (usr_res->histogram_max, ctx->histogram_max, size);
+	    ret |= copy_to_user (usr_res->histogram_avg, ctx->histogram_avg, size);
+	    if (ret)
+	      ret = -EFAULT;
 	    kfree (ctx->histogram_min);
 	  }
 
@@ -425,15 +412,17 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
 
 	ctx->done = 0;
 
-	copy_to_user (usr_res, &ctx->result,
-		      sizeof (struct rttst_interm_bench_res));
+	if (copy_to_user (usr_res, &ctx->result,
+		      sizeof (struct rttst_interm_bench_res)))
+	  ret = -EFAULT;
 
 	break;
       }
 
     case RTTST_GETCCLK:
       {
-	copy_to_user ((void *) arg, &tb_cclk, sizeof (tb_cclk));
+	if (copy_to_user ((void *) arg, &tb_cclk, sizeof (tb_cclk)))
+	  ret = -EFAULT;
 	break;
       }
 
@@ -441,14 +430,15 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
       {
 	struct timer_info t_info;
 
-	copy_from_user (&t_info, (void *) arg, sizeof (t_info));
+	if (copy_from_user (&t_info, (void *) arg, sizeof (t_info)))
+	  return -EFAULT;
 	ctx->period = t_info.period_tsc;
 	ctx->start_time = t_info.start_tsc;
 	ctx->date = ctx->start_time + ctx->period;
 
 	tb_timer_init (user_timer_proc, &tb_ctx);
 
-	read_tsc (tsc);
+	tsc = get_cycles();
 	tb_timer_start ((long) (ctx->date - tsc));
 	break;
       }
@@ -462,10 +452,10 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
 	  return ret;
 
 	ctx->date += ctx->period;
-	read_tsc (ctx->start_time);
+	ctx->start_time = get_cycles();
 
-	//printk("KERNEL: wake up - tsc: %lld, overrun: %ld\n", 
-	//ctx->start_time, ctx->curr.overruns);    
+	//printk("KERNEL: wake up - tsc: %lld, overrun: %ld\n",
+	//ctx->start_time, ctx->curr.overruns);
 
 	if (ctx->date <= ctx->start_time)
 	  {
@@ -479,8 +469,9 @@ tb_ioctl (struct inode *inode, struct file *filp, uint cmd, unsigned long arg)
 	  }
 	ctx->done = 0;
 	tb_timer_start ((long) (ctx->date - ctx->start_time));
-	copy_to_user ((void *) arg, &(ctx->curr.overruns),
-		      sizeof (ctx->curr.overruns));
+	if (copy_to_user ((void *) arg, &(ctx->curr.overruns),
+		      sizeof (ctx->curr.overruns)))
+	  ret = -EFAULT;
 	break;
       }
 
@@ -507,7 +498,7 @@ static struct file_operations tb_fops = {
 };
 
 
-int __init
+static int __init
 __timerbench_init (void)
 {
   int ret = 0;
@@ -519,14 +510,12 @@ __timerbench_init (void)
 
   return ret;
 }
+module_init (__timerbench_init);
 
 
-void
+static void __exit
 __timerbench_exit (void)
 {
   unregister_chrdev (TB_MAJOR, TB_DEVNAME);
 }
-
-
-module_init (__timerbench_init);
 module_exit (__timerbench_exit);
