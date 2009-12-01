@@ -2,3 +2,4 @@ busybox-1.15.2-ash.patch
 busybox-1.15.2-awk.patch
 busybox-1.15.2-buildsys.patch
 busybox-1.15.2-flash.patch
+busybox-1.15.2-ping.patch
