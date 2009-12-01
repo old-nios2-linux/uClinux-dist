@@ -75,6 +75,6 @@ static void __exit boundary_anomaly_test_cleanup(void)
 }
 module_exit(boundary_anomaly_test_cleanup);
 
-MODULE_DESCRIPTION("example kernel timer driver");
+MODULE_DESCRIPTION("boundary anomaly test module");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Barry Song <21cnbao@gmail.com>");
