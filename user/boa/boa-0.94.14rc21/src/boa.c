@@ -24,7 +24,7 @@
 /* $Id: boa.c,v 1.99.2.26 2005/02/22 14:11:29 jnelson Exp $*/
 
 #include "boa.h"
-#include <sys/wait.h>
+
 /* globals */
 int backlog = SO_MAXCONN;
 time_t start_time;
@@ -51,7 +51,7 @@ static int do_fork = 1;
 
 int main(int argc, char *argv[])
 {
-    int server_s,child_status;               /* boa socket */
+    int server_s;               /* boa socket */
     pid_t pid;
 
     /* set umask to u+rw, u-x, go-rwx */
@@ -91,41 +91,21 @@ int main(int argc, char *argv[])
 
     /* background ourself */
     if (do_fork) {
-        pid = vfork();
-    } else {
-        pid = getpid();
+        if (daemon(1, 1)) {
+            perror("daemon");
+            exit(EXIT_FAILURE);
+        }
     }
 
-    switch (pid) {
-    case -1:
-        /* error */
-        perror("fork/getpid");
-        exit(EXIT_FAILURE);
-    case 0:
-        /* child, success */
-        break;
-    default:
-        /* parent, success */
-        if (do_fork) {
-            waitpid(pid, &child_status, 0);
-                 if (WEXITSTATUS(child_status) != 0) {
-                     perror("child process exit abnormally.");
-                 }
+    pid = getpid();
+    if (pid_file != NULL) {
+        FILE *PID_FILE = fopen(pid_file, "w");
+        if (PID_FILE != NULL) {
+            fprintf(PID_FILE, "%d", pid);
+            fclose(PID_FILE);
+        } else {
+            perror("fopen pid file");
         }
-
-        if (pid_file != NULL) {
-            FILE *PID_FILE = fopen(pid_file, "w");
-            if (PID_FILE != NULL) {
-                fprintf(PID_FILE, "%d", pid);
-                fclose(PID_FILE);
-            } else {
-                perror("fopen pid file");
-            }
-        }
-
-        if (do_fork)
-            exit(EXIT_SUCCESS);
-        break;
     }
 
     drop_privs();
