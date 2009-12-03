@@ -23,11 +23,10 @@ set Throughput  0
 set case_num 0
 
 set test_time 10
-set spi_net_ip 10.100.4.51
+set serverip 192.168.0.175
+set spi_net_ip 192.168.0.51
 
 incr case_num
-puts "Switch the ethernet line to spi_net port."
-sleep 15
 
 send "ifconfig eth0 down\r" 
 while 1 {
