@@ -260,8 +260,10 @@ proc recover {} {
          }
       }
 
-      sleep 20
       if { $state_variable == 4 } {
+        set timeout 30
+        expect -nocase -re "up.*full"
+
 	send "export PATH=\$PATH:/bin\r"
 	expect "/bin>"
 	send "export TMP=/tmp\r"
@@ -378,7 +380,7 @@ proc force_reboot {} {
                     break
                 }
 
-                 -re $kernel_prompt {
+                -re "BusyBox.*$kernel_prompt" {
                     set state_variable 2
                     send "\r"
                     break
@@ -428,8 +430,10 @@ proc force_reboot {} {
             }
         }
 
-        sleep 20
         if { $state_variable == 4 } {
+            set timeout 30
+            expect -nocase -re "up.*full"
+
             send "export PATH=\$PATH:/bin\r"
             expect "/bin>"
             send "export TMP=/tmp\r"
@@ -2370,8 +2374,10 @@ test_cleanup
 # Before going on, many of the tests require some setup.
 #
 # Add network configuration.
-sleep 2
-set timeout 2
+set timeout 30
+expect -nocase -re "up.*full"
+
+set timeout 5
 send -s "ifconfig eth0 $ipaddr up\r"
 expect  -re $kernel_prompt
 
