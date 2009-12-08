@@ -88,7 +88,7 @@ while 1 {
         }
 
         -re "Atmel SD/MMC Driver.*\\\[.*]" {
-            send "N\r"
+            send "M\r"
         }
 
         -re "fdisk.*USER_FDISK_FDISK.*\\\[.*]" {

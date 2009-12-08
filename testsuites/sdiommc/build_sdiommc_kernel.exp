@@ -43,7 +43,7 @@ while 1 {
         }
 
         -re "Atmel SD/MMC Driver.*\\\[.*]" {
-            send "N\r"
+            send "M\r"
         }
 
         -re "MMC block device driver.*MMC_BLOCK.*\\\[.*]" {
