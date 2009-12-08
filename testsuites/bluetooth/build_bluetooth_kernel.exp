@@ -74,15 +74,11 @@ while 1 {
             send "y\r"
         }
 
-        -re "HCI USB driver.*BT_HCIUSB.*\\\[.*]" {
+        -re "HCI USB driver.*BT_HCIBTUSB.*\\\[.*]" {
             send "y\r"
         }
 
-        -re "SCO.*voice.*support.*BT_HCIUSB_SCO.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -re "CFI Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
+        -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
 #CONFIG_MTD_PHYSMAP claims the entire Async. Memory Space
 #need to entirely disable it while using various U-Connector boards
             send "n\r"
