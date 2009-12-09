@@ -474,7 +474,8 @@ if [ $BUILD_POLICY -eq 1  ] ; then
   echo  "Running build policy in uclinux-dist... "
   
   cd $UCLINUX_DIST_TESTSUITES/policy
-  ./build_policy_kernel.exp  $BOARD_TYPE $CPU $REVISION $UCLINUX_DIST_PATH $BINARY_FORMAT $ALLOCATOR $ICACHE $DCACHE $POLICY $UART_MODE $SMP $MPU $XENOMAI >/dev/null  2>&1
+  ./build_policy_kernel.exp        $BOARD_TYPE $CPU $REVISION $UCLINUX_DIST_PATH $BINARY_FORMAT $ALLOCATOR $ICACHE $DCACHE $POLICY $UART_MODE $SMP $MPU $XENOMAI >/dev/null  2>&1
+  echo "./build_policy_kernel.exp  $BOARD_TYPE $CPU $REVISION $UCLINUX_DIST_PATH $BINARY_FORMAT $ALLOCATOR $ICACHE $DCACHE $POLICY $UART_MODE $SMP $MPU $XENOMAI >/dev/null  2>&1"
     
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.policy
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.policy
