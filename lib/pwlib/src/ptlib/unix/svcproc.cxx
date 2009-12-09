@@ -757,7 +757,7 @@ int PServiceProcess::InitialiseService()
 #endif
   }
 
-#if !defined(BE_THREADS) && !defined(P_RTEMS)
+#if !defined(BE_THREADS) && !defined(P_RTEMS) && !defined(__ARCH_HAS_NO_MMU__)
   if (!args.HasOption('d'))
     return -1;
 

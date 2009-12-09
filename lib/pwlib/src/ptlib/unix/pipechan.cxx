@@ -324,7 +324,7 @@ BOOL PPipeChannel::PlatformOpen(const PString & subProgram,
   else
     execv(subProgram, args);
 
-  exit(2);
+  _exit(2);
   return FALSE;
 #endif // P_VXWORKS || P_RTEMS
 }
