@@ -46,7 +46,7 @@
 #include <time.h>
 #endif
 
-#include "pflags.h"
+#include "gpio.h"
 #include "adsp-ppifcd.h"
 
 extern int i2c_write_register(char *, unsigned char, unsigned char,
@@ -73,15 +73,15 @@ int WriteIMG(char *, unsigned long);
 #define HEIGHT          1024
 #endif
 
-#define BF537_MICRON_STANDBY  "/dev/pf27"      /* pg11 */
-#define BF537_MICRON_LED      "/dev/pf24"      /* pg8 */
+#define BF537_MICRON_STANDBY  27      /* pg11 */
+#define BF537_MICRON_LED      24      /* pg8 */
 #define BF537_MICRON_TRIGGER_STROBE 29
 
-#define BF533_MICRON_STANDBY  "/dev/pf8"
-#define BF533_MICRON_LED      "/dev/pf11"
+#define BF533_MICRON_STANDBY  8
+#define BF533_MICRON_LED      11
 #define BF533_MICRON_TRIGGER_STROBE 6
 
-#define FS3             "/dev/pf3"
+#define FS3		3
 
 #define MASTERCLOCK     48	//MHz
 
@@ -248,6 +248,8 @@ long calculate_total_frame_time(void)
 	     row_time, total_frame_time, total_frame_time / MASTERCLOCK);
 	printf
 	    ("*******************************************************************************\n");
+
+	return 0;
 }
 
 void usage(FILE * fp, int rc)
@@ -274,14 +276,13 @@ void mydelay(unsigned int delay)
 int main(int argc, char *argv[])
 {
 
-	int fd, i, c, cnt, delay, board, trigger_strobe;
-	int fd_standby, fd_led, fd_fs3;
+	int fd, i, c, cnt, board, trigger_strobe, led, standby;
 	char *buffer, *filename;
-	u_char addr;
-	u_short value, usetrigger, sendi2c;
+	u_char addr = 0;
+	u_short value = 0, usetrigger = 0, sendi2c = 0;
 	struct timeval o, t;
-	long delta, usec, offset;
-	char trigger[10], led[10], standby[10];
+	long delta, offset;
+
 	/* Check the passed arg */
 
 	cnt = 1;
@@ -321,12 +322,12 @@ int main(int argc, char *argv[])
 	}
 
 	if (board == 537) {
-		strcpy(standby, BF537_MICRON_STANDBY);
-		strcpy(led, BF537_MICRON_LED);
+		standby = BF537_MICRON_STANDBY;
+		led = BF537_MICRON_LED;
 		trigger_strobe = BF537_MICRON_TRIGGER_STROBE;
 	} else if (board == 533) {
-		strcpy(standby, BF533_MICRON_STANDBY);
-		strcpy(led, BF533_MICRON_LED);
+		standby = BF533_MICRON_STANDBY;
+		led = BF533_MICRON_LED;
 		trigger_strobe = BF533_MICRON_TRIGGER_STROBE;
 		
 		if (usetrigger) {
@@ -339,35 +340,37 @@ int main(int argc, char *argv[])
 	}
 
 
-	fd_standby = open(standby, O_RDWR, 0);
-	if (fd_standby < 0) {
-		printf("%s open error %d\n", standby, errno);
+
+	if(gpio_export(standby)) {
+		printf("open error gpio%d\n", standby);
 		return -1;
 	}
 
-	fd_led = open(led, O_RDWR, 0);
-	if (fd_led < 0) {
-		printf("%s open error %d\n", led, errno);
+	if(gpio_export(led)) {
+		printf("open error gpio%d\n", led);
 		return -1;
 	}
+	gpio_dir_out(standby);
+	gpio_dir_out(led);
 
 	/* Get latency between to gettimeofday calls */
 
 	offset = getoffset();
 
-	write(fd_standby, "0", sizeof("0"));
-
+	gpio_value(standby, 0);
+	
 	if (board == 533) {
-
-		fd_fs3 = open(FS3, O_RDWR, 0);
-		if (fd_fs3 < 0) {
-			printf("%s open error %d\n", FS3, errno);
+		if(gpio_export(FS3)) {
+			printf("open error gpio%d\n", FS3);
 			return -1;
 		}
-		write(fd_fs3, "0", sizeof("0"));
+		gpio_dir_out(FS3);
+		gpio_value(FS3, 0);
 	}
 
-	write(fd_led, "1", sizeof("0"));
+	gpio_value(led, 1);
+
+	gpio_value(standby, 1);
 
 	if (usetrigger) {
 		i2c_write_register(I2C_DEVICE, DEVID, 0x1E, 0x8100);
@@ -463,13 +466,13 @@ int main(int argc, char *argv[])
 		    ("*******************************************************************************\n");
 	}
 
-	write(fd_led, "0", sizeof("0"));
+	gpio_value(led, 0);
 
-	close(fd_standby);
-	close(fd_led);
+	gpio_unexport(led);
+	gpio_unexport(standby);
 
 	if (board == 533)
-		close(fd_fs3);
+		gpio_unexport(FS3);
 
 	free(buffer);
 	exit(0);

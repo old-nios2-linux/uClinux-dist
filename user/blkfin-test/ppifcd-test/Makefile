@@ -1,5 +1,5 @@
 EXEC = ppifcd_test
-OBJS = ppifcd_test.o i2c.o
+OBJS = ppifcd_test.o i2c.o gpio.o
 
 all: $(EXEC)
 
