@@ -1,8 +1,5 @@
 /*
- *
  *    Rev:          $Id$
- *    Revision:     $Revision$
- *    Source:       $Source$
  *    Created:      Do Apr 21 11:02:09 CEST 2005
  *    Author:       Michael Hennerich
  *    mail:         hennerich@blackfin.uclinux.org
@@ -10,24 +7,8 @@
  *
  *   Copyright (C) 2005 Michael Hennerich
  *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation; either version 2 of the License, or
- *   (at your option) any later version.
- *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program; if not, write to the Free Software
- *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- *
- ****************************************************************************
- * MODIFICATION HISTORY:
- ***************************************************************************/
+ *   Licensed under the GPL-2 or later.
+ */
 
 #include <sys/ioctl.h>
 #include <stdio.h>
@@ -39,24 +20,13 @@
 #include <getopt.h>
 #include <string.h>
 #include <strings.h>
-
-#ifdef TM_IN_SYS_TIME
 #include <sys/time.h>
-#else
 #include <time.h>
-#endif
 
+#include "i2c.h"
 #include "gpio.h"
 #include "adsp-ppifcd.h"
 
-extern int i2c_write_register(char *, unsigned char, unsigned char,
-			      unsigned short);
-extern int i2c_read_register(char *, unsigned char, unsigned char);
-extern int i2c_dump_register(char *, unsigned char, unsigned short,
-			     unsigned short);
-extern int i2c_scan_bus(char *);
-
-int set_gpio(char *, char *);
 int WriteIMG(char *, unsigned long);
 
 #define I2C_DEVICE      "/dev/i2c-0"
@@ -240,37 +210,37 @@ long calculate_total_frame_time(void)
 	total_frame_time = (i2c_read_register(I2C_DEVICE, DEVID, 0x03) + 1
 			    + i2c_read_register(I2C_DEVICE, DEVID, 0x06) + 1)
 	    * row_time;
-	printf
-	    ("************* Calculated Times Based on the actual Camera setting *************\n");
+	printf("************* Calculated Times Based on the actual Camera setting *************\n");
 	printf("Master Clock = \t\t%d MHz \n", MASTERCLOCK);
-	printf
-	    ("row_time = \t\t%d pixel clocks\ntotal_frame_time = \t%d pixel clocks\ntotal_frame_time = \t%d usec\n",
-	     row_time, total_frame_time, total_frame_time / MASTERCLOCK);
-	printf
-	    ("*******************************************************************************\n");
+	printf("row_time = \t\t%ld pixel clocks\n"
+	       "total_frame_time = \t%ld pixel clocks\n"
+	       "total_frame_time = \t%ld usec\n",
+	       row_time, total_frame_time, total_frame_time / MASTERCLOCK);
+	printf("*******************************************************************************\n");
 
 	return 0;
 }
 
-void usage(FILE * fp, int rc)
+void usage(FILE *fp, int rc)
 {
 	fprintf(fp,
-		"Usage: ppifcd_test [-h?vt] [-c count] [-r REG -a REGVALUE] [BMP output filename]\n");
-	fprintf(fp, "        -h?            this help\n");
-	fprintf(fp, "        -v             print version info\n");
-	fprintf(fp,
-		"        -t             user trigger strobe to capture image\n");
-	fprintf(fp, "        -c count       repeat count times\n");
-	fprintf(fp, "        -r REG         I2C register\n");
-	fprintf(fp, "        -a VAL         I2C value\n");
-	fprintf(fp, "        -b             STAMP board < 533 | 537 >\n");
+		"Usage: ppifcd_test [-h?vt] [-c count] [-r REG -a REGVALUE] [BMP output filename]\n"
+		"        -h?            this help\n"
+		"        -v             print version info\n"
+		"        -t             user trigger strobe to capture image\n"
+		"        -c count       repeat count times\n"
+		"        -r REG         I2C register\n"
+		"        -a VAL         I2C value\n"
+		"        -b             STAMP board < 533 | 537 >\n"
+	);
 	exit(rc);
 }
 
 void mydelay(unsigned int delay)
 {
 	clock_t goal = delay * CLOCKS_PER_SEC / 1000 + clock();
-	while (goal > clock()) ;
+	while (goal > clock())
+		continue;
 }
 
 int main(int argc, char *argv[])
@@ -329,7 +299,7 @@ int main(int argc, char *argv[])
 		standby = BF533_MICRON_STANDBY;
 		led = BF533_MICRON_LED;
 		trigger_strobe = BF533_MICRON_TRIGGER_STROBE;
-		
+
 		if (usetrigger) {
 			fprintf(stderr, "ERROR:Trigger option unsupported on BF533-STAMP\n");
 			usetrigger = 0;
@@ -358,7 +328,7 @@ int main(int argc, char *argv[])
 	offset = getoffset();
 
 	gpio_value(standby, 0);
-	
+
 	if (board == 533) {
 		if(gpio_export(FS3)) {
 			printf("open error gpio%d\n", FS3);
@@ -391,7 +361,7 @@ int main(int argc, char *argv[])
 	fd = open(PPI_DEVICE, O_RDONLY, 0);
 	if (fd == -1) {
 
-		printf("Could not open dev\/ppi : %d \n", errno);
+		printf("Could not open dev/ppi : %d \n", errno);
 		free(buffer);
 		exit(1);
 	}
@@ -458,7 +428,7 @@ int main(int argc, char *argv[])
 		(void)close(fd);
 		printf
 		    ("*******************************************************************************\n");
-		printf("Saved: %s \nSize : %d\n", filename,
+		printf("Saved: %s \nSize : %zu\n", filename,
 		       IMAGESIZE + sizeof(bmphead));
 		printf
 		    ("*******************************************************************************\n");
