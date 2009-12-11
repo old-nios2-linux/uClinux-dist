@@ -370,8 +370,6 @@ int main(int argc, char *argv[])
 
 	gpio_value(led, 1);
 
-	gpio_value(standby, 1);
-
 	if (usetrigger) {
 		i2c_write_register(I2C_DEVICE, DEVID, 0x1E, 0x8100);
 		mydelay(36);
