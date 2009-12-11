@@ -106,12 +106,17 @@ config USER_LMBENCH
 	bool "lmbench"
 config USER_BLKFIN_APPS_DEVFBAPP_DEVTEST
 	bool "devfbapp"
-config USER_INETUTILS_RSH
-	bool "rsh"
+config USER_INETUTILS
+	bool "inetutils"
 config USER_INETUTILS_RCP
-	bool "rcp"
+        bool "rcp"
+        depends on USER_INETUTILS
+config USER_INETUTILS_RSH
+        bool "rsh"
+        depends on USER_INETUTILS
 config USER_INETUTILS_RSHD
-	bool "rshd"
+        bool "rshd"
+        depends on USER_INETUTILS
 config USER_BF561_COREBLD
 	bool "BF561 Core B support tools"
 config USER_DSP_BRIDGE

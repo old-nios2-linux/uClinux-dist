@@ -4,9 +4,7 @@ dir_  =
 
 dir_$(CONFIG_USER_BLACKFIN_PPIFCDCGI)            += ppifcd-cgi
 dir_$(CONFIG_USER_BLKFIN_APPS_DEVFBAPP_DEVTEST)  += devfbapp
-dir_$(CONFIG_USER_INETUTILS_RCP)                 += inetutils
-dir_$(CONFIG_USER_INETUTILS_RSH)                 += inetutils
-dir_$(CONFIG_USER_INETUTILS_RSHD)                += inetutils
+dir_$(CONFIG_USER_INETUTILS)                     += inetutils
 dir_$(CONFIG_USER_LMBENCH)                       += lmbench3
 dir_$(CONFIG_USER_BF561_COREBLD)                 += corebld
 dir_$(CONFIG_USER_POUND)                         += pound
