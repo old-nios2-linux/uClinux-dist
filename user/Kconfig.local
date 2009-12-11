@@ -87,11 +87,11 @@ config FIXED_CODE_TEST
 config DYNTICK_TEST
 	bool "Dynamic Tick Test"
 config BFIN_DMA
-        bool "bfin-dma test"
+	bool "bfin-dma test"
 config XIP_TEST
-        bool "xip test"
+	bool "xip test"
 config BOUNDARY_ANOMALY_TEST
-        bool "boundary fetches anomaly test"
+	bool "boundary fetches anomaly test"
 endmenu
 
 
@@ -109,14 +109,14 @@ config USER_BLKFIN_APPS_DEVFBAPP_DEVTEST
 config USER_INETUTILS
 	bool "inetutils"
 config USER_INETUTILS_RCP
-        bool "rcp"
-        depends on USER_INETUTILS
+	bool "rcp"
+	depends on USER_INETUTILS
 config USER_INETUTILS_RSH
-        bool "rsh"
-        depends on USER_INETUTILS
+	bool "rsh"
+	depends on USER_INETUTILS
 config USER_INETUTILS_RSHD
-        bool "rshd"
-        depends on USER_INETUTILS
+	bool "rshd"
+	depends on USER_INETUTILS
 config USER_BF561_COREBLD
 	bool "BF561 Core B support tools"
 config USER_DSP_BRIDGE
