@@ -597,29 +597,29 @@ config USER_BUSYBOX_PREFIX
 
 endmenu
 
-source ../user/busybox/busybox-1.15.2/libbb/Kconfig
+source ../user/busybox/busybox-1.15.3/libbb/Kconfig
 
 endmenu
 
 comment "Applets"
 
-source ../user/busybox/busybox-1.15.2/archival/Kconfig
-source ../user/busybox/busybox-1.15.2/coreutils/Kconfig
-source ../user/busybox/busybox-1.15.2/console-tools/Kconfig
-source ../user/busybox/busybox-1.15.2/debianutils/Kconfig
-source ../user/busybox/busybox-1.15.2/editors/Kconfig
-source ../user/busybox/busybox-1.15.2/findutils/Kconfig
-source ../user/busybox/busybox-1.15.2/init/Kconfig
-source ../user/busybox/busybox-1.15.2/loginutils/Kconfig
-source ../user/busybox/busybox-1.15.2/e2fsprogs/Kconfig
-source ../user/busybox/busybox-1.15.2/modutils/Kconfig
-source ../user/busybox/busybox-1.15.2/util-linux/Kconfig
-source ../user/busybox/busybox-1.15.2/miscutils/Kconfig
-source ../user/busybox/busybox-1.15.2/networking/Kconfig
-source ../user/busybox/busybox-1.15.2/printutils/Kconfig
-source ../user/busybox/busybox-1.15.2/mailutils/Kconfig
-source ../user/busybox/busybox-1.15.2/procps/Kconfig
-source ../user/busybox/busybox-1.15.2/runit/Kconfig
-source ../user/busybox/busybox-1.15.2/selinux/Kconfig
-source ../user/busybox/busybox-1.15.2/shell/Kconfig
-source ../user/busybox/busybox-1.15.2/sysklogd/Kconfig
+source ../user/busybox/busybox-1.15.3/archival/Kconfig
+source ../user/busybox/busybox-1.15.3/coreutils/Kconfig
+source ../user/busybox/busybox-1.15.3/console-tools/Kconfig
+source ../user/busybox/busybox-1.15.3/debianutils/Kconfig
+source ../user/busybox/busybox-1.15.3/editors/Kconfig
+source ../user/busybox/busybox-1.15.3/findutils/Kconfig
+source ../user/busybox/busybox-1.15.3/init/Kconfig
+source ../user/busybox/busybox-1.15.3/loginutils/Kconfig
+source ../user/busybox/busybox-1.15.3/e2fsprogs/Kconfig
+source ../user/busybox/busybox-1.15.3/modutils/Kconfig
+source ../user/busybox/busybox-1.15.3/util-linux/Kconfig
+source ../user/busybox/busybox-1.15.3/miscutils/Kconfig
+source ../user/busybox/busybox-1.15.3/networking/Kconfig
+source ../user/busybox/busybox-1.15.3/printutils/Kconfig
+source ../user/busybox/busybox-1.15.3/mailutils/Kconfig
+source ../user/busybox/busybox-1.15.3/procps/Kconfig
+source ../user/busybox/busybox-1.15.3/runit/Kconfig
+source ../user/busybox/busybox-1.15.3/selinux/Kconfig
+source ../user/busybox/busybox-1.15.3/shell/Kconfig
+source ../user/busybox/busybox-1.15.3/sysklogd/Kconfig
