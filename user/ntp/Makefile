@@ -1,25 +1,8 @@
-VER := ntp-4.2.4p7
+VER = ntp-4.2.6
 
 # the ipv6 test passes compile but fails on link
 export ac_cv_have_in6addr_any = no
-
-ifdef CONFIG_USER_NTPD_NTPDATE
-NTPDATE := with
-else
-NTPDATE := without
-endif
-
-ifdef CONFIG_USER_NTPD_NTPDC
-NTPDC := with
-else
-NTPDC := without
-endif
-
-ifdef CONFIG_USER_NTPD_NTPQ
-NTPQ := with
-else
-NTPQ := without
-endif
+export isc_cv_have_in6addr_any = no
 
 CONF_OPTS = \
 	--disable-debugging	\
@@ -40,8 +23,10 @@ CONF_OPTS = \
 	--disable-SCHMID --disable-TRIMTAIP --disable-TRIMTSIP             \
 	--disable-WHARTON --disable-VARITEXT --disable-kmem                \
 	--without-openssl-libdir --without-openssl-incdir --without-crypto \
-	--without-electricfence --without-sntp --$(NTPDATE)-ntpdate \
-	--$(NTPDC)-ntpdc --$(NTPQ)-ntpq
+	--without-electricfence --without-sntp \
+	$(call USE_WITH,USER_NTPD_NTPDATE,ntpdate) \
+	$(call USE_WITH,USER_NTPD_NTPDC,ntpdc) \
+	$(call USER_NTPD_NTPQ,ntpq)
 
 include $(ROOTDIR)/tools/autotools.mk
 
