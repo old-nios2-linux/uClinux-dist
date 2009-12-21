@@ -5,7 +5,8 @@ VER = a6d05eb5ff9d5062852cdf7df574bec728921ef9
 CONF_OPTS = \
 	--without-ogg \
 	--enable-blackfin-asm \
-	--enable-fixed-point
+	--enable-fixed-point \
+	--disable-vbr
 
 include $(ROOTDIR)/tools/autotools.mk
 include $(ROOTDIR)/tools/gitweb.mk
