@@ -31,7 +31,7 @@
 
 #include <core/surface_pool_bridge.h>
 
-extern const SurfacePoolBridgeFuncs x11SurfacePoolBridgeFuncs;
+extern const SurfacePoolBridgeFuncs x11SurfacePoolBridgeFuncs D_HIDDEN;
 
 #endif
 
