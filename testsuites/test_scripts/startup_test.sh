@@ -4,7 +4,7 @@ USER=/home/test/work/cruise
 CHECKOUT=$USER/checkouts
 
 PROTOCOL=svn
-SVN_SERVER=10.99.22.20
+SVN_SERVER=10.99.29.20
 
 DO_SWITCH=1
 INDEX=2
