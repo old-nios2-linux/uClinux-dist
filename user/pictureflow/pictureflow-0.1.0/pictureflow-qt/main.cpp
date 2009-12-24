@@ -30,6 +30,12 @@
 #include <qfileinfo.h>
 #include <qimage.h>
 
+#ifdef QT_STATIC_PLUGIN
+#include <qplugin.h>
+
+Q_IMPORT_PLUGIN(qjpeg)
+#endif
+
 #if QT_VERSION >= 0x040000
 #include <QTime>
 #endif
