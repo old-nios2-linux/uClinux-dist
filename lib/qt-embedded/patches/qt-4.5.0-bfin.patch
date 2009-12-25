@@ -10,9 +10,9 @@ http://trolltech.com/developer/task-tracker/index_html?id=239094&method=entry
 +include(../linux-generic-g++/qmake.conf)
 +
 +QMAKE_CC          = bfin-linux-uclibc-gcc
-+QMAKE_CFLAGS     += -DQT_LINUX_NOMMU -DQT_STATIC_PLUGIN
++QMAKE_CFLAGS     += -DQT_LINUX_NOMMU
 +QMAKE_CXX         = bfin-linux-uclibc-g++
-+QMAKE_CXXFLAGS   += -DQT_LINUX_NOMMU -DQT_STATIC_PLUGIN
++QMAKE_CXXFLAGS   += -DQT_LINUX_NOMMU
 +QMAKE_LINK        = bfin-linux-uclibc-g++
 +QMAKE_LINK_SHLIB  = bfin-linux-uclibc-g++
 +QMAKE_AR          = bfin-linux-uclibc-ar cqs
