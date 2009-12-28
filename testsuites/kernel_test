@@ -506,8 +506,13 @@ fi
   ####################            AUTOMATED TESTING             ###############################
   #############################################################################################
  
-for i in `seq 0 83`
+for i in `seq 0 $n`
 do
+
+  if [ -z ${AUTO_TESTCASE[$i]} ] ; then
+  continue
+  fi
+
   if [ ${AUTO_RUN_STATUS[$i]} -eq 1  ] ; then
   
   echo  "Start testing ${AUTO_TESTCASE[$i]}..."
@@ -2121,8 +2126,13 @@ fi
   ###########################          MANUAL TEST          ######################################
   ################################################################################################
     
-for i in `seq 0 27`
-  do
+for i in `seq 0 $n`
+do
+
+  if [ -z ${MANUAL_TESTCASE[$i]} ] ; then
+  continue
+  fi
+
   if [ ${MANUAL_RUN_STATUS[$i]} -eq 1  ] ; then
   
   echo  "Start testing ${MANUAL_TESTCASE[$i]}..."
@@ -2183,8 +2193,8 @@ for i in `seq 0 27`
 
   echo  "End testing ${MANUAL_TESTCASE[$i]}..."
   fi
-  done
+done
   
  
- echo  "Testing Done."
- exit 0
+echo  "Testing Done."
+exit 0
