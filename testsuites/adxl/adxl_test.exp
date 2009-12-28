@@ -1,10 +1,27 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source ../board_info.exp
-log_file [log_file_name "$argv0"]
+
+set port_config "i2c"
+
+if { $argc >= 2} {
+set port_config [lindex $argv 1]
+}
+
+log_file [log_file_name $argv0.$port_config ]
+
+source  ../board_info.exp
 send_user "Starting $argv0\n"
+
+if { $port_config == "i2c" || $port_config == "spi" } {
+send_log "\n#### Port config is $port_config.\n"
+} else {
+send_log "\n#### This config $port_config is not supported. Sorry.\n"
+exit
+}
+
 set TITLE [title "$argv0"]
+append TITLE " ($port_config)"
 
 step "Start kermit."
 source ../spawn_kermit.exp
@@ -60,7 +77,7 @@ incr case_num
 send -s "cat /proc/interrupts\r" 
 while 1 {
    expect {
-      -re ".*$kernel_prompt" { 
+      -re "140.*$kernel_prompt" { 
                 case_pass $case_num
          break
       }
