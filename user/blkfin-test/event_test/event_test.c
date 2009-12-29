@@ -29,6 +29,7 @@
 
 #include <linux/input.h>
 #include <linux/version.h>
+#include <errno.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -236,7 +237,8 @@ int main (int argc, char **argv)
 	}
 
 	if ((fd = open(argv[argc - 1], O_RDONLY)) < 0) {
-		perror(argv[0]);
+		fprintf(stderr, "%s: open(%s): %s\n", argv[0], argv[argc - 1],
+			strerror(errno));
 		exit(1);
 	}
 
@@ -260,7 +262,7 @@ int main (int argc, char **argv)
 		if (test_bit(i, bit[0])) 
         {
 			printf("  Event type %d (%s)\n", i, events[i] ? events[i] : "?");
-			ioctl(fd, EVIOCGBIT(i, KEY_MAX), bit[i]);
+			ioctl(fd, EVIOCGBIT(i, EV_MAX), bit[i]);
 			for (j = 0; j < KEY_MAX; j++) 
             {
 				if (test_bit(j, bit[i])) 

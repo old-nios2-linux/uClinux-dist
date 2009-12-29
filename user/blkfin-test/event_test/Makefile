@@ -1,13 +1,12 @@
-EXEC = event_test
-OBJS = evtest.o
+CFLAGS ?= -g -O2
+CFLAGS += -Wall
 
-all: $(EXEC)
-
-$(EXEC): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBM) $(LDLIBS) $(LIBGCC)
+all: event_test
 
 romfs:
-	$(ROMFSINST) /bin/$(EXEC)
+	$(ROMFSINST) /bin/event_test
 
 clean:
-	-rm -f $(EXEC) *.elf *.gdb *.o
+	rm -f event_test *.elf *.gdb *.o
+
+.PHONY: all clean romfs
