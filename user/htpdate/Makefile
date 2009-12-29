@@ -4,8 +4,7 @@ all:
 	$(MAKE) -e -C $(VERS)
 
 romfs:
-	$(ROMFSINST) -d $(VERS)/httping /usr/bin/httping
-	cp $(VERS)/httping.1 $(STAGEDIR)/usr/share/man/man1/httping.1
+	$(ROMFSINST) -e CONFIG_USER_HTPDATE $(VERS)/htpdate /bin/htpdate
 
 clean:
 	$(MAKE) -C $(VERS) clean
