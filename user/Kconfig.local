@@ -40,8 +40,6 @@ config USER_BLACKFIN_PANICTEST
 	bool "Kernel Panic (test Watchdog)"
 config USER_BLACKFIN_TRAPSTEST
 	bool "Trap tests"
-config USER_NETPERF_TEST
-	bool "netperf test tool"
 config USER_SYSVIPC_TEST
 	bool "SYSVIPC testcase"
 config YET

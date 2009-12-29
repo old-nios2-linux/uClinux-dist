@@ -20,7 +20,6 @@ dir_$(CONFIG_USER_BLACKFIN_PPI)             += ppi-test
 dir_$(CONFIG_USER_BLACKFIN_PTHREADTEST)     += pthread_test
 dir_$(CONFIG_USER_BLACKFIN_PANICTEST)       += crash_test
 dir_$(CONFIG_USER_BLACKFIN_TRAPSTEST)       += crash_test
-dir_$(CONFIG_USER_NETPERF_TEST)             += netperf-bfin
 dir_$(CONFIG_USER_SYSVIPC_TEST)             += sysv_ipc_test
 dir_$(CONFIG_EVENT_TEST)                    += event_test
 dir_$(CONFIG_FILE_OPERATION_TEST)           += file_operation-test
