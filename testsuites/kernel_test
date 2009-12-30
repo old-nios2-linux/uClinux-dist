@@ -351,12 +351,12 @@ if [ $BOARD_CONFIG = "BF548-EZKIT-USBDEV" ] ; then
 
     BOARD_TYPE=BF548-EZKIT
 
-    for i in `seq 0 80`;
+    for i in `seq 0 $n`;
     do
         AUTO_RUN_STATUS[$i]=0
         AUTO_RUN_STATUS[$(( n + i ))]="0"
     done
-    for i in `seq 0 27`;
+    for i in `seq 0 $n`;
     do
         MANUAL_RUN_STATUS[$i]=0
         MANUAL_RUN_STATUS[$(( n + i ))]="0"
@@ -371,12 +371,12 @@ if [ $BOARD_CONFIG = "BF527-EZKIT-USBDEV" ] ; then
 
     BOARD_TYPE=BF527-EZKIT
 
-    for i in `seq 0 80`;
+    for i in `seq 0 $n`;
     do
         AUTO_RUN_STATUS[$i]=0
         AUTO_RUN_STATUS[$(( n + i ))]="0"
     done
-    for i in `seq 0 27`;
+    for i in `seq 0 $n`;
     do
         MANUAL_RUN_STATUS[$i]=0
         MANUAL_RUN_STATUS[$(( n + i ))]="0"
