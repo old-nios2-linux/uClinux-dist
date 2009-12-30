@@ -1,0 +1,132 @@
+#!/usr/bin/expect
+
+source  ../kernel_config.exp
+source  ../board_info.exp
+log_file [log_file_name "$argv0"]
+send_user "Starting $argv0\n"
+set TITLE [title "$argv0"]
+
+set format [lindex $argv 1]
+send_user "\n#### binary format is $format\n"
+
+if { $argc < 2} {
+    puts "Please input:board_type, binary format (FDPIC or SHARED-FLAT)"
+    exit
+}
+append TITLE " ($format)"
+
+step "Spawn kermit"
+source ../spawn_kermit.exp
+
+step "Start testing."
+
+set case_num 0
+incr case_num
+
+send_user "Try to figure out if we are in u-boot or the kernel"
+set where_are_we 0
+send "version\r"
+set timeout 20
+expect {
+    "U-Boot" {
+        send_user "We are in u-boot\n"
+        set where_are_we "uboot"
+    }
+
+    "Linux" {
+        send_user "We are in the kernel\n"
+        set where_are_we "kernel"
+    }
+
+    timeout {
+        send_user "Can't tell if we are in u-boot or the kernel\n"
+    }
+}
+
+if { $where_are_we == "uboot" } {
+    set timeout 50
+    expect ">"
+    send_user "sending reset\n"
+    send "reset\r"
+} else {
+    if { $where_are_we == "kernel" } {
+        set timeout 60
+        expect ">"
+        send_user "sending reboot\n"
+        send "reboot\r"
+    } else {
+        set timeout 10
+        expect "*"
+        expect "*"
+        send_user "sending control-C\n"
+        send "\3"
+        sleep 1
+        send "\r"
+    }
+}
+
+while 1 {
+    expect {
+        "Hit any key " {
+            send "\r"
+        }
+
+        ">" {
+            send_user "successful reset attemp\n"
+            break
+        }
+
+        timeout {
+            send_user "failed reset attemp\n"
+            break
+        }
+    }
+}
+
+if { $board_type == "BF548-EZKIT" || $board_type == "BF526-EZBRD" } {
+    send -s "set bootargs root=mtd3 rootfstype=romfs ro console=ttyBF0,57600\r"
+} else {
+    send -s "set bootargs root=mtd0 rootfstype=romfs ro console=ttyBF0,57600\r"
+}
+expect ">"
+
+send -s "tftpboot 0x1000000 $kernel_and_romfs_image\r"
+while 1 {
+    expect {
+        "#" {
+            expect ">"
+            break
+        }
+        timeout {
+            puts "Fail tftp"
+            break
+        }
+    }
+}
+
+send -s "bootm\r"
+
+set timeout 180
+while 1 {
+    expect {
+        -re "Kernel panic" {
+            case_fail $case_num
+        }
+
+        -re "VFS: Mounted root.*romfs filesystem.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+
+        timeout {
+            send_user "boot timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
+all_pass
+
+send_user "Ending $argv0\n"
+
+log_file

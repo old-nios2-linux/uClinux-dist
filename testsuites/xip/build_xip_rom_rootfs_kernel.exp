@@ -17,6 +17,8 @@ if { $argc < 2} {
     exit
 }
 
+set HAVE_ROMFS_IMAGE 1
+
 cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
@@ -34,30 +36,6 @@ while 1 {
             send "y\r"
         }
 
-        -re "Initial RAM filesystem and RAM disk.*BLK_DEV_INITRD.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Detect flash chips by Common Flash Interface.*MTD_CFI.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Support for AMD.*flash chips.*MTD_CFI_AMDSTD.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Support for ROM chips in bus mapping.*MTD_ROM.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Miscellaneous filesystems \\\(MISC_FILESYSTEMS.*\\\[.*]" {
-            send "Y\r"
-        }
-
         -re "ROM file system support.*ROMFS_FS.*\\\[.*]" {
             send "Y\r"
         }
@@ -70,7 +48,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "xip test.*XIP_TEST.*\\\[.*]" {
+        -re "Generic uClinux RAM/ROM filesystem support \\\(MTD_UCLINUX\\\).*\\\[.*]" {
             send "Y\r"
         }
 
