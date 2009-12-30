@@ -1738,6 +1738,54 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
 
     done
 
+    for format in $APP_FORMAT
+    do
+
+        FORMAT=`echo $format|tr 'a-z' 'A-Z'`
+        echo  "Testing xip_rom_rootfs in $format..."
+
+        rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
+        cd $UCLINUX_DIST_PATH/
+        cp -a  $UCLINUX_DIST_PATH_BAK/linux-2.6.x  .
+        cp $UCLINUX_DIST_PATH_BAK/config/.config config
+        cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
+        rm -rf romfs/ images/
+
+        cd $UCLINUX_DIST_PATH/
+        make clean > /dev/null 2>&1
+
+        cd $UCLINUX_DIST_TESTSUITES/xip
+        ./build_xip_rom_rootfs_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
+        if [ ! -f $UCLINUX_DIST_PATH/images/uImage.romfs ]
+        then
+            echo "$0:   Error, failed."
+            tail -50 ./build_xip_rom_rootfs_kernel_log
+        else
+            sleep 30
+            ./xip_rom_rootfs_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
+        fi
+
+        cp $UCLINUX_DIST_PATH/images/uImage.romfs $THIS_LOG/uImage.romfs.xip_rom_rootfs.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.xip_rom_rootfs.$format
+        mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_rom_rootfs_kernel_log $THIS_LOG/build_xip_rom_rootfs_${format}_kernel_log
+        mv $UCLINUX_DIST_TESTSUITES/xip/xip_rom_rootfs_test_log $THIS_LOG/xip_rom_rootfs_${format}_test_log
+
+        #make sure kernel can boot up before next xip test
+        cp $THIS_LOG/uImage.policy /tftpboot/linux
+
+        cd $UCLINUX_DIST_PATH/
+        make clean > /dev/null 2>&1
+
+        sleep 30
+
+        if [ $RESET_BOARD -eq 1  ] ; then
+            cd $UCLINUX_DIST_TESTSUITES
+            ./reset_board.exp  >/dev/null  2>&1
+            sleep 10
+        fi
+
+    done
+
 fi
 
 
