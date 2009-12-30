@@ -55,8 +55,12 @@ while 1 {
             send "N\r"
         }
 
-        -re "netperf test tool.*USER_NETPERF_TEST.*\\\[.*]" {
-            send "N\r"
+        -re "netperf.*USER_NETPERF_NETPERF.*\\\[.*]" {
+            send -s "N\r"
+        }
+
+        -re "netserver.*USER_NETPERF_NETSERVER.*\\\[.*]" {
+            send -s "N\r"
         }
 
         -re "strace.*USER_STRACE_STRACE.*\\\[.*]" {

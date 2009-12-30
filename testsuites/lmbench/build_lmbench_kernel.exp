@@ -8,7 +8,7 @@ send_user "Starting $argv0\n"
 if { $board_type == "BF548-EZKIT" } {
     set env(EXT2_BLOCKS) "18432"
 } else {
-    set env(EXT2_BLOCKS) "12288"
+    set env(EXT2_BLOCKS) "16384"
 }
 
 cd $uclinux_path/testsuites

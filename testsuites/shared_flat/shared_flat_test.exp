@@ -75,7 +75,7 @@ while 1 {
      }
 }
 
-if { $rcp_size > 8000  &&  $rcp_size < 12000 } {
+if { $rcp_size > 8000  &&  $rcp_size < 14000 } {
 
 send_log "\n"
 send_log "\n$TITLE ............\[PASS\]\n" 
