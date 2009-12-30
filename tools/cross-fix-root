@@ -1,7 +1,6 @@
 #!/bin/sh
 # Copyright 2008-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Header: $
 
 #
 # fix library perms, mung paths in pkg-config files, libtool linker scripts,
@@ -46,8 +45,12 @@ if [ -d "${LIBDIR}" ] ; then
 			-e "/^dependency_libs=/s: /usr/lib/: ${SYSROOT}/usr/lib/:g"
 fi
 
-if [ -d "${LIBDIR}/pkgconfig" ] ; then
-	find "./${LIBDIR}/pkgconfig/" ./usr/share/pkgconfig/ -name '*.pc' -print0 | xargs -0 -r \
+set --
+for d in "./${LIBDIR}/pkgconfig/" ./usr/share/pkgconfig/ ; do
+	[[ -d $d ]] && set -- "$@" "${d}"
+done
+if [ $# -gt 0 ] ; then
+	find "$@" -name '*.pc' -print0 | xargs -0 -r \
 		sed -i -r -e "/^(exec_)?prefix=/s:=/usr\$:='${SYSROOT}/usr':"
 fi
 
