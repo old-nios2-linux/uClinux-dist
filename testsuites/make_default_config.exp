@@ -24,10 +24,6 @@ while 1 {
             }
         }
 
-        -re "MMC/SD/SDIO card support \\\(MMC\\\) \\\[.*]" {
-            send "N\r"
-        }
-
         "\\\(*) \\\[*]" {
             sleep .01
             send "\r"

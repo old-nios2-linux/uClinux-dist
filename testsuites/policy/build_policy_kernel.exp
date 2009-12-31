@@ -211,10 +211,6 @@ while 1 {
             }
         }
 
-        -re "MMC/SD/SDIO card support \\\(MMC\\\) \\\[.*]" {
-            send "N\r"
-        }
-
         -re "strace.*USER_STRACE_STRACE.*\\\[.*]" {
             send "N\r"
         }
