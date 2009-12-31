@@ -60,14 +60,18 @@ expect -re  $sh_prompt
 set timeout 10
 send -s "ps aux | grep bfin-uclinux-gdb\r"
 expect {
-    -re  $sh_prompt
-    timeout
+    -re  $sh_prompt { }
+    timeout {
+    send_log "Fails to get bfin-uclinux-gdb process id!"
+    }
 }
 
 send -s "kill -9 `pidof  bfin-uclinux-gdb`\r"
 expect {
-    -re  $sh_prompt
-    timeout
+    -re  $sh_prompt { }
+    timeout { 
+    send_log "Fails to kill bfin-uclinux-gdb process id!"
+    }
 }
 
 }
