@@ -215,6 +215,10 @@ while 1 {
             send "N\r"
         }
 
+        -re "strace.*USER_STRACE_STRACE.*\\\[.*]" {
+            send "N\r"
+        }
+
         "\\\(*) \\\[*]" {
             sleep .05
             send "\r"
