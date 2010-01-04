@@ -3645,6 +3645,7 @@ static int checkjobs(struct pipe* fg_pipe)
 						if (WIFSIGNALED(status)) {
 							int sig = WTERMSIG(status);
 							printf("%s\n", sig == SIGINT ? "" : get_signame(sig));
+							rcode = sig + 128;
 						}
 					}
 				} else {
