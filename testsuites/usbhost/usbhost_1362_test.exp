@@ -159,21 +159,6 @@ send "mkdir -p /mnt/a; mkdir -p /mnt/b\r"
 expect  -re $kernel_prompt
 
 set case_num 0
-incr case_num
-
-set timeout 10
-send "dmesg\r"
-while 1 {
-    expect {
-       -re "sda.*device scan complete.*sdb.*device scan complete.*>" {
-           case_pass $case_num
-           break
-       }
-       timeout {
-           case_fail $case_num
-       }
-    }
-}
 
 incr case_num
 set timeout 10
