@@ -43,7 +43,7 @@ while 1 {
         -re "(\[dD]one|\[fF]ail|\[eE]rror).*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "Bluetooth HCI daemon.*$kernel_prompt" {
+        -re "Bluetooth HCI daemon" {
             case_pass $case_num
             break
         }
