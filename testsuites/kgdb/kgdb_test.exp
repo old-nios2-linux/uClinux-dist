@@ -402,7 +402,7 @@ if {  $core_config != "SMP" } {
 		}
 	}
         incr case_num
-        send "break 33\r"
+        send "break 34\r"
         expect {
               -re  "Breakpoint 4 at 0xffa0\[0-9a-f]{4}" {
                 case_pass $case_num
