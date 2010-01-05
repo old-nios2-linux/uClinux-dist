@@ -1,4 +1,4 @@
-VER = readline-6.0
+VER = readline-6.1
 URL = ftp://ftp.gnu.org/gnu/readline/$(VER).tar.gz
 
 CONF_OPTS = \
