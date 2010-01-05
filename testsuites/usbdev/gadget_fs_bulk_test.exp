@@ -262,7 +262,7 @@ while 1 {
         -re "panic|\[fF]ail|\[eE]rror" {
             case_fail $case_num
         }
-        -re "gadgetfs: connected.*simple_source_thread start.*simple_sink_thread start.*SETUP.*" {
+        -re "gadgetfs: connected.*thread start.*thread start.*SETUP.*" {
             case_pass $case_num
             break
         }
