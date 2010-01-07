@@ -267,9 +267,6 @@ while 1 {
             case_fail $case_num
         }
         -re $kernel_prompt {
-            sleep 1
-            send "\r"
-            expect -nocase "Done"
             case_pass $case_num
             break
         }
@@ -278,6 +275,9 @@ while 1 {
         }
     }
 }
+
+send "ps ax\r"
+expect -re $kernel_prompt
 
 set timeout 20
 incr case_num
