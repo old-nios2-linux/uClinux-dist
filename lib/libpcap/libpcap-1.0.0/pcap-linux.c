@@ -93,7 +93,7 @@ static const char rcsid[] _U_ =
 #include <sys/ioctl.h>
 #include <sys/utsname.h>
 #include <sys/mman.h>
-#include <net/if.h>
+#include <linux/if.h>
 #include <netinet/in.h>
 #include <linux/if_ether.h>
 #include <net/if_arp.h>
