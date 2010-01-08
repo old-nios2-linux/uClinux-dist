@@ -58,6 +58,9 @@ proc standby_test_case {} {
             }
         }
     }
+
+    set timeout 5
+    expect -re "Full\r\n|lpa 0x41E1\r\n"
 }
 
 
