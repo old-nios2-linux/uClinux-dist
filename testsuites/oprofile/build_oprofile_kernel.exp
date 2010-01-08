@@ -48,7 +48,6 @@ while 1 {
 
         -re "Profiling support.*PROFILING.*\\\[.*]" {
             send "Y\r"
-            sleep .05
         }
 
         -re "OProfile system profiling.*OPROFILE.*\\\[.*]" {
@@ -104,53 +103,6 @@ while 1 {
     }
 }
 
-set timeout 300
-spawn make config
-while 1 {
-    expect {
-
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -re "Profiling support.*PROFILING.*\\\[.*]" {
-            send "Y\r"
-            sleep .05
-        }
-
-        -re "OProfile system profiling.*OPROFILE.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .01
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
 cd $uclinux_path/testsuites
 
 step "Make"
@@ -162,7 +114,6 @@ cd $uclinux_path/testsuites
 step "Copy linux"
 
 source   copy_image.exp
-
 
 send_user "Ending $argv0\n"
 
