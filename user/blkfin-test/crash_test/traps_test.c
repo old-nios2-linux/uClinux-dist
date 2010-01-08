@@ -55,7 +55,7 @@ static const char *progname;
 #define err(fmt, args...)           do { _stderr("error", fmt, ## args); exit(EXIT_FAILURE); } while (0)
 #define errp(fmt, args...)          do { _stderrp("error", fmt, ## args); exit(EXIT_FAILURE); } while (0)
 
-const char *seqstat_path = "/sys/kernel/debug/blackfin/Core Registers/seqstat";
+const char *seqstat_path = "/sys/kernel/debug/blackfin/Core Registers/last_seqstat";
 
 #ifdef __FDPIC__
 # define _get_func_ptr(addr) ({ unsigned long __addr[2] = { addr, 0 }; __addr; })
