@@ -36,6 +36,13 @@ static void usage(void)
 	printf("\theadsetd [-n not_daemon]\n");
 }
 
+#ifdef __uClinux__
+static void _daemon(int nochdir, int noclose)
+{
+	daemon(nochdir, noclose);
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	int opt;
@@ -56,16 +63,12 @@ int main(int argc, char **argv)
 
 	if (daemonize) {
 #ifdef __uClinux__
-		int ret = vfork();
-		if (ret > 0) {
-			_exit(0);
-		}
+		_daemon(0, 0);
 #else
 		int ret = fork();
 		if (ret > 0) {
 			exit(0);
 		}
-#endif
 		else if(ret < 0) {
 			perror("Unable to fork");
 			exit(1);
@@ -81,6 +84,7 @@ int main(int argc, char **argv)
 	
 			chdir("/");
 		}
+#endif
 	}
 
 	umask(0077);
