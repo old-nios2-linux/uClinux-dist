@@ -1,7 +1,7 @@
 # XXX: make sure to delete "build.h" in source tree
 VER = DirectFB-1.4.2
 
-export LIBPNG_CONFIG="$(PKG_CONFIG) libpng"
+export ac_cv_path_LIBPNG_CONFIG = $(PKG_CONFIG) libpng
 
 CONF_OPTS = \
 	--with-tests \
