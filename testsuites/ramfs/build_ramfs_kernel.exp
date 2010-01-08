@@ -30,6 +30,10 @@ while 1 {
              send "y\r"
       }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
        "\\\(*) \\\[*]" {
 	     send "\r"
       }
@@ -63,9 +67,3 @@ source   copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
-
-
-
-
-
- 

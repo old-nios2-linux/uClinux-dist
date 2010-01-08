@@ -123,7 +123,8 @@ while 1 {
             send "Y\r"
         }
 
-         -nocase -re  " \\\(.*\\\) \\\[\[^\r]*] (\[ymn])" {
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         "\\\(*) \\\[*]" {

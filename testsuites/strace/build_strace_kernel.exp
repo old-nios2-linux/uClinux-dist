@@ -18,6 +18,10 @@ spawn make config
 while 1 {
     expect {
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         "\\\(*) \\\[*]" {
             send "\r"
         }
@@ -57,6 +61,10 @@ while 1 {
 
         -re "strace.*USER_STRACE_STRACE.*\\\[.*]" {
             send "Y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         "\\\(*) \\\[*]" {

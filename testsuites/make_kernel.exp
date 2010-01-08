@@ -9,13 +9,16 @@ while 1 {
         -re "Timer benchmark driver.*XENO_DRIVERS_TIMERBENCH.*\\\[.*]" {
             send "Y\r"
         }
+
         "\\\(*) \\\[*] \\\(NEW)" {
             sleep .01
             send "\r"
         }
+
         -re "\[cC]hoice\\\[.*]:" {
             send "\r"
         }
+
         "Entering directory" { }
         "Leaving directory" { set bfin_make_status success }
         "Error" {set bfin_make_status failure }

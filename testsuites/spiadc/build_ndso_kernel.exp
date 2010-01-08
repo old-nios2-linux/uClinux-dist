@@ -18,6 +18,10 @@ spawn make config
 while 1 {
     expect {
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         "\\\(*) \\\[*]" {
             send "\r"
         }
@@ -95,6 +99,10 @@ while 1 {
 
         -re "Networked Arbitrary Waveform Genertor.*USER_AWG.*\\\[.*]" {
             send "N\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         "\\\(*) \\\[*]" {

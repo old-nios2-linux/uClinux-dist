@@ -49,12 +49,16 @@ while 1 {
             set timeout 100
         }
 
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         "\\\(*) \\\[*]" {
-            sleep .1
+            sleep .01
+            send "\r"
+        }
+
+        -re "\[cC]hoice\\\[.*]:" {
             send "\r"
         }
 

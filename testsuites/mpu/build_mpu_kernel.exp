@@ -39,8 +39,12 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         "\\\(*) \\\[*]" {
-            sleep .1
+            sleep .01
             send "\r"
         }
 

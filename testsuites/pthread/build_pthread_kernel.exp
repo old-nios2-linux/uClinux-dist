@@ -13,33 +13,6 @@ source  make_default_config.exp
 
 cd $uclinux_path
 set timeout 300
-spawn make config
-
-while 1 {
-    expect {
-
-        "\\\(*) \\\[*]" {
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
-cd $uclinux_path
-set timeout 300
 set baud_rate_done_flag 0
 spawn make config
 
@@ -61,6 +34,10 @@ while 1 {
 
         -re "taskset.*USER_BUSYBOX_TASKSET.*\\\[.*]" {
             send  "Y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         "\\\(*) \\\[*]" {
