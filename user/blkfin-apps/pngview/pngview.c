@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
 
 	ioctl(fd, FBIOGET_VSCREENINFO, &vi);
 
-	framebase = mmap(0, vi.xres * vi.yres * 2, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
+	framebase = mmap(0, vi.xres * vi.yres * 2, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 	if (framebase == MAP_FAILED) {
 		close(fd);
 		perror("unable to mmap frame buffer");

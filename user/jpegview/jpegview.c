@@ -375,8 +375,8 @@ int main(int argc, char **argv)
 	printf("%d %d %d %d %d %d %d %d %d %d\n", vi.xres, vi.yres, vi.xres_virtual, vi.yres_virtual,
                vi.xoffset, vi.yoffset, vi.bits_per_pixel, vi.grayscale, vi.width, vi.height);
 
-	//framebase = mmap(0, vi.xres * vi.yres*2, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-        framebase = mmap(0, vi.xres * vi.yres*2, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
+	framebase = mmap(0, vi.xres * vi.yres*2, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+
         printf("framebase = %p err=%d\n", framebase, errno);
 	if (framebase == MAP_FAILED)
 	{
