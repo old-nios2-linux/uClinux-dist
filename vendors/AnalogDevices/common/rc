@@ -11,8 +11,7 @@ mount -t sysfs sysfs /sys -o noexec,nosuid,nodev
 #
 if [ -e /bin/mdev ] ; then
 	mount -t tmpfs mdev /dev -o exec,nosuid,mode=0755,size=10M
-	touch /dev/mdev.seq
-	echo >/dev/mdev.seq
+	> /dev/mdev.seq
 	[ -e /proc/sys/kernel/hotplug ] && echo /bin/mdev > /proc/sys/kernel/hotplug
 	/bin/mdev -s
 
