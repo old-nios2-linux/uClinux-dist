@@ -1,22 +1,3 @@
---- a/src/gui/embedded/qscreenlinuxfb_qws.cpp
-+++ b/src/gui/embedded/qscreenlinuxfb_qws.cpp
-@@ -391,10 +391,15 @@ bool QLinuxFbScreen::connect(const QString &displaySpec)
- 
-     mapsize = finfo.smem_len;
- 
-+#if defined(QT_LINUX_NOMMU)
-+# define MMAP_FLAGS MAP_PRIVATE
-+#else
-+# define MMAP_FLAGS MAP_SHARED
-+#endif
-     data = (unsigned char *)-1;
-     if (d_ptr->fd != -1)
-         data = (unsigned char *)mmap(0, mapsize, PROT_READ | PROT_WRITE,
--                                     MAP_SHARED, d_ptr->fd, 0);
-+                                     MMAP_FLAGS, d_ptr->fd, 0);
- 
-     if ((long)data == -1) {
-         if (QApplication::type() == QApplication::GuiServer) {
 --- a/src/3rdparty/webkit/JavaScriptCore/wtf/TCSystemAlloc.cpp
 +++ b/src/3rdparty/webkit/JavaScriptCore/wtf/TCSystemAlloc.cpp
 @@ -303,7 +303,7 @@
