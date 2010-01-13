@@ -1,12 +1,13 @@
 #!/usr/bin/expect --
 
 #
-# Build Kernel for XIP test in both kernel and user space.
-# Root file system is romfs.
-# Both kernel and root file system images are flashed into parallel flash.
+# Build Kernel for XIP test in userspace.
+# Test application is found only in additional file systems.
+# Root file system is initramfs.
 #
 
 source ../kernel_config.exp
+source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -18,14 +19,9 @@ if { $argc < 2} {
     exit
 }
 
-set HAVE_ROMFS_IMAGE 1
-
 cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
-
-cd $uclinux_path/testsuites
-source  make_cut_fs_config.exp
 
 cd $uclinux_path
 set timeout 300
@@ -40,8 +36,8 @@ while 1 {
             send "y\r"
         }
 
-        -re "Kernel executes from.*(\[0-9]). ROM.*choice.*\\\[.*]" {
-            send "$expect_out(1,string)\r"
+        -re "Initial RAM filesystem and RAM disk.*BLK_DEV_INITRD.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "Detect flash chips by Common Flash Interface.*MTD_CFI.*\\\[.*]" {
@@ -60,6 +56,10 @@ while 1 {
             send "Y\r"
         }
 
+        -re "Miscellaneous filesystems \\\(MISC_FILESYSTEMS.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "ROM file system support.*ROMFS_FS.*\\\[.*]" {
             send "Y\r"
         }
@@ -69,6 +69,10 @@ while 1 {
         }
 
         -re "Enable shared FLAT support \\\(BINFMT_SHARED_FLAT\\\).*\\\[././.]" {
+            send "Y\r"
+        }
+
+        -re "xip test.*XIP_TEST.*\\\[.*]" {
             send "Y\r"
         }
 

@@ -44,6 +44,7 @@ set ext2_rootfs_image    rootfs.ext2
 set jffs2_rootfs_image   rootfs.jffs2
 set yaffs_rootfs_image   rootfs.yaffs
 set ubifs_rootfs_image   rootfs.ubifs
+set romfs_rootfs_image   rootfs.romfs
 set HAVE_JFFS2_IMAGE     0
 set HAVE_KERNEL_ONLY_IMAGE     0
 set HAVE_ROMFS_IMAGE     0

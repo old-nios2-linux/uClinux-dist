@@ -1707,7 +1707,7 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
 
         cd $UCLINUX_DIST_TESTSUITES/xip
         ./build_xip_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
-        if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
+        if [ ! -f $UCLINUX_DIST_PATH/images/rootfs.romfs ]
         then
             echo "$0:   Error, failed."
             tail -50 ./build_xip_kernel_log
@@ -1716,8 +1716,8 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
             ./xip_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
         fi
 
-        cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.xip.$format
-        cp $UCLINUX_DIST_PATH/images/img.romfs $THIS_LOG/img.romfs.$format
+        cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.xip.$format
+        cp $UCLINUX_DIST_PATH/images/rootfs.romfs $THIS_LOG/rootfs.romfs.xip.$format
         cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.xip.$format
         mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_kernel_log $THIS_LOG/build_xip_${format}_kernel_log
         mv $UCLINUX_DIST_TESTSUITES/xip/xip_test_log $THIS_LOG/xip_${format}_test_log
@@ -1742,7 +1742,7 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
     do
 
         FORMAT=`echo $format|tr 'a-z' 'A-Z'`
-        echo  "Testing xip_rom_rootfs in $format..."
+        echo  "Testing xip_userspace in $format..."
 
         rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
         cd $UCLINUX_DIST_PATH/
@@ -1755,20 +1755,21 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
         make clean > /dev/null 2>&1
 
         cd $UCLINUX_DIST_TESTSUITES/xip
-        ./build_xip_rom_rootfs_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
-        if [ ! -f $UCLINUX_DIST_PATH/images/uImage.romfs ]
+        ./build_xip_userspace_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
+        if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
         then
             echo "$0:   Error, failed."
-            tail -50 ./build_xip_rom_rootfs_kernel_log
+            tail -50 ./build_xip_userspace_kernel_log
         else
             sleep 30
-            ./xip_rom_rootfs_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
+            ./xip_userspace_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
         fi
 
-        cp $UCLINUX_DIST_PATH/images/uImage.romfs $THIS_LOG/uImage.romfs.xip_rom_rootfs.$format
-        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.xip_rom_rootfs.$format
-        mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_rom_rootfs_kernel_log $THIS_LOG/build_xip_rom_rootfs_${format}_kernel_log
-        mv $UCLINUX_DIST_TESTSUITES/xip/xip_rom_rootfs_test_log $THIS_LOG/xip_rom_rootfs_${format}_test_log
+        cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.userspace.$format
+        cp $UCLINUX_DIST_PATH/images/img.romfs $THIS_LOG/img.romfs.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.xip_userspace.$format
+        mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_userspace_kernel_log $THIS_LOG/build_xip_userspace_${format}_kernel_log
+        mv $UCLINUX_DIST_TESTSUITES/xip/xip_userspace_test_log $THIS_LOG/xip_userspace_${format}_test_log
 
         #make sure kernel can boot up before next xip test
         cp $THIS_LOG/uImage.policy /tftpboot/linux
