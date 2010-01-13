@@ -48,7 +48,7 @@ proc standby_test_case {} {
     send " "
     while 1 {
         expect {
-            -re "Restarting tasks \.\.\. +done\.\r\n$kernel_prompt" {
+            -re "Restarting tasks.*done\.\r\n$kernel_prompt" {
                 case_pass $case_num
                 break
             }
