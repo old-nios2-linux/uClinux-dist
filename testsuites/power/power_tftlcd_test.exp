@@ -14,7 +14,11 @@ if { $argc == 2 } {
     exit
 }
 
-set wakeup_pattern "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt"
+if { $board_type == "BF548-EZKIT" }  {
+    set wakeup_pattern "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks.*done.*$kernel_prompt"
+} else {
+    set wakeup_pattern "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt"
+}
 
 if { $pm_state_count == 1 } {
     set pm_state_str "standby"
