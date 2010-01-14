@@ -131,7 +131,7 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_ftp_OBJECTS = cmds.$(OBJEXT) cmdtab.$(OBJEXT) domacro.$(OBJEXT) \
-	ftp.$(OBJEXT) main.$(OBJEXT) ruserpass.$(OBJEXT)
+	ftp.$(OBJEXT) main.$(OBJEXT) remote_userpass.$(OBJEXT)
 ftp_OBJECTS = $(am_ftp_OBJECTS)
 ftp_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
@@ -640,7 +640,7 @@ uucpd_INSTALL_HOOK = @uucpd_INSTALL_HOOK@
 whois_BUILD = @whois_BUILD@
 whois_INSTALL_HOOK = @whois_INSTALL_HOOK@
 bin_PROGRAMS = @ftp_BUILD@
-ftp_SOURCES = cmds.c cmdtab.c domacro.c ftp.c main.c ruserpass.c
+ftp_SOURCES = cmds.c cmdtab.c domacro.c ftp.c main.c remote_userpass.c
 noinst_HEADERS = extern.h ftp_var.h
 man_MANS = ftp.1
 INCLUDES = -I$(top_srcdir)/lib -I../lib -I$(top_srcdir)/libinetutils 
@@ -719,7 +719,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/domacro.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ftp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ruserpass.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/remote_userpass.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

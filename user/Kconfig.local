@@ -115,6 +115,12 @@ config USER_INETUTILS_RSH
 config USER_INETUTILS_RSHD
 	bool "rshd"
 	depends on USER_INETUTILS
+config USER_INETUTILS_TELNET
+	bool "telnet"
+	depends on USER_INETUTILS
+config USER_INETUTILS_FTP
+	bool "ftp"
+	depends on USER_INETUTILS
 config USER_BF561_COREBLD
 	bool "BF561 Core B support tools"
 config USER_DSP_BRIDGE

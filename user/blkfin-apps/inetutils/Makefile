@@ -7,7 +7,9 @@ CONF_OPTS = \
 	--with-ncurses-include-dir=$(STAGEDIR) \
 	$(call USE_ENABLE,USER_INETUTILS_RCP,rcp) \
 	$(call USE_ENABLE,USER_INETUTILS_RSH,rsh) \
-	$(call USE_ENABLE,USER_INETUTILS_RSHD,rshd)
+	$(call USE_ENABLE,USER_INETUTILS_RSHD,rshd) \
+	$(call USE_ENABLE,USER_INETUTILS_TELNET,telnet) \
+	$(call USE_ENABLE,USER_INETUTILS_FTP,ftp)
 
 include $(ROOTDIR)/tools/autotools.mk
 
@@ -19,3 +21,5 @@ romfs:
 	    -a "shell   stream tcp nowait root /bin/rshd" /etc/inetd.conf
 	$(ROMFSINST) -e CONFIG_USER_INETUTILS_RSHD \
 	    -a "+ +" /root/.rhosts
+	$(ROMFSINST) -e CONFIG_USER_INETUTILS_TELNET     build-$(VER)/telnet/telnet /bin/telnet
+	$(ROMFSINST) -e CONFIG_USER_INETUTILS_FTP        build-$(VER)/ftp/ftp /bin/ftp

@@ -269,7 +269,7 @@ login (host)
   int n, aflag = 0;
 
   user = pass = acct = 0;
-  if (ruserpass (host, &user, &pass, &acct) < 0)
+  if (remote_userpass (host, &user, &pass, &acct) < 0)
     {
       code = -1;
       return (0);

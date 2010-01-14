@@ -1598,7 +1598,11 @@ shell (argc, argv)
 
   old1 = signal (SIGINT, SIG_IGN);
   old2 = signal (SIGQUIT, SIG_IGN);
+#ifdef __uClinux__
+  if ((pid = vfork ()) == 0)
+#else
   if ((pid = fork ()) == 0)
+#endif
     {
       for (pid = 3; pid < 20; pid++)
 	close (pid);
