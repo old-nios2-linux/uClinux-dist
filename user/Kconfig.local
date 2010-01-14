@@ -121,6 +121,9 @@ config USER_INETUTILS_TELNET
 config USER_INETUTILS_FTP
 	bool "ftp"
 	depends on USER_INETUTILS
+config USER_INETUTILS_FTPD
+	bool "ftpd"
+	depends on USER_INETUTILS
 config USER_BF561_COREBLD
 	bool "BF561 Core B support tools"
 config USER_DSP_BRIDGE
