@@ -1,3 +1,6 @@
+the version after ncurses-5.7 should have a --without-manpages configure option
+we can use instead of this hack
+
 --- ncurses-5.6/man/Makefile.in
 +++ ncurses-5.6/man/Makefile.in
 @@ -57,7 +57,7 @@
