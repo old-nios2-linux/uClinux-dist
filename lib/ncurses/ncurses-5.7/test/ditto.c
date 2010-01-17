@@ -162,11 +162,7 @@ open_tty(char *path)
 	failed(slave_name);
     }
     sprintf(s_option, "-S%s/%d", slave_name, aslave);
-#ifdef __uClinux__
-    if (vfork()) {
-#else
-    if (fork()) {
-#endif
+    if (vfork() == 0) {
 	execlp("xterm", "xterm", s_option, "-title", path, (char *) 0);
 	_exit(0);
     }
