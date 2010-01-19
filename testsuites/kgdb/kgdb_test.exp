@@ -127,7 +127,7 @@ while 1 {
         if { $debug_port == "ethernet" } {
 	send -s "target remote udp:$targetip:6443\r"
 	expect {
-		"Remote debugging using udp*kgdb.c" {
+		"Remote debugging using udp" {
                  case_pass $case_num
 			expect { 
 				"(gdb) " {
@@ -154,7 +154,7 @@ while 1 {
         }
         send -s "target remote $ttyUSBdev\r"
         expect {
-                "Remote debugging using $ttyUSBdev*kgdb.c" {
+                "Remote debugging using $ttyUSBdev" {
                  case_pass $case_num
                         expect {
                                 "(gdb) " {
