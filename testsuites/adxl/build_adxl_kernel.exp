@@ -63,7 +63,7 @@ while 1 {
         }
 
         -re "Blackfin TWI I2C support.*I2C_BLACKFIN_TWI.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" && $port_config == "i2c" } {
+            if { $port_config == "i2c" } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -71,10 +71,10 @@ while 1 {
         }
 
         -re "Blackfin TWI I2C clock.*I2C_BLACKFIN_TWI_CLK_KHZ.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" && $port_config == "i2c" } {
-                send "100\r"
+            if { $port_config == "i2c" } {
+                 send "100\r"
             } else {
-                send "\r"
+                 send "\r"
             }
         }
 

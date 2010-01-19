@@ -20,6 +20,16 @@ send_log "\n#### This config $port_config is not supported. Sorry.\n"
 exit
 }
 
+if { $port_config == "i2c" } {
+set input_num 1
+set interrupt_num 140
+} elseif { $port_config == "spi" } {
+set input_num 0
+set interrupt_num 56
+} else {
+exit
+}
+
 set TITLE [title "$argv0"]
 append TITLE " ($port_config)"
 
@@ -57,7 +67,7 @@ timeout {
 
 incr case_num
 
-send -s "cat /sys/class/input/input1/name\r" 
+send -s "cat /sys/class/input/input$input_num/name\r" 
 while 1 {
    expect {
       -re "ADXL34x accelerometer.*$kernel_prompt" { 
@@ -77,7 +87,7 @@ incr case_num
 send -s "cat /proc/interrupts\r" 
 while 1 {
    expect {
-      -re "140.*$kernel_prompt" { 
+      -re "$interrupt_num.*$kernel_prompt" { 
                 case_pass $case_num
          break
       }
@@ -89,7 +99,7 @@ while 1 {
      }
 }
 
-send -s "event_test /dev/input/event1\r" 
+send -s "event_test /dev/input/event$input_num\r" 
 while 1 {
    expect {
      -re "Input device name.*Testing" { 
