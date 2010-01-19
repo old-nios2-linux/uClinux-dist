@@ -13,7 +13,7 @@ step "Make config."
 source make_default_config.exp
 
 cd $uclinux_path/testsuites
-source make_config_reserve_mem.exp
+source make_cut_fs_config.exp
 
 cd $uclinux_path
 set timeout 300
@@ -31,7 +31,7 @@ while 1 {
         }
 
         -re "Use full SLAB allocator \\\(SLAB\\\).*\\\[././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {

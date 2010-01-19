@@ -28,7 +28,7 @@ source  make_default_config.exp
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_config_reserve_mem.exp
+source  make_cut_fs_config.exp
 
 # Following make specific configuration for this case.
 

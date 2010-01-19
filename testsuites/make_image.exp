@@ -1,0 +1,24 @@
+#!/usr/bin/expect
+
+if [ catch {exec rm [glob $uclinux_path/romfs/lib/libgfortran*]} ] {
+    send_user "$errorInfo\n"
+}
+
+cd $uclinux_path
+spawn make image
+set timeout 300
+set bfin_make_status failure
+while 1 {
+    expect {
+        "Entering directory" { }
+        "Leaving directory" { set bfin_make_status success }
+        "Error" {set bfin_make_status failure }
+        "/bin/sh" { }
+        eof { break }
+    }
+}
+
+if { $bfin_make_status == "failure" } {
+    puts "ERROR: Error somewhere during make"
+    exit
+}
