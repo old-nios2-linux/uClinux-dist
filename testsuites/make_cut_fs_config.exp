@@ -1,9 +1,9 @@
 #!/usr/bin/expect
+set file_name $argv0
 
 cd $uclinux_path
 set timeout 300
 spawn make config
-
 while 1 {
     expect {
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
@@ -13,7 +13,6 @@ while 1 {
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
         }
-################################################################################
 
         -re "Power Management support.*PM.*\\\[.*]" {
             send "N\r"
@@ -34,9 +33,17 @@ while 1 {
         -re "Real Time Clock.*RTC_CLASS.*\\\[.*]" {
             send "N\r"
         }
-        
+
         -re "Hardware Monitoring support.*HWMON.*\\\[.*]" {
             send "N\r"
+        }
+
+        -re "Networking support.*NET.*\\\[.*]" {
+            if { $file_name == "./build_xip_kernel.exp" } {
+                send "N\r"
+            } else {
+                send "\r"
+            }
         }
 
         -re "Ethernet.*1000 Mbit.*NETDEV_1000.*\\\[.*]" {
@@ -60,8 +67,7 @@ while 1 {
         }
 
         -re "Distributed Switch Architecture support.*NET_DSA.*\\\[.*]" {
-
-                    send -s "N\r"
+            send -s "N\r"
         }
 
 #######################################################################################
@@ -69,7 +75,7 @@ while 1 {
         -re "Build ncurses.*LIB_NCURSES.*\\\[.*]" {
             send "N\r"
         }
-        
+
         -re "boa.*USER_BOA_SRC_BOA.*\\\[.*]" {
             send "N\r"
         }
@@ -81,7 +87,6 @@ while 1 {
         -re "whetstone.*USER_WHETSTONE_WHETSTONE.*\\\[.*]" {
             send "N\r"
         }
-
 
         -re "VIDEO test program.*USER_BLACKFIN_VIDEOTEST.*\\\[.*]" {
             send "N\r"
@@ -102,7 +107,7 @@ while 1 {
         -re "strace.*USER_STRACE_STRACE.*\\\[.*]" {
             send "N\r"
         }
-        
+
         -re "dhcp.*USER_DHCP.*\\\[.*]" {
             send "N\r"
         }
@@ -163,12 +168,16 @@ while 1 {
             send "N\r"
         }
 
+        -re "mtd-utils.*USER_MTDUTILS.*\\\[.*]" {
+            send "N\r"
+        }
+
         -re "Install ELF shared libraries.*INSTALL_ELF_SHARED_LIBS.*\\\[.*]" {
-            send  "N\r"
+            send "N\r"
         }
 
         -re "Install FLAT shared libraries.*INSTALL_FLAT_SHARED_LIBS.*\\\[.*]" {
-            send  "N\r"
+            send "N\r"
         }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
@@ -195,6 +204,7 @@ while 1 {
         }
     }
 }
+
 ##############################################################################
 ##############################################################################
 # Since SPI is selected by sound driver which is underneath and turned on, so
@@ -203,11 +213,8 @@ while 1 {
 ##############################################################################
 
 spawn make config
-
 while 1 {
     expect {
-
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -215,41 +222,33 @@ while 1 {
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
         }
-################################################################################
-
 
         -re "SPI support.*SPI.*\\\[\[^\r]*]" {
             send "N\r"
         }
 
-        -re "Build libpng \\\(LIB_LIBPNG\\\) \\\[(\[^\r]*)]" {
-            set timeout 5
-            expect {
-             -nocase -re " (\[ym])\r\n" {
-                send_user "\n Item_value is selected $expect_out(1,string).\n"
-            }
-            timeout {
-                send -s "N\r"
-            }
-            }
-            set timeout 50
-        }
-
-        -re "Build libjpeg \\\(LIB_LIBJPEG\\\) \\\[(\[^\r]*)]" {
-            set timeout 5
-            expect {
-             -nocase -re " (\[ym])\r\n" {
-                send_user "\n Item_value is selected $expect_out(1,string).\n"
-            }
-            timeout {
-                send -s "N\r"
-            }
-            }
-            set timeout 50
-        }
-
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
+        }
+
+        -re "Build libpng \\\(LIB_LIBPNG\\\) \\\[.*\[nN].*]" {
+            send "N\r"
+        }
+
+        -re "Build libjpeg \\\(LIB_LIBJPEG\\\) \\\[.*\[nN].*]" {
+            send "N\r"
+        }
+
+        -re "Build libG \\\(LIB_LIBG\\\) \\\[.*\[nN].*]" {
+            send "N\r"
+        }
+
+        -re "Build liblzo \\\(LIB_LIBLZO\\\) \\\[.*\[nN].*]" {
+            send "N\r"
+        }
+
+        -re "Build libZ \\\(LIB_ZLIB\\\) \\\[.*\[nN].*]" {
+            send "N\r"
         }
 
         "\\\(*) \\\[*]" {
@@ -272,4 +271,3 @@ while 1 {
         }
     }
 }
-

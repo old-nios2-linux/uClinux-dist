@@ -108,17 +108,19 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make kernel"
-
 source   make_kernel.exp
 
+step "Make image without libgfortran"
+if [ catch {exec rm [glob $uclinux_path/romfs/lib/libgfortran*]} ] {
+    send_user "$errorInfo\n"
+}
 cd $uclinux_path/testsuites
+source   make_image.exp
 
+cd $uclinux_path/testsuites
 step "Copy linux image"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"
-
 log_file
