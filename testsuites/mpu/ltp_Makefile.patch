@@ -74,3 +74,36 @@ Index: testcases/kernel/mem/Makefile
 +
  clean:
  	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i clean ; done
+Index: testcases/kernel/mem/mtest06/mmap1.c
+===================================================================
+--- testcases/kernel/mem/mtest06/mmap1.c	(revision 159)
++++ testcases/kernel/mem/mtest06/mmap1.c	(working copy)
+@@ -171,7 +171,8 @@
+              _exit(0);
+ 
+         case SIGSEGV:
+-             if (info->si_code == SEGV_MAPERR &&
++#define ILL_CPLB_VI 9
++             if (info->si_code == ILL_CPLB_VI &&
+                       info->si_addr == map_address)
+              {
+                   tst_resm(TINFO,
+@@ -360,6 +361,10 @@
+     static int	 rd_index = 0;	/* index to the number of reads performed.    */
+     long 	*rmargs = args;	/* local pointer to the arguments	      */
+     long exit_val = 0;  /* pthread exit value			      */
++    
++    /* waiting write thread to finish mapping */
++    while (!map_address)
++    	usleep(1);
+ 
+     tst_resm(TINFO, "pid[%d] - read contents of memory %p %ld times",
+            getpid(), map_address, rmargs[2]);
+@@ -617,6 +622,7 @@
+             }
+         }
+         close(fd);
++	map_address = 0;
+     }while (TRUE);
+     exit (0);
+ }
