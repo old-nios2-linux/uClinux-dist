@@ -76,11 +76,28 @@ set allcases {mmap1 mmap02 mmap03 mmap04 mmap05 mmap06 mmap07 mmap08}
 set casenum [llength $allcases]
 send_user "casenum=$casenum\n"
 
-incr case_num
 set timeout 10
 send "echo \"nobody:x:1:1:nobody:/:/bin/sh\" >> /etc/passwd\n"
 send "cd /bin\n"
 expect -re $kernel_prompt
+
+send "cat /proc/sys/kernel/printk\n"
+expect -re $kernel_prompt
+
+incr case_num
+set timeout 5
+send "echo 1 > /proc/sys/kernel/printk\n"
+while 1 {
+    expect {
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
 
 set timeout 500
 send "./mmap1 -x 0.1\n"
@@ -102,8 +119,25 @@ while 1 {
         }
     }
 }
+
+incr case_num
+set timeout 5
+send "echo 7 > /proc/sys/kernel/printk\n"
+while 1 {
+    expect {
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
 sleep 5
 
+incr case_num
 set timeout 10
 for {set i 1} {$i < $casenum} {incr i} {
     send "./[lindex $allcases $i]\n"
