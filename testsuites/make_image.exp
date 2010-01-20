@@ -1,9 +1,5 @@
 #!/usr/bin/expect
 
-if [ catch {exec rm [glob $uclinux_path/romfs/lib/libgfortran*]} ] {
-    send_user "$errorInfo\n"
-}
-
 cd $uclinux_path
 spawn make image
 set timeout 300
