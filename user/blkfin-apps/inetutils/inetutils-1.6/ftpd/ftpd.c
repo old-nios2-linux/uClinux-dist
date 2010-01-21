@@ -387,7 +387,12 @@ main (int argc, char *argv[], char **envp)
 	  break;
 
 	case 'D':		/* Run ftpd as daemon.  */
+#ifdef __uClinux__
+	  printf ("Daemon mode not supported yet for no MMU.\n\n");
+	  exit (0);
+#else
 	  daemon_mode = 1;
+#endif
 	  break;
 
 	case 'd':		/* Enable debug mode.  */
@@ -457,6 +462,7 @@ main (int argc, char *argv[], char **envp)
 
   /* If not running via inetd, we detach and dup(fd, 0), dup(fd, 1) the
      fd = accept(). tcpd is check if compile with the support  */
+#ifndef __uClinux__
   if (daemon_mode)
     {
       if (server_mode (pid_file, &his_addr) < 0)
@@ -464,6 +470,7 @@ main (int argc, char *argv[], char **envp)
     }
   else
     {
+#endif
       socklen_t addrlen = sizeof (his_addr);
       if (getpeername (STDIN_FILENO, (struct sockaddr *) &his_addr,
 		       &addrlen) < 0)
@@ -471,7 +478,9 @@ main (int argc, char *argv[], char **envp)
 	  syslog (LOG_ERR, "getpeername (%s): %m", program_name);
 	  exit (1);
 	}
+#ifndef __uClinux__
     }
+#endif
 
   signal (SIGHUP, sigquit);
   signal (SIGINT, sigquit);

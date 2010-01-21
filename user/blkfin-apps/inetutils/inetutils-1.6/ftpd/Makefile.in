@@ -131,8 +131,7 @@ am__installdirs = "$(DESTDIR)$(inetdaemondir)" "$(DESTDIR)$(man8dir)"
 inetdaemonPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(inetdaemon_PROGRAMS)
 am_ftpd_OBJECTS = ftpcmd.$(OBJEXT) ftpd.$(OBJEXT) logwtmp.$(OBJEXT) \
-	popen.$(OBJEXT) pam.$(OBJEXT) auth.$(OBJEXT) conf.$(OBJEXT) \
-	server_mode.$(OBJEXT)
+	popen.$(OBJEXT) pam.$(OBJEXT) auth.$(OBJEXT) conf.$(OBJEXT)
 ftpd_OBJECTS = $(am_ftpd_OBJECTS)
 ftpd_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
@@ -645,7 +644,7 @@ whois_BUILD = @whois_BUILD@
 whois_INSTALL_HOOK = @whois_INSTALL_HOOK@
 inetdaemon_PROGRAMS = @ftpd_BUILD@
 ftpd_SOURCES = ftpcmd.y ftpd.c logwtmp.c popen.c pam.c auth.c \
-               conf.c server_mode.c
+               conf.c
 
 noinst_HEADERS = extern.h
 man_MANS = ftpd.8
@@ -731,7 +730,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/logwtmp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pam.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/popen.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/server_mode.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

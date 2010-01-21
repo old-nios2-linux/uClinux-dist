@@ -129,9 +129,9 @@ CONFIG_CLEAN_FILES =
 LIBRARIES = $(noinst_LIBRARIES)
 ARFLAGS = cru
 libinetutils_a_AR = $(AR) $(ARFLAGS)
-libinetutils_a_DEPENDENCIES = daemon.o $(top_builddir)/lib/libgnu.a
+libinetutils_a_DEPENDENCIES = $(top_builddir)/lib/libgnu.a
 am_libinetutils_a_OBJECTS = argcv.$(OBJEXT) cleansess.$(OBJEXT) \
-	daemon.$(OBJEXT) des_rw.$(OBJEXT) kcmd.$(OBJEXT) \
+	des_rw.$(OBJEXT) kcmd.$(OBJEXT) \
 	krcmd.$(OBJEXT) localhost.$(OBJEXT) logwtmpko.$(OBJEXT) \
 	setsig.$(OBJEXT) shishi.$(OBJEXT) tftpsubs.$(OBJEXT) \
 	ttymsg.$(OBJEXT) utmp_init.$(OBJEXT) utmp_logout.$(OBJEXT)
@@ -639,11 +639,11 @@ whois_INSTALL_HOOK = @whois_INSTALL_HOOK@
 noinst_LIBRARIES = libinetutils.a
 noinst_HEADERS = argcv.h libinetutils.h
 EXTRA_DIST = logwtmp.c
-libinetutils_a_SOURCES = argcv.c cleansess.c daemon.c des_rw.c kcmd.c	\
+libinetutils_a_SOURCES = argcv.c cleansess.c des_rw.c kcmd.c	\
 	krcmd.c localhost.c logwtmpko.c setsig.c shishi.c tftpsubs.c \
         ttymsg.c utmp_init.c utmp_logout.c
 
-libinetutils_a_LIBADD = daemon.o $(top_builddir)/lib/libgnu.a
+libinetutils_a_LIBADD = $(top_builddir)/lib/libgnu.a
 AM_CPPFLAGS = $(PATHDEF_WTMPX) $(PATHDEF_TTY_PFX) $(PATHDEF_DEVNULL) $(PATHDEF_HEQUIV) 
 INCLUDES = -I$(top_srcdir)/headers -I$(top_srcdir)/lib -I../lib
 all: all-am
@@ -695,7 +695,6 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/argcv.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cleansess.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/daemon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/des_rw.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/kcmd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/krcmd.Po@am__quote@

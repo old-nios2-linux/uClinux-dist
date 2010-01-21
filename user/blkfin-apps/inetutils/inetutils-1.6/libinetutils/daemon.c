@@ -107,11 +107,7 @@ waitdaemon (int nochdir, int noclose, int maxwait)
 
   ppid = getpid ();
 
-#ifdef __uClinux__
-  switch (childpid = vfork ())
-#else
   switch (childpid = fork ())
-#endif
     {
     case -1:			/* Something went wrong.  */
       return (-1);
@@ -136,11 +132,7 @@ waitdaemon (int nochdir, int noclose, int maxwait)
      all process in the session (the second child) are sent the SIGHUP.  */
   signal (SIGHUP, SIG_IGN);
 
-#ifdef __uClinux__
-  switch (vfork ())
-#else
   switch (fork ())
-#endif
     {
     case 0:
       break;
