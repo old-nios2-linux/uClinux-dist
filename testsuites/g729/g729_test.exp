@@ -21,7 +21,11 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 step "test preparation"
-set TEST_PROG "g729ab_test g729ab_testsimgot g729ab_testfdpic g729ab_testfdpic_so"
+if { $board_type == "BF518F-EZBRD" } {
+    set TEST_PROG "g729ab_test g729ab_testsimgot"
+} else {
+    set TEST_PROG "g729ab_test g729ab_testsimgot g729ab_testfdpic g729ab_testfdpic_so"
+}
 
 set case_num 0
 incr case_num
