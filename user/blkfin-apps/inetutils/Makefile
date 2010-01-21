@@ -1,5 +1,7 @@
 VER = inetutils-1.6
 
+FLTFLAGS += -s 0x6000
+
 CONF_OPTS = \
 	--without-included-regex \
 	--disable-libls \
