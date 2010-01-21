@@ -1,6 +1,7 @@
 /* ssi - server-side-includes CGI program
 **
-** Copyright (C) 1995 by Jef Poskanzer <jef@acme.com>.  All rights reserved.
+** Copyright © 1995 by Jef Poskanzer <jef@mail.acme.com>.
+** All rights reserved.
 **
 ** Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions
@@ -32,6 +33,7 @@
 #include <sys/stat.h>
 
 #include "config.h"
+#include "match.h"
 
 
 #define ST_GROUND 0
@@ -60,8 +62,6 @@ internal_error( char* reason )
     char* title = "500 Internal Error";
 
     (void) printf( "\
-Content-type: text/html\n\
-\n\
 <HTML><HEAD><TITLE>%s</TITLE></HEAD>\n\
 <BODY><H2>%s</H2>\n\
 Something unusual went wrong during a server-side-includes request:\n\
@@ -78,8 +78,6 @@ not_found( char* filename )
     char* title = "404 Not Found";
 
     (void) printf( "\
-Content-type: text/html\n\
-\n\
 <HTML><HEAD><TITLE>%s</TITLE></HEAD>\n\
 <BODY><H2>%s</H2>\n\
 The requested server-side-includes filename, %s,\n\
@@ -109,7 +107,7 @@ not_permitted( char* directive, char* tag, char* val )
     (void) printf( "\
 <HR><H2>%s</H2>\n\
 The filename requested in the %s %s=%s directive\n\
-contains .. or is an absolute pathname.\n\
+may not be fetched.\n\
 <HR>\n", title, directive, tag, val );
     }
 
@@ -212,6 +210,74 @@ get_filename( char* vfilename, char* filename, char* directive, char* tag, char*
     }
 
 
+static int
+check_filename( char* filename )
+    {
+    static int inited = 0;
+    static char* cgi_pattern;
+    int fnl;
+    char* cp;
+    char* dirname;
+    char* authname;
+    struct stat sb;
+    int r;
+
+    if ( ! inited )
+	{
+	/* Get the cgi pattern. */
+	cgi_pattern = getenv( "CGI_PATTERN" );
+#ifdef CGI_PATTERN
+	if ( cgi_pattern == (char*) 0 )
+	    cgi_pattern = CGI_PATTERN;
+#endif /* CGI_PATTERN */
+	inited = 1;
+	}
+
+    /* ../ is not permitted. */
+    if ( strstr( filename, "../" ) != (char*) 0 )
+	return 0;
+
+#ifdef AUTH_FILE
+    /* Ensure that we are not reading a basic auth password file. */
+    fnl = strlen(filename);
+    if ( strcmp( filename, AUTH_FILE ) == 0 ||
+	 ( fnl >= sizeof(AUTH_FILE) &&
+	   strcmp( &filename[fnl - sizeof(AUTH_FILE) + 1], AUTH_FILE ) == 0 &&
+	   filename[fnl - sizeof(AUTH_FILE)] == '/' ) )
+	return 0;
+
+    /* Check for an auth file in the same directory.  We can't do an actual
+    ** auth password check here because CGI programs are not given the
+    ** authorization header, for security reasons.  So instead we just
+    ** prohibit access to all auth-protected files.
+    */
+    dirname = strdup( filename );
+    if ( dirname == (char*) 0 )
+	return 0;	/* out of memory */
+    cp = strrchr( dirname, '/' );
+    if ( cp == (char*) 0 )
+	(void) strcpy( dirname, "." );
+    else
+	*cp = '\0';
+    authname = malloc( strlen( dirname ) + 1 + sizeof(AUTH_FILE) );
+    if ( authname == (char*) 0 )
+	return 0;	/* out of memory */
+    (void) sprintf( authname, "%s/%s", dirname, AUTH_FILE );
+    r = stat( authname, &sb );
+    free( dirname );
+    free( authname );
+    if ( r == 0 )
+	return 0;
+#endif /* AUTH_FILE */
+
+    /* Ensure that we are not reading a CGI file. */
+    if ( cgi_pattern != (char*) 0 && match( cgi_pattern, filename ) )
+	return 0;
+
+    return 1;
+    }
+
+
 static void
 show_time( time_t t, int gmt )
     {
@@ -263,6 +329,7 @@ do_config( char* vfilename, char* filename, FILE* fp, char* directive, char* tag
     **     (formatted as 1,234,567), or abbrev for an abbreviated version
     **     displaying the number of kilobytes or megabytes the file occupies.
     */
+
     if ( strcmp( tag, "timefmt" ) == 0 )
 	{
 	(void) strncpy( timefmt, val, sizeof(timefmt) - 1 );
@@ -290,10 +357,17 @@ do_include( char* vfilename, char* filename, FILE* fp, char* directive, char* ta
     FILE* fp2;
 
     /* Inserts the text of another document into the parsed document. */
+
     if ( get_filename(
 	     vfilename, filename, directive, tag, val, filename2,
 	     sizeof(filename2) ) < 0 )
 	return;
+
+    if ( ! check_filename( filename2 ) )
+	{
+	not_permitted( directive, tag, filename2 );
+	return;
+	}
 
     fp2 = fopen( filename2, "r" );
     if ( fp2 == (FILE*) 0 )
@@ -342,6 +416,7 @@ do_echo( char* vfilename, char* filename, FILE* fp, char* directive, char* tag, 
     ** printed subject to the currently configured timefmt.  The only valid
     ** tag is var, whose value is the name of the variable you wish to echo.
     */
+
     if ( strcmp( tag, "var" ) != 0 )
 	unknown_tag( filename, directive, tag );
     else
@@ -400,6 +475,7 @@ do_fsize( char* vfilename, char* filename, FILE* fp, char* directive, char* tag,
     char filename2[1000];
 
     /* Prints the size of the specified file. */
+
     if ( get_filename(
 	     vfilename, filename, directive, tag, val, filename2,
 	     sizeof(filename2) ) < 0 )
@@ -419,6 +495,7 @@ do_flastmod( char* vfilename, char* filename, FILE* fp, char* directive, char* t
     char filename2[1000];
 
     /* Prints the last modification date of the specified file. */
+
     if ( get_filename(
 	     vfilename, filename, directive, tag, val, filename2,
 	     sizeof(filename2) ) < 0 )
@@ -533,9 +610,6 @@ slurp( char* vfilename, char* filename, FILE* fp )
     int state;
     int ich;
 
-    /* First, write out a close-comment sequence. */
-    (void) fputs( "-->", stdout );
-
     /* Now slurp in the rest of the comment from the input file. */
     i = 0;
     state = ST_GROUND;
@@ -550,6 +624,8 @@ slurp( char* vfilename, char* filename, FILE* fp )
 	    case ST_MINUS1:
 	    if ( ich == '-' )
 		state = ST_MINUS2;
+	    else
+		state = ST_GROUND;
 	    break;
 	    case ST_MINUS2:
 	    if ( ich == '>' )
@@ -558,6 +634,8 @@ slurp( char* vfilename, char* filename, FILE* fp )
 		parse( vfilename, filename, fp, buf );
 		return;
 		}
+	    else if ( ich != '-' )
+		state = ST_GROUND;
 	    break;
 	    }
 	if ( i < sizeof(buf) - 1 )
@@ -582,19 +660,25 @@ read_file( char* vfilename, char* filename, FILE* fp )
 	    {
 	    case ST_GROUND:
 	    if ( ich == '<' )
-		state = ST_LESSTHAN;
+		{ state = ST_LESSTHAN; continue; }
 	    break;
 	    case ST_LESSTHAN:
 	    if ( ich == '!' )
-		state = ST_BANG;
+		{ state = ST_BANG; continue; }
+	    else
+		{ state = ST_GROUND; putchar( '<' ); }
 	    break;
 	    case ST_BANG:
 	    if ( ich == '-' )
-		state = ST_MINUS1;
+		{ state = ST_MINUS1; continue; }
+	    else
+		{ state = ST_GROUND; (void) fputs ( "<!", stdout ); }
 	    break;
 	    case ST_MINUS1:
 	    if ( ich == '-' )
-		state = ST_MINUS2;
+		{ state = ST_MINUS2; continue; }
+	    else
+		{ state = ST_GROUND; (void) fputs ( "<!-", stdout ); }
 	    break;
 	    case ST_MINUS2:
 	    if ( ich == '#' )
@@ -603,6 +687,8 @@ read_file( char* vfilename, char* filename, FILE* fp )
 		state = ST_GROUND;
 		continue;
 		}
+	    else
+		{ state = ST_GROUND; (void) fputs ( "<!--", stdout ); }
 	    break;
 	    }
 	putchar( (char) ich );
@@ -624,6 +710,9 @@ main( int argc, char** argv )
     (void) strcpy( timefmt, "%a %b %e %T %Z %Y" );
     sizefmt = SF_BYTES;
 
+    /* The MIME type has to be text/html. */
+    (void) fputs( "Content-type: text/html\n\n", stdout );
+
     /* Get the name that we were run as. */
     script_name = getenv( "SCRIPT_NAME" );
     if ( script_name == (char*) 0 )
@@ -635,10 +724,7 @@ main( int argc, char** argv )
     /* Append the PATH_INFO, if any, to get the full URL. */
     path_info = getenv( "PATH_INFO" );
     if ( path_info == (char*) 0 )
-	{
-	internal_error( "Couldn't get PATH_INFO environment variable." );
-	exit( 1 );
-	}
+	path_info = "";
     url = (char*) malloc( strlen( script_name ) + strlen( path_info ) + 1 );
     if ( url == (char*) 0 )
 	{
@@ -655,6 +741,12 @@ main( int argc, char** argv )
 	exit( 1 );
 	}
 
+    if ( ! check_filename( path_translated ) )
+	{
+	not_permitted( "initial", "PATH_TRANSLATED", path_translated );
+	exit( 1 );
+	}
+
     /* Open it. */
     fp = fopen( path_translated, "r" );
     if ( fp == (FILE*) 0 )
@@ -662,9 +754,6 @@ main( int argc, char** argv )
 	not_found( path_translated );
 	exit( 1 );
 	}
-
-    /* The MIME type has to be text/html. */
-    (void) fputs( "Content-type: text/html\n\n", stdout );
 
     /* Read and handle the file. */
     read_file( path_info, path_translated, fp );

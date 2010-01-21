@@ -1,6 +1,7 @@
-/* nph-redirect - simple redirection CGI program
+/* redirect - simple redirection CGI program
 **
-** Copyright (C) 1995 by Jef Poskanzer <jef@acme.com>.  All rights reserved.
+** Copyright © 1995 by Jef Poskanzer <jef@mail.acme.com>.
+** All rights reserved.
 **
 ** Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions
@@ -74,7 +75,7 @@ internal_error( char* reason )
     char* title = "500 Internal Error";
 
     (void) printf( "\
-HTTP/1.0 %s\n\
+Status: %s\n\
 Content-type: text/html\n\
 \n\
 <HTML><HEAD><TITLE>%s</TITLE></HEAD>\n\
@@ -93,7 +94,7 @@ not_found( char* script_name )
     char* title = "404 Not Found";
 
     (void) printf( "\
-HTTP/1.0 %s\n\
+Status: %s\n\
 Content-type: text/html\n\
 \n\
 <HTML><HEAD><TITLE>%s</TITLE></HEAD>\n\
@@ -107,10 +108,9 @@ however, the new URL has not yet been specified.\n\
 static void
 moved( char* script_name, char* url )
     {
-    char* title = "301 Moved";
+    char* title = "Moved";
 
     (void) printf( "\
-HTTP/1.0 %s\n\
 Location: %s\n\
 Content-type: text/html\n\
 \n\
@@ -118,7 +118,7 @@ Content-type: text/html\n\
 <BODY><H2>%s</H2>\n\
 The requested filename, %s, has moved to a new URL:\n\
 <A HREF=\"%s\">%s</A>.\n\
-</BODY></HTML>\n", title, url, title, title, script_name, url, url );
+</BODY></HTML>\n", url, title, title, script_name, url, url );
     }
 	
 
@@ -129,6 +129,7 @@ main( int argc, char** argv )
     char* path_info;
     char* cp;
     FILE* fp;
+    char *star;
     char buf[5000], file[5000], url[5000];
 
     argv0 = argv[0];
@@ -183,7 +184,21 @@ main( int argc, char** argv )
 	    /* Parse line. */
 	    if ( sscanf( cp, "%[^ \t\n] %[^ \t\n]", file, url ) == 2 )
 		{
-		/* Check for match. */
+		/* Check for wildcard match. */
+		star = strchr( file, '*' );
+		if ( star != (char*) 0 )
+		    {
+		    /* Check for leading match. */
+		    if ( strncmp( file, script_name, star - file ) == 0 )
+			{
+			/* Got it; put together the full name. */
+			strcat( url, script_name + ( star - file ) );
+			/* XXX Whack the script_name, too? */
+			moved( script_name, url );
+			exit( 0 );
+			}
+		    }
+		/* Check for exact match. */
 		if ( strcmp( file, script_name ) == 0 )
 		    {
 		    /* Got it. */

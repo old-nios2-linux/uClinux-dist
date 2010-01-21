@@ -1,8 +1,9 @@
 /* match.c - simple shell-style filename matcher
 **
-** Only does ? and *, and multiple patterns separated by |.  Returns 1 or 0.
+** Only does ? * and **, and multiple patterns separated by |.  Returns 1 or 0.
 **
-** Copyright (C) 1995 by Jef Poskanzer <jef@acme.com>.  All rights reserved.
+** Copyright © 1995,2000 by Jef Poskanzer <jef@mail.acme.com>.
+** All rights reserved.
 **
 ** Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions
@@ -12,7 +13,7 @@
 ** 2. Redistributions in binary form must reproduce the above copyright
 **    notice, this list of conditions and the following disclaimer in the
 **    documentation and/or other materials provided with the distribution.
-** 
+**
 ** THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
 ** ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 ** IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -31,34 +32,57 @@
 
 #include "match.h"
 
+static int match_one( const char* pattern, int patternlen, const char* string );
 
 int
-match( char* pattern, char* string )
+match( const char* pattern, const char* string )
     {
-    char* s;
+    const char* or;
 
-    for ( ; ; ++pattern )
+    for (;;)
 	{
-	for ( s = string; ; ++pattern, ++s )
+	or = strchr( pattern, '|' );
+	if ( or == (char*) 0 )
+	    return match_one( pattern, strlen( pattern ), string );
+	if ( match_one( pattern, or - pattern, string ) )
+	    return 1;
+	pattern = or + 1;
+	}
+    }
+
+
+static int
+match_one( const char* pattern, int patternlen, const char* string )
+    {
+    const char* p;
+
+    for ( p = pattern; p - pattern < patternlen; ++p, ++string )
+	{
+	if ( *p == '?' && *string != '\0' )
+	    continue;
+	if ( *p == '*' )
 	    {
-	    if ( *pattern == '?' && *s != '\0' )
-		continue;
-	    if ( *pattern == '*' )
+	    int i, pl;
+	    ++p;
+	    if ( *p == '*' )
 		{
-		int i;
-		++pattern;
-		for ( i = strlen( s ); i >= 0; --i )
-		    if ( match( pattern, &(s[i]) ) )	/* not quite right */
-			return 1;
-		break;
+		/* Double-wildcard matches anything. */
+		++p;
+		i = strlen( string );
 		}
-	    if ( *pattern == '|' || *pattern == '\0' )
-		return 1;
-	    if ( *pattern != *s )
-		break;
+	    else
+		/* Single-wildcard matches anything but slash. */
+		i = strcspn( string, "/" );
+	    pl = patternlen - ( p - pattern );
+	    for ( ; i >= 0; --i )
+		if ( match_one( p, pl, &(string[i]) ) )
+		    return 1;
+	    return 0;
 	    }
-	pattern = strchr( pattern, '|' );
-	if ( pattern == (char*) 0 )
+	if ( *p != *string )
 	    return 0;
 	}
+    if ( *string == '\0' )
+	return 1;
+    return 0;
     }

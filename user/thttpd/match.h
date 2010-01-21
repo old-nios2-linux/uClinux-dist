@@ -1,6 +1,7 @@
 /* match.h - simple shell-style filename patcher
 **
-** Copyright (C) 1995 by Jef Poskanzer <jef@acme.com>.  All rights reserved.
+** Copyright © 1995 by Jef Poskanzer <jef@mail.acme.com>.
+** All rights reserved.
 **
 ** Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions
@@ -10,7 +11,7 @@
 ** 2. Redistributions in binary form must reproduce the above copyright
 **    notice, this list of conditions and the following disclaimer in the
 **    documentation and/or other materials provided with the distribution.
-** 
+**
 ** THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
 ** ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 ** IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -27,9 +28,9 @@
 #ifndef _MATCH_H_
 #define _MATCH_H_
 
-/* Simple shell-style filename pattern matcher.  Only does ? and *, and
+/* Simple shell-style filename pattern matcher.  Only does ? * and **, and
 ** multiple patterns separated by |.  Returns 1 or 0.
 */
-extern int match( char* pattern, char* string );
+extern int match( const char* pattern, const char* string );
 
 #endif /* _MATCH_H_ */
