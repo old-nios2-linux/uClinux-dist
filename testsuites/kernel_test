@@ -1717,7 +1717,8 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
 
         cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.xip.$format
         cp $UCLINUX_DIST_PATH/images/rootfs.romfs $THIS_LOG/rootfs.romfs.xip.$format
-        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.xip.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.xip.$format
+        cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.xip.$format
         mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_kernel_log $THIS_LOG/build_xip_${format}_kernel_log
         mv $UCLINUX_DIST_TESTSUITES/xip/xip_test_log $THIS_LOG/xip_${format}_test_log
 
@@ -1766,7 +1767,8 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
 
         cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.userspace.$format
         cp $UCLINUX_DIST_PATH/images/img.romfs $THIS_LOG/img.romfs.$format
-        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.xip_userspace.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.xip_userspace.$format
+        cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.xip_userspace.$format
         mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_userspace_kernel_log $THIS_LOG/build_xip_userspace_${format}_kernel_log
         mv $UCLINUX_DIST_TESTSUITES/xip/xip_userspace_test_log $THIS_LOG/xip_userspace_${format}_test_log
 
