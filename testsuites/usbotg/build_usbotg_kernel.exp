@@ -141,6 +141,10 @@ while 1 {
             send "Y\r"
         }
 
+        -re "bonnie\\\+\\\+.*USER_BONNIE.*\\\[.*]" {
+            send "y\r"
+        }
+
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
         }
