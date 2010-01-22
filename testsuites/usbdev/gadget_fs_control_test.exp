@@ -255,14 +255,15 @@ while 1 {
 }
 
 incr case_num
-set timeout 5
+set timeout 20
 send "./usb -r \"1.3\" -v\r"
 while 1 {
     expect {
         -re "panic|\[fF]ail|\[eE]rror" {
             case_fail $case_num
         }
-        -re "gadgetfs: connected.*thread start.*thread start.*SETUP.*" {
+        -re "gadgetfs: connected.*thread start.*thread start" {
+            expect -re $kernel_prompt
             case_pass $case_num
             break
         }
