@@ -1346,7 +1346,7 @@ do
 
   
   #############################################################################################
-  #################### TEST SPI DATA FLASH ####################################################
+  #################### TEST SPI FLASH WITH DIFFERENT CONFIGS ##################################
 
   snormtd_df_config=""
   snormtd_dma_config=""
@@ -1361,6 +1361,10 @@ do
  
   for config in "$snormtd_df_config" "$snormtd_dma_config"
   do
+
+  if [ -z $config ] ; then
+  continue
+  fi
 
   echo  "Testing from spi flash $config ..."
  # Please set the chip selection to the 3rd one on bf537 board.
