@@ -62,6 +62,7 @@ while 1 {
     }
 }
 
+sleep 5
 incr case_num
 set timeout 120
 send "mke2fs /dev/$usb_dev1\r"
