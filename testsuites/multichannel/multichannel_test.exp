@@ -37,7 +37,7 @@ if { $audio_dev == "audio_ad1836" } {
     set channel_num 8
 }
 
-
+sleep 5
 set timeout 30
 incr case_num
 send "modprobe $audio_mod\r"

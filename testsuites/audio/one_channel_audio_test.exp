@@ -280,8 +280,8 @@ while 1 {
 
     send_log "record while play...\n"
     incr case_num
-    set timeout 15
-    send -s "arecord -t wav -c 2 -f S16_LE -r 11000 -d 10 aaa\n"
+    set timeout 20
+    send -s "arecord -t wav -c 2 -f S16_LE -r 11000 -d 15 aaa\n"
     while 1 {
         expect {
             -re "TUV|UVF|TU|UV|VF" {
