@@ -205,7 +205,7 @@ while 1 {
         -re "(modprobe:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "Gadget Zero.*using musb_hdrc.*source and sink data" {
+        -re "Gadget Zero.*zero ready.*(high|full) speed config.*source/sink" {
             break
         }
         timeout {
