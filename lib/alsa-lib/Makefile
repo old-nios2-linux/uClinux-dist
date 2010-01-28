@@ -19,7 +19,7 @@ romfs:
 # if you feel this list is not complete - please send patches
 	rm -rf $(ROMFSDIR)/usr/share/alsa/cards/*.conf
 	$(ROMFSINST) $(VER)/src/conf/cards/aliases.conf /usr/share/alsa/cards/aliases.conf
-	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD1836 $(VER)/src/conf/cards/AD1836.conf /usr/share/alsa/cards/AD1836.conf
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD183X $(VER)/src/conf/cards/AD183X.conf /usr/share/alsa/cards/AD183X.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD193X $(VER)/src/conf/cards/AD193X.conf /usr/share/alsa/cards/AD193X.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD73311 $(VER)/src/conf/cards/AD73311.conf /usr/share/alsa/cards/AD73311.conf
 	$(ROMFSINST) -e CONFIG_SND_BFIN_AD73322 $(VER)/src/conf/cards/AD73322.conf /usr/share/alsa/cards/AD73322.conf
