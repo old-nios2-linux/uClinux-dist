@@ -400,7 +400,7 @@ if [ $BOARD_CONFIG = "BF518F-EZBRD-STD" ] ; then
     BOARD_TYPE=BF518F-EZBRD
 
     AUTO_RUN_STATUS[2]="1"; AUTO_RUN_STATUS[9]="1"; AUTO_RUN_STATUS[11]="0"; AUTO_RUN_STATUS[55]="1"; AUTO_RUN_STATUS[57]="1";AUTO_RUN_STATUS[76]="1";AUTO_RUN_STATUS[$(( n + 6 ))]="1"
-    MANUAL_RUN_STATUS[2]="0"; MANUAL_RUN_STATUS[7]="0"; MANUAL_RUN_STATUS[10]="0"; MANUAL_RUN_STATUS[24]="1"; MANUAL_RUN_STATUS[26]="1"
+    MANUAL_RUN_STATUS[2]="0"; MANUAL_RUN_STATUS[7]="0"; MANUAL_RUN_STATUS[10]="0"; MANUAL_RUN_STATUS[13]="0"; MANUAL_RUN_STATUS[24]="1"; MANUAL_RUN_STATUS[26]="1"
 
 fi
 if [ $BOARD_CONFIG = "BF526-EZBRD-STD" ] ; then
@@ -408,7 +408,7 @@ if [ $BOARD_CONFIG = "BF526-EZBRD-STD" ] ; then
     BOARD_TYPE=BF526-EZBRD
 
     AUTO_RUN_STATUS[2]="1"; AUTO_RUN_STATUS[9]="1"; AUTO_RUN_STATUS[25]="1"; AUTO_RUN_STATUS[57]="1"; AUTO_RUN_STATUS[$(( n + 6 ))]="1"
-    MANUAL_RUN_STATUS[2]="0"; MANUAL_RUN_STATUS[7]="0"; MANUAL_RUN_STATUS[10]="0"; MANUAL_RUN_STATUS[15]="0"
+    MANUAL_RUN_STATUS[2]="0"; MANUAL_RUN_STATUS[7]="0"; MANUAL_RUN_STATUS[10]="0"; MANUAL_RUN_STATUS[13]="0"; MANUAL_RUN_STATUS[15]="0"
 
 fi
 
@@ -1769,8 +1769,8 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
             ./xip_userspace_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
         fi
 
-        cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.userspace.$format
-        cp $UCLINUX_DIST_PATH/images/img.romfs $THIS_LOG/img.romfs.$format
+        cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.xip_userspace.$format
+        cp $UCLINUX_DIST_PATH/images/img.romfs $THIS_LOG/img.romfs.xip_userspace.$format
         cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.xip_userspace.$format
         cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.xip_userspace.$format
         mv $UCLINUX_DIST_TESTSUITES/xip/build_xip_userspace_kernel_log $THIS_LOG/build_xip_userspace_${format}_kernel_log
