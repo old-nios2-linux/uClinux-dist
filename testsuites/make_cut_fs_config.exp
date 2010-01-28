@@ -72,10 +72,6 @@ while 1 {
 
 #######################################################################################
 
-        -re "Build ncurses.*LIB_NCURSES.*\\\[.*]" {
-            send "N\r"
-        }
-
         -re "boa.*USER_BOA_SRC_BOA.*\\\[.*]" {
             send "N\r"
         }
@@ -248,6 +244,10 @@ while 1 {
         }
 
         -re "Build libZ \\\(LIB_ZLIB\\\) \\\[.*\[nN].*]" {
+            send "N\r"
+        }
+
+        -re "Build ncurses.*LIB_NCURSES.*\\\[.*\[nN].*]" {
             send "N\r"
         }
 
