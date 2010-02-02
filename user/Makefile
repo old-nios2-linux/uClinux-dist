@@ -80,6 +80,7 @@ dir_$(CONFIG_USER_CRON_CRON)                += cron
 dir_$(CONFIG_USER_CRYPTO_TOOLS_CRYPTOTEST)  += crypto-tools
 dir_$(CONFIG_USER_CRYPTO_TOOLS_CRYPTOKEYTEST)  += crypto-tools
 dir_$(CONFIG_USER_CXXTEST_CXXTEST)          += cxxtest
+dir_$(CONFIG_USER_RTTESTS_CYCLICTEST)       += rt-tests
 dir_$(CONFIG_USER_DDNS3_CLIENT_DDNS3)        += ddns3-client
 dir_$(CONFIG_USER_DE2TSCAL_DE2TSCAL)        += de2ts-cal
 dir_$(CONFIG_USER_DEBUG_DEBUG)		    += debug

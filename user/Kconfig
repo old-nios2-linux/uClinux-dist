@@ -4025,6 +4025,11 @@ config USER_CXXTEST_CXXTEST
 	help
 	  Applications to test the c++ build environment.
 
+config USER_RTTESTS_CYCLICTEST
+	bool "cyclictest (rt-tests)"
+	help
+	  System latency test (http://rt.wiki.kernel.org/index.php/Cyclictest)
+
 comment "Real Time"
 config USER_XENOMAI
 	bool "Xenomai"
