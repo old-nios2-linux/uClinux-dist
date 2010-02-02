@@ -4,6 +4,8 @@ VER = ntp-4.2.6
 export ac_cv_have_in6addr_any = no
 export isc_cv_have_in6addr_any = no
 
+export ac_cv_path_PATH_NET_SNMP_CONFIG = $(CONFIGURE_HOST)-net-snmp-config
+
 CONF_OPTS = \
 	--disable-debugging	\
 	--disable-HOPFSERIAL --disable-HOPFPCI --disable-BANCOMM           \
@@ -23,7 +25,7 @@ CONF_OPTS = \
 	--disable-SCHMID --disable-TRIMTAIP --disable-TRIMTSIP             \
 	--disable-WHARTON --disable-VARITEXT --disable-kmem                \
 	--without-openssl-libdir --without-openssl-incdir --without-crypto \
-	--without-electricfence --without-sntp \
+	--without-electricfence --without-sntp --without-ntpsnmpd          \
 	$(call USE_WITH,USER_NTPD_NTPDATE,ntpdate) \
 	$(call USE_WITH,USER_NTPD_NTPDC,ntpdc) \
 	$(call USER_NTPD_NTPQ,ntpq)
