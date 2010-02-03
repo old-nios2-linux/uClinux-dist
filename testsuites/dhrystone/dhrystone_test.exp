@@ -42,7 +42,7 @@ while 1 {
         "Please give the number of runs through the benchmark:" {
             send "$runs_number \r"
         }
-        -re "Microseconds.*: +(\[0-9.]+)" {
+        -re "Microseconds.*: +(\[0-9]+\.\[0-9]+)" {
             set microseconds $expect_out(1,string)
         }
         -re "Dhrystones per Second: +(\[0-9]+\.\[0-9e+]+)" {
