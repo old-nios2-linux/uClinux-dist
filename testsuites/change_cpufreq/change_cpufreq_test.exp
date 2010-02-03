@@ -89,11 +89,11 @@ if { $core_clock >= $std_clock } {
                 set calibration_before $expect_out(2,string)
                       
                              if { 0 <= [expr $exact_core_clock - $core_clock] && [expr $exact_core_clock - $core_clock] < 1 } {
-                                    case_pass $case_num
                                     send_log "\n exact_core_clock $exact_core_clock\n"
                                     send_log "\n calibration_before $calibration_before\n"
-                                    send_user "\ncat cpuinfo case pass!\n"
+                                    send_log "\ncat cpuinfo case pass!\n"
                                     expect  -re "$kernel_prompt"
+                                    case_pass $case_num
                                     break
                                 } else {
                                     case_fail $case_num
@@ -134,8 +134,40 @@ if { $core_clock >= $std_clock } {
             -re "cpu MHz\[\x20\t]+: $new_core_clock\.\[0-9]{3}.*/.*Calibration\[\x20\t]+: $calibration_after loops" {
                 send_log "\nMatched new_core_clock and calibration.\n"
                 expect  -re "$kernel_prompt"
-                    case_pass $case_num
-                    break
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+                exit
+            }
+        }
+    }
+
+    incr case_num
+    send -s  "cpufreq-set -f $core_clock_inK\r"
+    while 1 {
+        expect {
+            -re "$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+                exit
+            }
+        }
+    }
+
+    incr case_num
+    send -s  "cat /proc/cpuinfo\r"
+    while 1 {
+        expect {
+            -re "cpu MHz\[\x20\t]+: $core_clock\.\[0-9]{3}.*/.*Calibration\[\x20\t]+: $calibration_before loops" {
+                send_log "\nMatched core_clock and calibration.\n"
+                expect  -re "$kernel_prompt"
+                case_pass $case_num
+                break
             }
             timeout {
                 case_fail $case_num
