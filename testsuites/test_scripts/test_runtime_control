@@ -31,7 +31,7 @@ else
  elif [ "$script_name" == "./ltp_auto_test.exp" ] ; then
      sleep 7200
  else
-     sleep 3600
+     sleep 6000
  fi
 
  test_name=`{ ps -p $test_pid | tail -1 | awk '{print $4}' ;}  2> /dev/null`
