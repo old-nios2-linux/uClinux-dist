@@ -25,13 +25,13 @@ send "\r"
 expect -re $kernel_prompt
 
 set case_num 0
-set timeout 500
+set timeout 60
 
 incr case_num
 send "/lmbench3/bin/blackfin-Linux/lat_ctx -s 0 processes 2 8 16\r"
 while 1 {
     expect {
-        -re "size.* ovr.*16 \[0-9\.]+$kernel_prompt" {
+        -re "size.* ovr.*16 \[0-9\.]+.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -45,7 +45,7 @@ incr case_num
 send "/lmbench3/bin/blackfin-Linux/lat_ctx -s 16 processes 2 8 16\r"
 while 1 {
     expect {
-        -re "size.* ovr.*16 \[0-9\.]+$kernel_prompt" {
+        -re "size.* ovr.*16 \[0-9\.]+.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -59,7 +59,7 @@ incr case_num
 send "/lmbench3/bin/blackfin-Linux/lat_ctx -s 64 processes 2 8 16\r"
 while 1 {
     expect {
-        -re "size.* ovr.*16 \[0-9\.]+$kernel_prompt" {
+        -re "size.* ovr.*16 \[0-9\.]+.*$kernel_prompt" {
             case_pass $case_num
             break
         }
