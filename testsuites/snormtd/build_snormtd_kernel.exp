@@ -23,7 +23,7 @@ set board_file $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c
 }  
 
 if { $mode == "dma" } {
-    if [ catch {exec sed -i  /"spi_flash_chip_info ="/{N\;s/".enable_dma = 0"/".enable_dma = 1"/}  $board_file} ] {
+    if [ catch {exec sed -i  /spi_flash_chip_info/{N\;s/0/1/}  $board_file} ] {
         send_user "\nfail to modify board file\n"
         send_user "$errorInfo\n"
     }

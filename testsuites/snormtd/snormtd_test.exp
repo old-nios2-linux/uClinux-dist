@@ -16,7 +16,6 @@ set mode [lindex $argv 1]
 
 if { $argc >= 3} {
 set spi_board_type [lindex $argv 2]
-append TITLE " ($spi_board_type)"
   if { $spi_board_type == "df" } {
       set spi_rootfs_num 2
       set page_size  512
@@ -26,6 +25,7 @@ append TITLE " ($spi_board_type)"
 log_file [log_file_name "$argv0.$mode.$spi_board_type"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
+append TITLE " ($mode $spi_board_type)"
 set page_size  4096
 set erase_size 65536
 
