@@ -19,7 +19,6 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" { 
             send "y\r"
         }
@@ -29,6 +28,10 @@ while 1 {
         }
 
         -re "Allow mmaped anonymous memory to be un-initialized.*MMAP_ALLOW_UNINITIALIZE.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "GPTimer0.*GPTMR0_CLOCKSOURCE.*\\\[.*]" {
             send "Y\r"
         }
 

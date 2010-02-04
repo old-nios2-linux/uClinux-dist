@@ -23,7 +23,7 @@ send "uname -a\r"
 while 1 {
     expect {
         -re "SMP.*$kernel_prompt" {
-            set time 120
+            set time 180
             break
         }
         -re $kernel_prompt {
