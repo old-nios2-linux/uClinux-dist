@@ -115,6 +115,11 @@ step "Make image without libgfortran"
 if [ catch {exec rm [glob $uclinux_path/romfs/lib/libgfortran*]} ] {
     send_user "$errorInfo\n"
 }
+
+if [ catch {exec sed --in-place "/syslogd/ d" $uclinux_path/romfs/etc/inittab} ] {
+    send_user "$errorInfo\n"
+}
+
 cd $uclinux_path/testsuites
 source   make_image.exp
 
