@@ -1,7 +1,12 @@
 VER = iproute2-2.6.29-1
 
+ARGS =
+ifeq ($(CONFIGURE_SHARED_WITH),--without-shared)
+ARGS += SHARED_LIBS=n
+endif
+
 all: $(VER)/Config
-	$(MAKE) -C $(VER) CC="$(CC)" LIBUTIL=
+	$(MAKE) -C $(VER) CC="$(CC)" LIBUTIL= $(ARGS)
 
 $(VER)/Config: Config
 	cp $< $@
