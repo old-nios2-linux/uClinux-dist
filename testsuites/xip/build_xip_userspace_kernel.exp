@@ -41,11 +41,11 @@ while 1 {
         }
 
         -re "Detect flash chips by Common Flash Interface.*MTD_CFI.*\\\[.*]" {
-            send "Y\r"
+            send "N\r"
         }
 
         -re "Support for AMD.*flash chips.*MTD_CFI_AMDSTD.*\\\[.*]" {
-            send "Y\r"
+            send "N\r"
         }
 
         -re "Support for ROM chips in bus mapping.*MTD_ROM.*\\\[.*]" {
@@ -112,17 +112,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make kernel"
-
 source   make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux image"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"
-
 log_file
