@@ -44,12 +44,16 @@ while 1 {
             send "$expect_out(1,string)\r"
         }
 
+        -re "Initial RAM filesystem and RAM disk.*BLK_DEV_INITRD.*\\\[.*]" {
+            send "N\r"
+        }
+
         -re "Detect flash chips by Common Flash Interface.*MTD_CFI.*\\\[.*]" {
-            send "Y\r"
+            send "N\r"
         }
 
         -re "Support for AMD.*flash chips.*MTD_CFI_AMDSTD.*\\\[.*]" {
-            send "Y\r"
+            send "N\r"
         }
 
         -re "Support for ROM chips in bus mapping.*MTD_ROM.*\\\[.*]" {
@@ -57,6 +61,10 @@ while 1 {
         }
 
         -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Miscellaneous filesystems \\\(MISC_FILESYSTEMS.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -72,6 +80,30 @@ while 1 {
             send "Y\r"
         }
 
+        -re "Kernel support for FDPIC ELF binaries.*BINFMT_ELF_FDPIC.*\\\[.*]" {
+            if { $format == "fdpic" } {
+                send  "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "Kernel support for flat binaries.*BINFMT_FLAT.*\\\[.*]" {
+            if { $format == "shared-flat" } {
+                send  "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "Enable shared FLAT support.*BINFMT_SHARED_FLAT.*\\\[.*]" {
+            if { $format == "shared-flat" } {
+                send  "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
             if { $format == "fdpic" } {
                 send  "4\r"
@@ -84,6 +116,14 @@ while 1 {
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
+        }
+
+        -re "Install ELF shared libraries.*INSTALL_ELF_SHARED_LIBS.*\\\[.*]" {
+            if { $format == "shared-flat" } {
+                send  "N\r"
+            } else {
+                send "Y\r"
+            }
         }
 
         "\\\(*) \\\[*]" {

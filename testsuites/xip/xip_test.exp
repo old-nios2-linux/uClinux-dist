@@ -222,7 +222,7 @@ while 1 {
         -re "Kernel panic" {
             case_fail $case_num
         }
-        -re "XIP Kernel Image \.\.\. OK.*VFS: Mounted root.*romfs filesystem.*$kernel_prompt" {
+        -re "VFS: Mounted root.*romfs filesystem.*$kernel_prompt" {
             case_pass $case_num
             break
         }
