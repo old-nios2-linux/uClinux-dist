@@ -25,6 +25,9 @@ step "Make config."
 source  make_default_config.exp
 
 cd $uclinux_path/testsuites
+source  make_cut_busybox_config.exp
+
+cd $uclinux_path/testsuites
 source  make_cut_fs_config.exp
 
 cd $uclinux_path
