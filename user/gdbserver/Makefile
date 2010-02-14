@@ -1,5 +1,7 @@
 VER = gdb-6.5
 
+FLTFLAGS += -s 0x10000
+
 include $(ROOTDIR)/tools/autotools.mk
 CONFIGURE = gdbserver/configure
 
