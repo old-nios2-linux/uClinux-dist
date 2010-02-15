@@ -1892,6 +1892,8 @@
 	{"linux/kvm.h",	"KVM_CREATE_PIT2",	0xae77},
 	{"linux/kvm.h",	"KVM_SET_BOOT_CPU_ID",	0xae78},
 	{"linux/kvm.h",	"KVM_IOEVENTFD",	0xae79},
+	{"linux/kvm.h",	"KVM_SET_CLOCK",	0xae7b},
+	{"linux/kvm.h",	"KVM_GET_CLOCK",	0xae7c},
 	{"linux/kvm.h",	"KVM_RUN",	0xae80},
 	{"linux/kvm.h",	"KVM_GET_REGS",	0xae81},
 	{"linux/kvm.h",	"KVM_SET_REGS",	0xae82},
