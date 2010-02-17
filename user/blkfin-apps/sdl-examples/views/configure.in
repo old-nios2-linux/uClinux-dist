@@ -18,7 +18,7 @@ SDL_VERSION=1.1.0
 AM_PATH_SDL($SDL_VERSION, :,
                 AC_MSG_ERROR([*** SDL version $SDL_VERSION or above not found!]))
 		CFLAGS="$CFLAGS $SDL_CFLAGS"
-		LIBS="$LIBS $SDL_LIBS $X_LIBS -L/usr/lib"
+		LIBS="$LIBS $SDL_LIBS $X_LIBS"
 
 AC_CHECK_LIB(SDL_image, IMG_Load)
 AC_CHECK_FUNCS([IMG_Load])

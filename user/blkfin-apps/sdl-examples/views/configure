@@ -4546,7 +4546,7 @@ echo "$as_me: error: *** SDL version $SDL_VERSION or above not found!" >&2;}
   rm -f conf.sdltest
 
 		CFLAGS="$CFLAGS $SDL_CFLAGS"
-		LIBS="$LIBS $SDL_LIBS $X_LIBS -L/usr/lib"
+		LIBS="$LIBS $SDL_LIBS $X_LIBS"
 
 
 echo "$as_me:$LINENO: checking for IMG_Load in -lSDL_image" >&5
