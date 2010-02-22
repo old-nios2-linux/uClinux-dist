@@ -281,7 +281,7 @@ set timeout 90
 send "mke2fs /dev/$mmc_dev1\r"
 while 1 {
     expect {
-        -re "mke2fs.*Writing.*$kernel_prompt" {
+        -re "Writing superblocks and filesystem accounting information: done.*$kernel_prompt" {
             send_user "mke2fs done, test pass\n"
             case_pass $case_num
             break
@@ -595,7 +595,7 @@ set timeout 90
 send "mke2fs /dev/$mmc_dev1\r"
 while 1 {
     expect {
-        -re "mke2fs.*Writing.*$kernel_prompt" {
+        -re "Writing superblocks and filesystem accounting information: done.*$kernel_prompt" {
             send_user "mke2fs done, test pass\n"
             case_pass $case_num
             break
