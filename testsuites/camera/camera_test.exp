@@ -57,6 +57,8 @@ while 1 {
     }
 }
 
+sleep 5
+
 incr case_num
 set timeout 20
 send "ffmpeg -r 20 -f video4linux -s 320x240 -i /dev/video0 -f mpegts udp:$serverip:1234\r"
