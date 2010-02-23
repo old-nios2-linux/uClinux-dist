@@ -53,16 +53,16 @@ while 1 {
             send "M\r"
         }
 
-        -re "AD1836 Audio support for BF53x.*SND_BLACKFIN_AD1836.*\\\[.*]" {
+        -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF5xx chip.*SND_BF5XX_TDM.*\\\[.*]" {
             send "M\r"
         }
 
-        -re "Blackfin Audio SPORT port.*SND_BLACKFIN_SPORT.*\\\[.]" {
-            send "0\r"
+        -re "SoC AD183X Audio support for BF5xx.*SND_BF5XX_SOC_AD183X.*\\\[.*]" {
+            send "M\r"
         }
 
-        -re "Blackfin Audio SPI channel selection bit.*SND_BLACKFIN_SPI_PFBIT.*\\\[.]" {
-            send "4\r"
+        -re "SoC AC97 Audio for the ADI BF5xx chip.*SND_BF5XX_AC97.*\\\[.*]" {
+            send "N\r"
         }
 
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {

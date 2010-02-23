@@ -84,12 +84,16 @@ while 1 {
             send "Y\r"
         }
 
-        -re "AD1836 Audio support for BF53x.*SND_BLACKFIN_AD1836.*\\\[.*]" {
+        -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN.*\\\[.*]" {
+            send "M\r"
+        }
+
+        -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
             send "N\r"
         }
 
-        -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN.*\\\[.*]" {
-            send "M\r"
+        -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF5xx chip.*SND_BF5XX_TDM.*\\\[.*]" {
+            send "N\r"
         }
 
         -re "Cascaded AD73322 Audio support for BF53x.*SND_BFIN_AD73322.*\\\[.*]" {
