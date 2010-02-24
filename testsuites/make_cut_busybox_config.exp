@@ -31,6 +31,30 @@ while 1 {
             send "N\r"
         }
 
+        -re "cmp.*USER_BUSYBOX_CMP.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "diff.*USER_BUSYBOX_DIFF.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "fdisk.*USER_BUSYBOX_FDISK.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "wget.*USER_BUSYBOX_WGET.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "traceroute.*USER_BUSYBOX_TRACEROUTE.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "top.*USER_BUSYBOX_TOP.*\\\[.*]" {
+            send "N\r"
+        }
+
         -re "sed.*USER_BUSYBOX_SED.*\\\[.*]" {
             send "N\r"
         }
@@ -40,10 +64,6 @@ while 1 {
         }
 
         -re "find.*USER_BUSYBOX_FIND.*\\\[.*]" {
-            send "N\r"
-        }
-
-        -re "grep.*USER_BUSYBOX_GREP.*\\\[.*]" {
             send "N\r"
         }
 
