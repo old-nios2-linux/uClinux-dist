@@ -15,11 +15,10 @@ step "Starting test."
 set timeout 8
 set flag 0
 
-#expect  -re $kernel_prompt
-send -s "modprobe can\r" 
+send -s "modprobe bfin_can\r" 
 while 1 {
    expect {
-     -re "BlackFin-CAN CAN Driver" {
+     -re "bfin_can device" {
          incr flag
 	 puts "module insert success.\n"
          break
@@ -35,7 +34,7 @@ expect  -re $kernel_prompt
 send -s "lsmod\r" 
 while 1 {
    expect {
-      "can" {
+      "bfin_can" {
          incr flag
 	 puts "module ls success.\n"
          break
@@ -49,7 +48,56 @@ while 1 {
 }
 
 expect  -re $kernel_prompt
-send -s "can_send 10 00 01 02 03 04 05 06 07\r" 
+send -s "ip link set can0 type can bitrate 125000\r" 
+while 1 {
+   expect {
+     -re "bfin_can.*set" {
+         incr flag
+	 puts "set bitrate success.\n"
+         break
+      }
+
+      timeout { 
+         puts "set bitrate failed.\n"                  
+         break
+         
+     }
+}
+
+expect  -re $kernel_prompt
+send -s "ifconfig can0 up\r" 
+while 1 {
+   expect {
+     -re "$kernel_prompt" {
+         incr flag
+	 puts "ifconfig success.\n"
+         break
+      }
+
+      timeout { 
+         puts "ifconfig failed.\n"                  
+         break
+         }
+     }
+}
+
+send -s "candump can0\r" 
+while 1 {
+   expect {
+     -re "can0 .*" { 
+         incr flag
+         send -s "\3"
+         break
+      }
+
+      timeout {                           
+         break
+         }
+     }
+}
+
+expect  -re $kernel_prompt
+send -s "cansend can0 123#AABBCCDD\r" 
 while 1 {
    sleep 3
    expect {
@@ -65,7 +113,7 @@ while 1 {
 }
 
 expect  -re $kernel_prompt
-send -s "can_send 10 00 01 02 03 04 05 06 07\r" 
+send -s "cansend can0 12345678#1122334455667788\r" 
 while 1 {
    sleep 3
    expect {
@@ -80,12 +128,13 @@ while 1 {
      }
 }
 
-send -s "receive\r" 
+expect  -re $kernel_prompt
+send -s "cangen can0\r" 
 while 1 {
+   sleep 3
    expect {
-     -re "Received with ret=1.*00 01 02 03 04 05 06 07.*" { 
-         incr flag
-         send -s "\3"
+       -re $kernel_prompt { 
+        incr flag
          break
       }
 
@@ -95,23 +144,19 @@ while 1 {
      }
 }
 
-#send -s "lsmod\r" 
-expect  -re $kernel_prompt
-
-send -s "lsmod\r"
-
+send -s "rmmod bfin_can\r"
 while 1 {
    expect {
-      "can" {
-         incr flag
-         puts "module ls success.\n"
+      "bfin_can" {
+         puts "module ls failed.\n"
          break
       }
 
       timeout {
-         puts "module ls failed.\n"
+         incr flag
+         puts "module ls success.\n"
          break
-         }
+      }
      }
 }
 

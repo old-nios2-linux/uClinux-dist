@@ -30,32 +30,40 @@ while 1 {
             send "y\r"
         }
 
-        -re "Re-program Clocks while Kernel boots.*BFIN_KERNEL_CLOCK.*\\\[.*]" {
+        -re "CAN bus subsystem support.*CAN.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "VCO Multiplier.*VCO_MULT.*\\\[.*]" {
-            send "20\r"
+        -re "Raw CAN Protocol.*CAN_RAW.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "Core Clock Divider.*CCLK_DIV.*\\\[.*]" {
-            send "1\r"
+        -re "Broadcast Manager CAN Protocol.*CAN_BCM.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "System Clock Divider.*SCLK_DIV.*\\\[.*]" {
-            send "4\r"
+        -re "Platform CAN drivers with Netlink support.*CAN_DEV.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "can4linux support, the car bus and industrial fieldbus.*CAN4LINUX.*\\\[.*]" {
-            send "y\r"
+        -re "CAN bit-timing calculation.*CAN_CALC_BITTIMING.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "Analog Devices BlackFin CAN Controller.*CAN_BLACKFIN.*\\\[.*]" {
+        -re "Analog Devices Blackfin on-chip CAN.*CAN_BFIN.*\\\[.*]" {
             send "M\r"
         }
 
-        -re "can4linux examples.*USER_CAN_EXAMPLES.*\\\[.*]" {
-            send "y\r"
+        -re "SocketCAN utilities.*USER_CAN_UTILS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "iproute2.*USER_IPROUTE2.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "ip.*USER_IPROUTE2_IP_IP.*\\\[.*]" {
+            send "Y\r"
         }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {

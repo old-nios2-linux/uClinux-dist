@@ -19,6 +19,8 @@ step "Reboot the kernel."
 # set bootargs 	$bootargs_param0   
 source ../reboot_kernel.exp 
 
+set SMP_STATUS 0
+
 if { $board_type == "BF533-STAMP" || $board_type == "BF518F-EZBRD" || $board_type == "BF526-EZBRD" } {
    set std_clock 398
 } else {
@@ -32,10 +34,13 @@ set timeout 5
 set case_num 0
 incr case_num
 
-
 send -s  "dmesg\r"
 while 1 {
     expect {
+        -re "SMP" {
+            set SMP_STATUS 1 
+            send_log "Linux kernel SMP status is $SMP_STATUS .\r"
+        }
         -re "Processor Speed: (.*) MHz core clock and (.*) MHz System Clock" {
             set core_clock $expect_out(1,string)
             set system_clock $expect_out(2,string)
@@ -87,7 +92,7 @@ if { $core_clock >= $std_clock } {
             -re "cpu MHz\[\x20\t]+: (\[0-9]+\.\[0-9]{3}).*/.*Calibration\[\x20\t]+: (\[0-9]+) loops" {
                 set exact_core_clock $expect_out(1,string)
                 set calibration_before $expect_out(2,string)
-                      
+                     
                              if { 0 <= [expr $exact_core_clock - $core_clock] && [expr $exact_core_clock - $core_clock] < 1 } {
                                     send_log "\n exact_core_clock $exact_core_clock\n"
                                     send_log "\n calibration_before $calibration_before\n"
@@ -98,7 +103,6 @@ if { $core_clock >= $std_clock } {
                                 } else {
                                     case_fail $case_num
                                 }
-
             }
             timeout {
                 case_fail $case_num
@@ -133,6 +137,20 @@ if { $core_clock >= $std_clock } {
         expect {
             -re "cpu MHz\[\x20\t]+: $new_core_clock\.\[0-9]{3}.*/.*Calibration\[\x20\t]+: $calibration_after loops" {
                 send_log "\nMatched new_core_clock and calibration.\n"
+
+                if { $SMP_STATUS == 1 } {
+                     expect {
+                                  -re "cpu MHz\[\x20\t]+: $new_core_clock\.\[0-9]{3}.*/.*Calibration\[\x20\t]+: $calibration_after loops" {
+                                    send_log "The second core is detected!\r"
+                                    case_pass $case_num
+                                    }
+
+                                  timeout {
+                                    case_fail $case_num
+                                    exit
+                                  }
+                     }
+                }
                 expect  -re "$kernel_prompt"
                 case_pass $case_num
                 break
@@ -165,6 +183,21 @@ if { $core_clock >= $std_clock } {
         expect {
             -re "cpu MHz\[\x20\t]+: $core_clock\.\[0-9]{3}.*/.*Calibration\[\x20\t]+: $calibration_before loops" {
                 send_log "\nMatched core_clock and calibration.\n"
+
+                if { $SMP_STATUS == 1 } {
+                     expect {
+                                  -re "cpu MHz\[\x20\t]+: $core_clock\.\[0-9]{3}.*/.*Calibration\[\x20\t]+: $calibration_before loops" {
+                                    send_log "The second core is detected and freq is changed back!\r"
+                                    case_pass $case_num
+                                    }
+
+                                  timeout {
+                                    case_fail $case_num
+                                    exit
+                                  }
+                     }
+                }
+
                 expect  -re "$kernel_prompt"
                 case_pass $case_num
                 break
