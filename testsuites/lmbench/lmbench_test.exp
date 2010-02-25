@@ -25,7 +25,7 @@ send "\r"
 expect -re $kernel_prompt
 
 set case_num 0
-set timeout 60
+set timeout 120
 
 incr case_num
 send "/lmbench3/bin/blackfin-Linux/lat_ctx -s 0 processes 2 8 16\r"
