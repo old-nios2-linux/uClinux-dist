@@ -54,10 +54,6 @@ while 1 {
             send "N\r"
         }
 
-        -re "Generic input layer.*needed for keyboard, mouse.*INPUT.*\\\[.*]" {
-            send "N\r"
-        }
-
         -re "Support for frame buffer devices.*FB.*\\\[.*]" {
             send "N\r"
         }
@@ -68,6 +64,46 @@ while 1 {
 
         -re "Distributed Switch Architecture support.*NET_DSA.*\\\[.*]" {
             send -s "N\r"
+        }
+
+        -re "Virtual terminal.*VT.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Second extended fs support \\\(EXT2_FS\\\) \\\[.*]" {
+            send "N\r"
+        }
+
+        -re "SCSI device support.*SCSI.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Backlight & LCD device support.*BACKLIGHT_LCD_SUPPORT.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "HID Devices.*HID_SUPPORT.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "ISO 9660 CDROM file system support.*ISO9660_FS.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "UDF file system support.*UDF_FS.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "VFAT \\\(Windows-95\\\) fs support.*VFAT_FS.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "usbutils \\\(lsusb\\\).*USER_USBUTILS.*\\\[.*]" {
+            send "N\r"
         }
 
 #######################################################################################
@@ -239,6 +275,14 @@ while 1 {
             send "y\r"
         }
 
+        -re "Generic input layer.*needed for keyboard, mouse.*INPUT.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Native language support.*NLS.*\\\[.*]" {
+            send "N\r"
+        }
+
         -re "SPI support.*SPI.*\\\[\[^\r]*]" {
             send "N\r"
         }
@@ -268,6 +312,10 @@ while 1 {
         }
 
         -re "Build ncurses.*LIB_NCURSES.*\\\[.*\[nN].*]" {
+            send "N\r"
+        }
+
+        -re "Build libusb.*LIB_LIBUSB.*\\\[.*]" {
             send "N\r"
         }
 
