@@ -33,7 +33,10 @@ step "Make config"
 source  make_default_config.exp
 
 cd $uclinux_path/testsuites
-source  make_cut_fs_config.exp
+source  make_config_reserve_mem.exp
+
+cd $uclinux_path/testsuites
+source  make_cut_busybox_config.exp
 
 cd $uclinux_path
 set timeout 300
@@ -97,6 +100,14 @@ while 1 {
                 send "Y\r"
             } else {
                 send "N\r"
+            }
+        }
+
+        -re "Second extended fs support \\\(EXT2_FS\\\) \\\[.*]" {
+            if { $board_type == "BF548-EZKIT" } {
+                send "Y\r"
+            } else {
+                send "\r"
             }
         }
 
