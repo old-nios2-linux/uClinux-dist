@@ -322,11 +322,13 @@ while 1 {
 }
 
 incr case_num
-set timeout 10
-send "diff test_file host_file\r"
+set timeout 20
+send "diff -q test_file host_file\r"
 while 1 {
     expect {
-        -nocase -re "(diff:|fail|error|no such|>).* #" {
+        -nocase -re "(diff:|fail|error|no such|differ).* #" {
+            send "diff test_file host_file\r"
+            expect " #"
             case_fail $case_num
         }
          -re " #" {
@@ -451,11 +453,13 @@ while 1 {
 }
 
 incr case_num
-set timeout 10
-send "diff test_file target_file\r"
+set timeout 20
+send "diff -q test_file target_file\r"
 while 1 {
     expect {
-        -nocase -re "(diff:|fail|error|no such|>).* #" {
+        -nocase -re "(diff:|fail|error|no such|differ).* #" {
+            send "diff test_file target_file\r"
+            expect " #"
             case_fail $case_num
         }
          -re " #" {
