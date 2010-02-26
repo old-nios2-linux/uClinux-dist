@@ -14,6 +14,13 @@ if { $argc >= 2} {
 log_file [log_file_name $argv0.$spi_mode ]
 send_user "Starting $argv0\n"
 
+# workaround for bug 5808
+if [ catch {exec patch -p0 < mmc_config.patch} ] {
+    send_user "\nfail to patch config file\n"
+    send_user "$errorInfo\n"
+    exit
+}
+
 if { $spi_mode == "interrupt" } {
     if [ catch {exec sed -i "/pio_interrupt/ s/0/1/" $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c} ] {
         send_user "\nfail to modify board file\n"
@@ -29,55 +36,11 @@ step "Make config."
 source  make_default_config.exp
 
 # Following make specific configuration for this case.
-# workaround for bug 5808
 cd $uclinux_path
 set timeout 300
 spawn make config
 while 1 {
     expect {
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -re "MMC/SD/SDIO card support \\\(MMC\\\).*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .01
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
-cd $uclinux_path
-set timeout 300
-spawn make config
-while 1 {
-    expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }

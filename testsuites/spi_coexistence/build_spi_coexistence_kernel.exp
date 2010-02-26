@@ -7,6 +7,13 @@ send_user "Starting $argv0\n"
 
 set env(EXT2_BLOCKS) "10240"
 
+# workaround for bug 5808
+if [ catch {exec patch -p0 < mmc_config.patch} ] {
+    send_user "\nfail to patch config file\n"
+    send_user "$errorInfo\n"
+    exit
+}
+
 cd $uclinux_path/testsuites
 step "Make clean."
 source  make_clean.exp
@@ -16,49 +23,6 @@ step "Make config."
 source make_default_config.exp
 
 # Following make specific configuration for this case.
-# workaround for bug 5808
-cd $uclinux_path
-set timeout 300
-spawn make config
-while 1 {
-    expect {
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -re "MMC/SD/SDIO card support \\\(MMC\\\).*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .01
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
 cd $uclinux_path
 set timeout 300
 spawn make config
