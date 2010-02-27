@@ -63,7 +63,7 @@ clean:
 
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSH build/ssh /bin/ssh
-	$(ROMFSINST) -e CONFIG_USER_SSH_SSH /etc/default/ssh_config
+	$(ROMFSINST) -d -e CONFIG_USER_SSH_SSH /etc/default/ssh_config
 	: $(ROMFSINST) -e CONFIG_USER_SSH_SSH -p 700 -d /.ssh
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSHD build/sshd /bin/sshd
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSHKEYGEN build/ssh-keygen /bin/ssh-keygen
