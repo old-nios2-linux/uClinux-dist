@@ -108,7 +108,7 @@ int          n
             "[P1--] = R3;\n\t"
             "P0 += 4;\n\t"
          "LOOP_END pitch%=;\n\t"
-	 "L0 = 0;\n\t"
+         "L0 = 0;\n\t"
    : : "m" (xs), "m" (x), "m" (ac32top), "m" (N_lag), "m" (lag_1), "m" (nshift)
    : "A0", "A1", "P0", "P1", "P2", "P3", "P4", "R0", "R1", "R2", "R3", "R4", "I0", "I1", "L0", "L1", "B0", "B1", "memory",
      "ASTAT" BFIN_HWLOOP0_REGS BFIN_HWLOOP1_REGS

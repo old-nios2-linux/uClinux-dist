@@ -66,7 +66,7 @@ void vq_nbest(spx_word16_t *in, const spx_word16_t *codebook, int len, int entri
                "if cc %3 = R2;\n\t"
                "R2 += 1;\n\t"
             "LOOP_END entries_loop%=;\n\t"
-	    "L0 = 0;\n\t"
+            "L0 = 0;\n\t"
             : "=&D" (dist), "=&a" (codebook), "=&d" (best_dist[0]), "=&d" (nbest[0]), "=&a" (E)
             : "a" (len-1), "a" (in), "a" (2), "d" (entries), "d" (len<<1), "1" (codebook), "4" (E), "2" (best_dist[0]), "3" (nbest[0])
             : "R0", "R1", "R2", "I0", "L0", "B0", "A0", "cc", "memory",
