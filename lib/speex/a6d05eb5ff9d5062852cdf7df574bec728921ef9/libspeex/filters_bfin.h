@@ -52,7 +52,7 @@ int normalize16(const spx_sig_t *x, spx_word16_t *y, spx_sig_t max_scale, int le
    "LOOP_END norm_max%=;\n\t"
    : "=&d" (max_val)
    : "a" (x), "a" (len)
-   : "R1", "R2", "ASTAT" BFIN_HWLOOP0_REGS
+   : "L0", "R1", "R2", "ASTAT" BFIN_HWLOOP0_REGS
    );
 
    sig_shift=0;
