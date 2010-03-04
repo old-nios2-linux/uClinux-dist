@@ -397,4 +397,5 @@
 	{ 5,	TD,	printargs,		"preadv"	}, /* 366 */
 	{ 5,	TD,	printargs,		"pwritev"	}, /* 367 */
 	{ 4,	TP|TS,	printargs,		"rt_tgsigqueueinfo"	}, /* 368 */
-	{ 5,	0,	printargs,		"perf_counter_open"	}, /* 369 */
+	{ 5,	0,	printargs,		"perf_event_open"	}, /* 369 */
+	{ 5,	0,	printargs,		"recvmmsg"	}, /* 370 */
