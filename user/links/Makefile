@@ -1,5 +1,7 @@
 VER = links-2.2
 
+export ac_cv_path_DIRECTFB_CONFIG = $(STAGEDIR)/usr/bin/directfb-config
+
 CONF_OPTS = \
 	$(call USE_ENABLE,LIB_LIBPNG,graphics) \
 	--without-svgalib \
