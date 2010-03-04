@@ -1,5 +1,9 @@
 VER = lynx2-8-6.5
 
+CONF_OPTS = \
+	--with-screen=ncurses \
+	--with-curses-dir=$(STAGEDIR)/usr
+
 include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
