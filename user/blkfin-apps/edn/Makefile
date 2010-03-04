@@ -13,7 +13,9 @@ LDLIBS += -lrt
 sysinfo.c:
 	./sysinfo.sh $(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS)
 
-$(EXEC): sysinfo.c $(OBJS)
+linux.o: sysinfo.c
+
+$(EXEC): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) -lm $(LDLIBS)
 
 romfs:
