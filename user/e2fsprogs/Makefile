@@ -1,11 +1,11 @@
-VER = e2fsprogs-1.41.9
+VER = e2fsprogs-1.41.10
 URL = http://downloads.sourceforge.net/sourceforge/e2fsprogs/$(VER).tar.gz
 
 MAKE := $(MAKE) DVI=true MAKEINFO=true
 
 CONF_OPTS = \
-	--prefix=/ \
-	--with-ldopts="$(LDFLAGS)"
+	--disable-tls \
+	--prefix=/
 
 include $(ROOTDIR)/tools/autotools.mk
 
