@@ -1,9 +1,10 @@
-VER = e2fsprogs-libs-1.41.9
+VER = e2fsprogs-libs-1.41.10
 URL = http://downloads.sourceforge.net/sourceforge/e2fsprogs/$(VER).tar.bz2
 
 MAKE := $(MAKE) DVI=true MAKEINFO=true LDCONFIG=: STRIP=:
 
 CONF_OPTS = \
+	--disable-tls \
 	$(CONFIGURE_SHARED_ENABLE:shared=elf-shlibs)
 
 include $(ROOTDIR)/tools/autotools.mk
