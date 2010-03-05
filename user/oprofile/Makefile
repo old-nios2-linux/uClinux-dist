@@ -3,6 +3,8 @@ VER = oprofile-0.9.1
 CONF_OPTS= --with-kernel-support
 FILE_IMAGE = $(ROOTDIR)/$(LINUXDIR)/vmlinux
 
+FLTFLAGS += -s 32000
+
 include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
