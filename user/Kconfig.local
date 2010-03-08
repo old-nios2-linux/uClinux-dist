@@ -90,6 +90,8 @@ config XIP_TEST
 	bool "xip test"
 config BOUNDARY_ANOMALY_TEST
 	bool "boundary fetches anomaly test"
+config NMI_WDT_TEST
+	bool "nmi_wdt test"
 endmenu
 
 
