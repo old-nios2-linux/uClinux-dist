@@ -136,7 +136,7 @@ while 1 {
 
 sleep 10
 incr case_num
-set timeout 5
+set timeout 10
 send "ls $dev\r"
 while 1 {
     expect {
@@ -154,8 +154,8 @@ while 1 {
 }
 
 incr case_num
-set timeout 60
-send "fdisk $dev\r"
+set timeout 90
+send "time fdisk $dev\r"
 while 1 {
     expect {
         -re "(fdisk:|\[eE]rror|\[fF]ail).*#" {
