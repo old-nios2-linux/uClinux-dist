@@ -122,43 +122,27 @@ while 1 {
             send "Y\r"
         }
 
-        -re "AD1836 Audio support for BF53x.*SND_BLACKFIN_AD1836.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Blackfin Audio SPORT port.*SND_BLACKFIN_SPORT.*\\\[.*]" {
-            send "1\r"
-        }
-
-        -re "Blackfin Audio SPI channel selection bit.*SND_BLACKFIN_SPI_PFBIT.*\\\[.*]" {
-            send "7\r"
-        }
-
         -re "Cascaded AD73322 Audio support for BF53x.*SND_BFIN_AD73322.*\\\[.*]" {
             send "N\r"
         }
 
         -re "ALSA for SoC audio support.*SND_SOC.*\\\[.*]" {
-            send "N\r"
+            send "Y\r"
         }
 
         -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
             send "N\r"
         }
 
-        -re "SoC SSM2602 Audio support for BF52x ezkit.*SND_BF5XX_SOC_SSM2602.*\\\[.*]" {
-            send "N\r"
+        -re "AD183X Audio support for BF5xx.*SND_BF5XX_SOC_AD183X.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "SoC AD73311 Audio support for Blackfin.*SND_BF5XX_SOC_AD73311.*\\\[.*]" {
-            send "N\r"
+        -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
+            send "1\r"
         }
 
         -re "SoC AC97 Audio for the ADI BF5xx chip.*SND_BF5XX_AC97.*\\\[.*]" {
-            send "N\r"
-        }
-
-        -re "SoC AD1980/1 Audio support for BF5xx.*SND_BF5XX_SOC_AD1980.*\\\[.*]" {
             send "N\r"
         }
 
