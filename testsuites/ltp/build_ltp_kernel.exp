@@ -45,7 +45,6 @@ spawn make config
 #tee "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -114,6 +113,44 @@ while 1 {
         -re "hostid.*USER_BUSYBOX_HOSTID.*\\\[.*]" {
             send "Y\r"
         }
+
+#Need to reduce size for some platform, such as BF533-EZKIT
+        -re "IrDA \\\(infrared\\\) subsystem support.*IRDA.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Direct char device access to MTD devices.*MTD_CHAR.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Detect non-CFI AMD/JEDEC-compatible flash chips.*MTD_JEDECPROBE.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Support for ROM chips in bus mapping.*MTD_ROM.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Blackfin Userspace DMA Interface.*BFIN_DMA_INTERFACE.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Blackfin JTAG Communication.*BFIN_JTAG_COMM.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Journalling Flash File System v2 \\\(JFFS2\\\) support.*JFFS2_FS.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Network File Systems.*NETWORK_FILESYSTEMS.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Native language support.*NLS.*\\\[.*]" {
+            send "N\r"
+        }
+#END - Need to reduce size for some platform, such as BF533-EZKIT
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
