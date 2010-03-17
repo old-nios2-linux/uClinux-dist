@@ -130,7 +130,7 @@ while 1 {
 }
 
 incr case_num
-set timeout 60
+set timeout 300
 send -s "cp.b 0x1000000 $kernel_start_addr $image_size\r"
 while 1 {
     expect {
@@ -196,7 +196,7 @@ while 1 {
 }
 
 incr case_num
-set timeout 60
+set timeout 300
 send -s "cp.b 0x1000000 $rootfs_start_addr $image_size\r"
 while 1 {
     expect {
