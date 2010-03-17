@@ -65,7 +65,7 @@ EOF
 
 UBOOT_VER=$(cd $UBOOT_SRC; ls -d u-boot-* | sort -n | tail -n 1)
 cd $TOOLCHAIN_SRC/buildscript
-./BuildToolChain -j 1 -w -s $TOOLCHAIN_SRC -b $BUILD -k $CHECKOUT/uclinux-dist/linux-2.6.x -u $UBOOT_SRC/$UBOOT_VER  -c $TOOLCHAIN_VERSION -f > $BUILD/toolchain_test_log.$TIMESTAMP  2>&1
+./BuildToolChain -j 1 -w -s $TOOLCHAIN_SRC -b $BUILD -k $CHECKOUT/uclinux-dist/linux-2.6.x -u $UBOOT_SRC/$UBOOT_VER  -c $TOOLCHAIN_VERSION > $BUILD/toolchain_test_log.$TIMESTAMP  2>&1
 
 TIMESTAMP=`date +%Y_%b_%d_%H_%M`
 echo -e "\n\n$TIMESTAMP" >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
