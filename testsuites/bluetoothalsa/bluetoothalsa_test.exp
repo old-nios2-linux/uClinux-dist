@@ -42,7 +42,7 @@ if { $board_type == "BF548-EZKIT" } {
 } elseif {$board_type == "BF527-EZKIT" } {
     send "modprobe i2c-bfin-twi; modprobe snd-ssm2602\r"
 } elseif { $board_type == "BF537-STAMP" } {
-    send "modprobe snd-ad1836\r"
+    send "modprobe snd-ad183x\r"
 } else {
     send_user "Wrong board type!\n"
     case_fail $case_num
