@@ -171,6 +171,8 @@ while 1 {
     }
 }
 
+sleep 5
+
 incr case_num
 set timeout 10
 send -s "vrec -w -S -b 16 -s 48000 -t 5|vplay\n"

@@ -168,6 +168,8 @@ while 1 {
     }
 }
 
+sleep 5
+
 set timeout 20
 incr case_num
 send "modprobe bfin_adv7393fb\r"
@@ -197,6 +199,7 @@ while 1 {
 }
 
 sleep 5
+
 incr case_num
 set timeout 10
 send "video_test\r"
