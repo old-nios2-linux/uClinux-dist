@@ -2156,7 +2156,7 @@ fi
       cd $UCLINUX_DIST_TESTSUITES/$OTG_mode
 
       if [ $OTG_mode = "usbhost" ] ; then
-          ./usbhost_bf5xx_test.exp $BOARD_TYPE otg >/dev/null  2>&1
+          ./usbotg_host_test.exp $BOARD_TYPE >/dev/null  2>&1
       elif [ $OTG_mode = "usbdev" ] ; then
           ./gadget_zero_test.exp $BOARD_TYPE otg >/dev/null  2>&1
       fi
@@ -2166,9 +2166,6 @@ fi
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.usbotg
   cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.usbotg
   cp $UCLINUX_DIST_TESTSUITES/usbotg/build_usbotg_kernel_log $THIS_LOG
-  if [ $OTG_mode = "usbhost" ] ; then
-      mv $UCLINUX_DIST_TESTSUITES/usbhost/usbhost_bf5xx_test_log $THIS_LOG/usbotg_host_test_log
-  fi
   if [ $OTG_mode = "usbdev" ] ; then
       mv $UCLINUX_DIST_TESTSUITES/usbdev/gadget_zero_test_log $THIS_LOG/usbotg_dev_test_log
   fi
