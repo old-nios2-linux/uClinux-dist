@@ -127,6 +127,10 @@ while 1 {
             send "N\r"
         }
 
+        -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF5xx chip.*SND_BF5XX_TDM.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "AD183X Audio support for BF5xx.*SND_BF5XX_SOC_AD183X.*\\\[.*]" {
             send "Y\r"
         }
