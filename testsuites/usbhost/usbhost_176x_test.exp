@@ -26,7 +26,7 @@ while 1 {
        -re "\[eE]rror|\[fF]ail|Hardware Trace|SIGSEGV" {
            case_fail $case_num
        }
-       -re "ISP1760.*USB Mass Storage devices.*sda: sda1 sda2.*Attached SCSI removable disk" {
+       -re "ISP1760.*sda: sda1 sda2.*Attached SCSI removable disk" {
            send "\r"
            expect -re $kernel_prompt
            case_pass $case_num
