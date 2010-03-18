@@ -125,12 +125,12 @@ if { $manual == 1 } {
     }
 }
 
-set timeout 5
+set timeout 10
 incr case_num
 send -s "\3"
 while 1 {
     expect {
-        -re "nano-X: client closed socket" {
+        -re "nano-X: client closed socket: \[0-9]" {
             expect -re $kernel_prompt
             case_pass $case_num
             break
@@ -183,12 +183,12 @@ if { $manual == 1 } {
     }
 }
 
-set timeout 5
+set timeout 10
 incr case_num
 send -s "\3"
 while 1 {
     expect {
-        -re "nano-X: client closed socket" {
+        -re "nano-X: client closed socket: \[0-9]" {
             expect -re $kernel_prompt
             case_pass $case_num
             break
