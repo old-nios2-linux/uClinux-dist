@@ -12,13 +12,10 @@ send_user "Starting $argv0\n"
 set HAVE_KERNEL_ONLY_IMAGE 1
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
 source  make_default_config.exp
 
 # Following make specific configuration for this case.
-
 cd $uclinux_path
 set timeout 300
 spawn make config
@@ -26,7 +23,6 @@ spawn make config
 #tee "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -37,10 +33,6 @@ while 1 {
 
         -re "MMC/SD/SDIO card support \\\(MMC\\\).*\\\[.*]" {
             send "Y\r"
-        }
-
-        -re "Atmel SD/MMC Driver.*\\\[.*]" {
-            send "M\r"
         }
 
         -re "MMC block device driver.*MMC_BLOCK.*\\\[.*]" {
@@ -141,17 +133,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"
-
 log_file

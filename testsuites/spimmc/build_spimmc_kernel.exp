@@ -14,13 +14,6 @@ if { $argc >= 2} {
 log_file [log_file_name $argv0.$spi_mode ]
 send_user "Starting $argv0\n"
 
-# workaround for bug 5808
-if [ catch {exec patch -p0 < mmc_config.patch} ] {
-    send_user "\nfail to patch config file\n"
-    send_user "$errorInfo\n"
-    exit
-}
-
 if { $spi_mode == "interrupt" } {
     if [ catch {exec sed -i "/pio_interrupt/ s/0/1/" $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c} ] {
         send_user "\nfail to modify board file\n"
@@ -87,10 +80,6 @@ while 1 {
 
         -re "MMC/SD/SDIO over SPI.*MMC_SPI.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -re "Atmel SD/MMC Driver.*\\\[.*]" {
-            send "M\r"
         }
 
         -re "fdisk.*USER_FDISK_FDISK.*\\\[.*]" {
