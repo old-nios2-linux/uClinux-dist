@@ -5,6 +5,11 @@ source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
+if [ catch {exec sed -i "/SND_BLACKFIN_SPI_PFBIT/ s/4/7/" $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c} ] {
+    send_user "\nfail to modify board file\n"
+    send_user "$errorInfo\n"
+}
+
 set env(EXT2_BLOCKS) "10240"
 
 cd $uclinux_path/testsuites
@@ -94,10 +99,6 @@ while 1 {
             send "Y\r"
         }
 
-        -re "bonnie\\\+\\\+.*USER_BONNIE.*\\\[.*]" {
-            send "Y\r"
-        }
-
 #sound card
         -re "Sound card support.*SOUND.*\\\[.*]" {
             send "Y\r"
@@ -168,7 +169,7 @@ while 1 {
         }
 
         -re "bonnie\\\+\\\+.*USER_BONNIE.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
