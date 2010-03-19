@@ -266,7 +266,7 @@ while 1 {
     }
 }
 
-set Total_Count 10
+set Total_Count 9
 set fail_count 0
 
 incr case_num
