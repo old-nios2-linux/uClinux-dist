@@ -45,7 +45,7 @@ while 1 {
         -re "modprobe:|\[eE]rror|\[fF]ail" {
             case_fail $case_num
         }
-        -re $kernel_prompt {
+        -re "zero ready" {
             case_pass $case_num
             break
         }
@@ -55,7 +55,7 @@ while 1 {
     }
 }
 
-sleep 5
+sleep 10
 
 incr case_num
 set timeout 5
