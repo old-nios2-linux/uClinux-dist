@@ -14,10 +14,15 @@ if { $argc >= 2} {
 log_file [log_file_name $argv0.$spi_mode ]
 send_user "Starting $argv0\n"
 
+if { $board_type == "BF537-STAMP" } {
+    set board_file $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c
+}
+
 if { $spi_mode == "interrupt" } {
-    if [ catch {exec sed -i "/pio_interrupt/ s/0/1/" $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c} ] {
+    if [ catch {exec sed -i "/pio_interrupt/ s/0/1/" $board_file} ] {
         send_user "\nfail to modify board file\n"
         send_user "$errorInfo\n"
+        exit
     }
 }
 
