@@ -966,6 +966,24 @@ proc run_LTP_test { filename command torun mode} {
    #      timeout {break}
    #   }
    #}
+
+   if { [string match "mount*" $filename] && $board_type == "BF548-EZKIT" } {
+       set timeout 60
+       send "mke2fs /dev/sdb1\r"
+       while 1 {
+           expect {
+               -re "done.*done.*>" {
+                   report "mke2fs OK"
+                   break
+               }
+               timeout {
+                   report "mke2fs fail"
+                   break
+               }
+           }
+       }
+   }
+
    step "execute \[$command\] ..."
    send "$command\r"
    set timeout 60
