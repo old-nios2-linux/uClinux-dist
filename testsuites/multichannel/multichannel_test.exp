@@ -58,6 +58,8 @@ while 1 {
     }
 }
 
+sleep 10
+
 set count_under_run 0
 set timeout 120
 incr case_num
