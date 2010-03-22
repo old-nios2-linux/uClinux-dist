@@ -58,8 +58,6 @@ while 1 {
             expect -re "Partition number.*"
             send "1\r"
             expect -re "Command.*"
-            send "w\r"
-            expect -re $kernel_prompt
             break
         }
         eof {
@@ -86,10 +84,12 @@ while 1 {
         }
         eof {
             send "q\r"
+            expect -re $kernel_prompt
             break
         }
         timeout {
             send "q\r"
+            expect -re $kernel_prompt
             break
         }
     }
