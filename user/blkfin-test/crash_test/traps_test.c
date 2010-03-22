@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include <sched.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -38,15 +39,31 @@
 #define NULL_PTR		0x00000000
 #define UNPOPULATED_EVEN	0x87654320
 #define UNPOPULATED_ODD		0x87654321
-#define SCRATCHPAD		0xFFB00000
-#define L1_DATA_A		0xFF800000
-#define L1_DATA_B		0xFF900000
-#define L1_INSTRUCTION		0xFFA10000
-#define L1_NON_EXISTANT		0xFFAFFF00
+
+#define SCRATCHPAD_COREA	0xFFB00000
+#define L1_DATA_A_COREA		0xFF800000
+#define L1_DATA_B_COREA		0xFF900000
+#define L1_INSTRUCTION_COREA	0xFFA10000
+#define L1_NON_EXISTANT_COREA	0xFFAFFF00
+
+#define SCRATCHPAD_COREB	0xFF700000
+#define L1_DATA_A_COREB		0xFF400000
+#define L1_DATA_B_COREB		0xFF500000
+#define L1_INSTRUCTION_COREB	0xFF610000
+#define L1_NON_EXISTANT_COREB	0xFF6FFF00
+
 #define SYSMMR_BASE		0xFFC00000
 #define COREMMR_BASE		0xFFE00000
 
 static const char *progname;
+
+#define NR_CPUS 2
+static unsigned cpu;
+static unsigned scratch_pad[] = {SCRATCHPAD_COREA, SCRATCHPAD_COREB};
+static unsigned l1_data_a[] = {L1_DATA_A_COREA, L1_DATA_A_COREB};
+static unsigned l1_dta_b[] = {L1_DATA_B_COREA, L1_DATA_B_COREB};
+static unsigned l1_instruction[] = {L1_INSTRUCTION_COREA, L1_INSTRUCTION_COREB};
+static unsigned l1_non_existant[] = {L1_NON_EXISTANT_COREA, L1_NON_EXISTANT_COREB};
 
 #define _stderr(pfx, fmt, args...)  fprintf(stderr, "%s: " pfx ": " fmt "\n", progname, ## args)
 #define _stderrp(pfx, fmt, args...) _stderr(pfx, fmt ": %s", ## args, strerror(errno))
@@ -277,17 +294,17 @@ void instruction_fetch_odd_address(void)
  */
 void bad_return_scratchpad(void)
 {
-	_bad_return_address(SCRATCHPAD);
+	_bad_return_address(scratch_pad[cpu]);
 }
 
 void bad_return_l1dataA(void)
 {
-	_bad_return_address(L1_DATA_A);
+	_bad_return_address(l1_data_a[cpu]);
 }
 
 void bad_return_l1dataB(void)
 {
-	_bad_return_address(L1_DATA_B);
+	_bad_return_address(l1_dta_b[cpu]);
 }
 
 /* Instruction fetch CPLB miss -                       EXCAUSE 0x2C */
@@ -425,81 +442,81 @@ void supervisor_brute_force(const char *test)
 //__attribute__ ((l1_text))
 void l1_instruction_read(void)
 {
-	int *i = (void *)L1_INSTRUCTION;
+	int *i = (void *)l1_instruction[cpu];
 	printf("%i\n", *i);
 }
 
 void l1_instruction_write(void)
 {
-	int *i = (void *)L1_INSTRUCTION;
+	int *i = (void *)l1_instruction[cpu];
 	*i = 0;
 }
 
 void stack_instruction(void)
 {
-	_bad_stack_set(L1_INSTRUCTION);
+	_bad_stack_set(l1_instruction[cpu]);
 }
 
 void l1_dataA_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(L1_DATA_A);
+	foo = get_func_ptr(l1_data_a[cpu]);
 	(*foo)();
 }
 
 void l1_dataB_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(L1_DATA_B);
+	foo = get_func_ptr(l1_dta_b[cpu]);
 	(*foo)();
 }
 
 void l1_scratchpad_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(SCRATCHPAD);
+	foo = get_func_ptr(scratch_pad[cpu]);
 	(*foo)();
 }
 
 void l1_non_existant_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(L1_NON_EXISTANT);
+	foo = get_func_ptr(l1_non_existant[cpu]);
 	(*foo)();
 }
 
 void l1_non_existant_read(void)
 {
-	int *i = (void *)L1_NON_EXISTANT;
+	int *i = (void *)l1_non_existant[cpu];
 	printf("%i\n", *i);
 }
 
 void l1_non_existant_write(void)
 {
-	int *i = (void *)L1_NON_EXISTANT;
+	int *i = (void *)l1_non_existant[cpu];
 	*i = 0;
 }
 
 void l1_non_existant_write_syscall(void)
 {
-	int *i = (void *)L1_NON_EXISTANT;
+	int *i = (void *)l1_non_existant[cpu];
 	*i = 0;
 	sync();
 }
 
 void stack_l1_non_existant(void)
 {
-	_bad_stack_set(L1_NON_EXISTANT);
+	_bad_stack_set(l1_non_existant[cpu]);
 }
 
 void stack_push_l1_non_existant(void)
 {
-	bad_stack_push(L1_NON_EXISTANT);
+	bad_stack_push(l1_non_existant[cpu]);
 }
 
 void bad_return_l1_non_existant(void)
 {
-	_bad_return_address(L1_NON_EXISTANT);
+	_bad_return_address(l1_non_existant[cpu]);
 }
 
 void bad_return_mmr(void)
@@ -524,27 +541,27 @@ void flush_upop_odd(void)
 
 void flush_scratch(void)
 {
-	flush(SCRATCHPAD);
+	flush(scratch_pad[cpu]);
 }
 
 void flush_l1_dataA(void)
 {
-	flush(L1_DATA_A);
+	flush(l1_data_a[cpu]);
 }
 
 void flush_l1_dataB(void)
 {
-	flush(L1_DATA_B);
+	flush(l1_dta_b[cpu]);
 }
 
 void flush_l1_instruction(void)
 {
-	flush(L1_INSTRUCTION);
+	flush(l1_instruction[cpu]);
 	}
 
 void flush_l1_non(void)
 {
-	flush(L1_NON_EXISTANT);
+	flush(l1_non_existant[cpu]);
 }
 
 void flush_sysmmr(void)
@@ -574,27 +591,27 @@ void prefetch_upop_odd(void)
 
 void prefetch_scratch(void)
 {
-	prefetch(SCRATCHPAD);
+	prefetch(scratch_pad[cpu]);
 }
 
 void prefetch_l1_dataA(void)
 {
-	prefetch(L1_DATA_A);
+	prefetch(l1_data_a[cpu]);
 }
 
 void prefetch_l1_dataB(void)
 {
-	prefetch(L1_DATA_B);
+	prefetch(l1_dta_b[cpu]);
 }
 
 void prefetch_l1_instruction(void)
 {
-	prefetch(L1_INSTRUCTION);
+	prefetch(l1_instruction[cpu]);
 }
 
 void prefetch_l1_non(void)
 {
-	prefetch(L1_NON_EXISTANT);
+	prefetch(l1_non_existant[cpu]);
 }
 
 void prefetch_sysmmr(void)
@@ -625,27 +642,27 @@ void flushinv_upop_odd(void)
 
 void flushinv_scratch(void)
 {
-	flushinv(SCRATCHPAD);
+	flushinv(scratch_pad[cpu]);
 }
 
 void flushinv_l1_dataA(void)
 {
-	flushinv(L1_DATA_A);
+	flushinv(l1_data_a[cpu]);
 }
 
 void flushinv_l1_dataB(void)
 {
-	flushinv(L1_DATA_B);
+	flushinv(l1_dta_b[cpu]);
 }
 
 void flushinv_l1_instruction(void)
 {
-	flushinv(L1_INSTRUCTION);
+	flushinv(l1_instruction[cpu]);
 }
 
 void flushinv_l1_non(void)
 {
-	flushinv(L1_NON_EXISTANT);
+	flushinv(l1_non_existant[cpu]);
 }
 
 void flushinv_sysmmr(void)
@@ -676,27 +693,27 @@ void iflush_upop_odd(void)
 
 void iflush_scratch(void)
 {
-	iflush(SCRATCHPAD);
+	iflush(scratch_pad[cpu]);
 }
 
 void iflush_l1_dataA(void)
 {
-	iflush(L1_DATA_A);
+	iflush(l1_data_a[cpu]);
 }
 
 void iflush_l1_dataB(void)
 {
-	iflush(L1_DATA_B);
+	iflush(l1_dta_b[cpu]);
 }
 
 void iflush_l1_instruction(void)
 {
-	iflush(L1_INSTRUCTION);
+	iflush(l1_instruction[cpu]);
 }
 
 void iflush_l1_non(void)
 {
-	iflush(L1_NON_EXISTANT);
+	iflush(l1_non_existant[cpu]);
 }
 
 void iflush_sysmmr(void)
@@ -904,6 +921,13 @@ int main(int argc, char *argv[])
 	struct timespec delay;
 	struct stat last_seqstat;
 	FILE *seqstat_file;
+	cpu_set_t set;
+
+	if (sched_getaffinity(0, sizeof(cpu_set_t), &set) < 0 ){
+		err("sched_getaffinity failed\n");
+	}
+	for (cpu = 0; cpu < NR_CPUS; cpu++)
+		if (CPU_ISSET(cpu, &set)) break;
 
 	progname = argv[0];
 
