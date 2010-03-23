@@ -61,7 +61,6 @@ while 1 {
 
       timeout {
                 case_fail $case_num
-	exit
          }
      }
 }
@@ -74,12 +73,12 @@ while 1 {
 	 "Hit any key" {
 	        expect  -re $kernel_prompt
                 case_fail $case_num
-		break
+                exit
          }
 
          timeout {
                 case_pass $case_num
-		exit
+                break
          }
 	 }      
 }

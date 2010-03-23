@@ -401,6 +401,7 @@ while 1 {
 	}
     }
 }
+
 incr case_num
 
 step "Reading MTD "	
@@ -441,6 +442,89 @@ while 1 {
         }
     }
 }
+incr case_num
+send -s "dd if=/dev/zero of=10meg bs=1M count=10 \r"
+while 1 {
+    expect {
+       -re "records in.*records out.*$kernel_prompt" {
+                case_pass $case_num
+                break
+        }
+
+        timeout {
+                case_fail $case_num
+                exit
+        }
+    }
+}
+set timeout 10
+incr case_num
+send -s "while : ; do cat 10meg > /mnt/foo ; date ; done \r"
+while 1 {
+    expect {
+       -re "$kernel_prompt" {
+                case_fail $case_num
+                exit
+        }
+
+        timeout {
+                break
+        }
+    }
+}
+spawn /bin/sh
+set telnet_spawn_id $spawn_id
+set timeout 200
+expect -re $sh_prompt
+send -s "telnet $targetip\r"
+        expect {
+                -re $kernel_prompt {  }
+                timeout { send_user "Failed inital telnet\n"
+                        exit }
+        }
+send -s "watch -n 1 ps\r"
+while 1 {
+        expect {
+                -re "Every 1s: ps" {
+                     send_log "Start watching ps process...\n"
+                     expect {
+                       -re "$kernel_prompt" {
+                       }
+
+                       timeout {
+                       send_log "Finish watching ps process.\n"
+                       send "\3"
+                       expect -re $kernel_prompt
+                       break
+                       }
+                     }
+
+                }
+
+                timeout { 
+                exit 
+                }
+         }
+
+}
+
+set spawn_id $kermit_spawn_id
+set timeout 5
+send -s "\3"
+while 1 {
+    expect {
+       -re "$kernel_prompt" {
+                break
+        }
+
+        timeout {
+                case_fail $case_num
+                exit
+        }
+    }
+}
+
+ 
 incr case_num
 set timeout 20
 send -s "umount /mnt\r"
