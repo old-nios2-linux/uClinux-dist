@@ -17,22 +17,26 @@ log_file $title
 send_user "Starting $argv0\n"
 send_log "\n#### build kernel for $audio_dev\n"
 
+if { $audio_dev == "audio_ad73322" } {
+    step "Apply ad73322 patch."
+    cd $uclinux_path/linux-2.6.x
+    if [ catch {exec patch -p1 < $uclinux_path/bfin_patch/ad73322_patch/old_sound_ad73322.patch} ] {
+        send_user "$errorInfo\n"
+        exit
+    }
+}
+
 cd $uclinux_path/testsuites
-
 step "Make config"
-
 source make_default_config.exp
 
 # Following make specific configuration for this case.
-
 cd $uclinux_path
 set timeout 300
 set baud_rate_done_flag 0
 spawn make config
-
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -228,15 +232,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"

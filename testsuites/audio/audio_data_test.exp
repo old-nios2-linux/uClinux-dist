@@ -197,13 +197,13 @@ rec_at_pc 100   255
 rec_at_pc 250   255
 rec_at_pc 440   255
 rec_at_pc 1000  255
-rec_at_pc 10000 255
+rec_at_pc 3800  255
 
 rec_from_pc 100   255
 rec_from_pc 250   255
 rec_from_pc 440   255
 rec_from_pc 1000  255
-rec_from_pc 10000 255
+rec_from_pc 3800  255
 
 send_log "\n$TITLE ............\[PASS\]\n"
 
