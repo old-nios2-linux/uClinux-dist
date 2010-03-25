@@ -348,6 +348,12 @@ config LIB_READLINE
 	  applications that allow users to edit command lines as they are typed in.
 	  http://cnswww.cns.cwru.edu/php/chet/readline/rltop.html
 
+config LIB_LIBSAMPLERATE
+	bool "Build libsamplerate"
+	help
+	  libsamplerate is a Sample Rate Converter (SRC) for audio.
+	  http://www.mega-nerd.com/SRC/
+
 config LIB_SDL_GFX
 	bool "build SDL_gfx"
 	select LIB_LIBSDL

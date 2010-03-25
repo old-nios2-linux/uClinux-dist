@@ -37,6 +37,7 @@ dir_3_$(CONFIG_LIB_NCURSES)          += ncurses
 dir_3_$(CONFIG_LIB_OPENOBEX)         += openobex
 dir_3_$(CONFIG_LIB_ORTP)             += ortp
 dir_3_$(CONFIG_LIB_POPT)             += popt
+dir_3_$(CONFIG_LIB_LIBSAMPLERATE)    += libsamplerate
 dir_3_$(CONFIG_LIB_SPEEX)            += speex
 dir_3_$(CONFIG_LIB_SPHINXBASE)       += sphinxbase
 dir_3_$(CONFIG_LIB_SQLITE)           += sqlite
