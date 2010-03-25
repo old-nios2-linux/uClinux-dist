@@ -8,18 +8,18 @@
 @PACKAGE@.so.0.0
 {
 	global:
-		_src_new ;
-		_src_delete ;
-		_src_get_name ;
-		_src_get_description ;
-		_src_get_version ;
-		_src_process ;
-		_src_reset ;
-		_src_error ;
-		_src_strerror ;
-		_src_simple ;
-		_src_is_valid_ratio ;
-		_src_set_ratio ;
+		@SYMBOL_PREFIX@src_new ;
+		@SYMBOL_PREFIX@src_delete ;
+		@SYMBOL_PREFIX@src_get_name ;
+		@SYMBOL_PREFIX@src_get_description ;
+		@SYMBOL_PREFIX@src_get_version ;
+		@SYMBOL_PREFIX@src_process ;
+		@SYMBOL_PREFIX@src_reset ;
+		@SYMBOL_PREFIX@src_error ;
+		@SYMBOL_PREFIX@src_strerror ;
+		@SYMBOL_PREFIX@src_simple ;
+		@SYMBOL_PREFIX@src_is_valid_ratio ;
+		@SYMBOL_PREFIX@src_set_ratio ;
 		
 	local:
 		*;
@@ -28,26 +28,26 @@
 @PACKAGE@.so.0.1
 {
 	global:
-		_src_new ;
-		_src_delete ;
-		_src_get_name ;
-		_src_get_description ;
-		_src_get_version ;
-		_src_process ;
-		_src_reset ;
-		_src_error ;
-		_src_strerror ;
-		_src_simple ;
-		_src_is_valid_ratio ;
-		_src_set_ratio ;
+		@SYMBOL_PREFIX@src_new ;
+		@SYMBOL_PREFIX@src_delete ;
+		@SYMBOL_PREFIX@src_get_name ;
+		@SYMBOL_PREFIX@src_get_description ;
+		@SYMBOL_PREFIX@src_get_version ;
+		@SYMBOL_PREFIX@src_process ;
+		@SYMBOL_PREFIX@src_reset ;
+		@SYMBOL_PREFIX@src_error ;
+		@SYMBOL_PREFIX@src_strerror ;
+		@SYMBOL_PREFIX@src_simple ;
+		@SYMBOL_PREFIX@src_is_valid_ratio ;
+		@SYMBOL_PREFIX@src_set_ratio ;
 		
-		_src_callback_new ;
-		_src_callback_read ;
+		@SYMBOL_PREFIX@src_callback_new ;
+		@SYMBOL_PREFIX@src_callback_read ;
 
-		_src_short_to_float_array ;
-		_src_float_to_short_array ;
-		_src_int_to_float_array ;
-		_src_float_to_int_array ;
+		@SYMBOL_PREFIX@src_short_to_float_array ;
+		@SYMBOL_PREFIX@src_float_to_short_array ;
+		@SYMBOL_PREFIX@src_int_to_float_array ;
+		@SYMBOL_PREFIX@src_float_to_int_array ;
 	local:
 		*;
 };

@@ -9,7 +9,7 @@ AC_INIT([libsamplerate],[0.1.7],[erikd@mega-nerd.com])
 AC_CONFIG_AUX_DIR(Cfg)
 
 AC_CONFIG_SRCDIR([src/samplerate.c])
-AC_CANONICAL_TARGET([])
+AC_CANONICAL_HOST([])
 
 AC_CONFIG_MACRO_DIR([M4])
 
@@ -54,11 +54,13 @@ AC_PROG_MAKE_SET
 AC_PROG_LN_S
 AC_PROG_MKDIR_P
 
-if test "x-$build_os-$host_os-$target_os" = x-mingw32-mingw32-mingw32 ; then
-	AC_CHECK_PROG(DLLTOOL, dlltool, dlltool)
-	AC_CHECK_PROG(DLLWRAP, dllwrap, dllwrap)
-	AC_CHECK_PROG(PEXPORTS, pexports, pexports)
-	fi
+case $host_os in
+	mingw*|*-mingw*)
+		AC_CHECK_TOOL(DLLTOOL, dlltool, dlltool)
+		AC_CHECK_TOOL(DLLWRAP, dllwrap, dllwrap)
+		AC_CHECK_TOOL(PEXPORTS, pexports, pexports)
+		;;
+	esac
 
 AC_HEADER_STDC
 
@@ -101,14 +103,21 @@ AC_CHECK_SIZEOF(float,4)
 AC_CHECK_SIZEOF(double,8)
 
 #====================================================================================
-# Determine endian-ness of target processor.
+# Determine endian-ness of host processor.
 
-AC_C_FIND_ENDIAN
+ac_cv_c_big_endian=0
+ac_cv_c_little_endian=0
+AC_C_BIGENDIAN
+if test "x$ac_cv_c_bigendian" = true ; then
+	ac_cv_c_big_endian=1
+else
+	ac_cv_c_little_endian=1
+fi
 
 AC_DEFINE_UNQUOTED(CPU_IS_BIG_ENDIAN, ${ac_cv_c_big_endian},
-        [Target processor is big endian.])
+        [Host processor is big endian.])
 AC_DEFINE_UNQUOTED(CPU_IS_LITTLE_ENDIAN, ${ac_cv_c_little_endian},
-        [Target processor is little endian.])
+        [Host processor is little endian.])
 
 #====================================================================================
 # Check for functions.
@@ -145,9 +154,9 @@ else
 	fi
 
 AC_DEFINE_UNQUOTED(CPU_CLIPS_POSITIVE, ${ac_cv_c_clip_positive},
-	[Target processor clips on positive float to int conversion.])
+	[Host processor clips on positive float to int conversion.])
 AC_DEFINE_UNQUOTED(CPU_CLIPS_NEGATIVE, ${ac_cv_c_clip_negative},
-	[Target processor clips on negative float to int conversion.])
+	[Host processor clips on negative float to int conversion.])
 
 #====================================================================================
 # Check for libsndfile which is required for the test and example programs.
@@ -213,12 +222,12 @@ if test $ac_cv_c_compiler_gnu = yes ; then
 
 	# Disable -Wall for Apple Darwin/Rhapsody.
 	# System headers on these systems are broken.
-	case "$target_os" in
+	case "$host_os" in
 		darwin* | rhapsody*)
 			temp_CFLAGS=`echo $CFLAGS | sed "s/-Wall//"`
 			CFLAGS=$temp_CFLAGS
 			;;
-		linux*)
+		*linux*)
 			SHLIB_VERSION_ARG="-Wl,--version-script=Version_script"
 			;;
 		*)
@@ -238,12 +247,12 @@ if test $ac_cv_c_compiler_gnu = yes ; then
 	fi
 
 #====================================================================================
-# Find known target OS.
+# Find known host OS.
 
 OS_SPECIFIC_INCLUDES=""
 os_is_win32=0
 
-case "$target_os" in
+case "$host_os" in
 	darwin* | rhapsody*)
 		OS_SPECIFIC_INCLUDES="-fpascal-strings -I/Developer/Headers/FlatCarbon"
 		OS_SPECIFIC_LINKS="-framework CoreAudio"
