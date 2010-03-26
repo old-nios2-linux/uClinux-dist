@@ -97,18 +97,18 @@ if { $smp_flag == 1 } {
             }
         }
     }
-}
-
-incr case_num
-send -s "./traps_test -1\r"
-while 1 {
-    expect {
-        -re "$case_number/$case_number tests passed.*$kernel_prompt" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
+} else {
+    incr case_num
+    send -s "./traps_test -1\r"
+    while 1 {
+        expect {
+            -re "$case_number/$case_number tests passed.*$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
         }
     }
 }
