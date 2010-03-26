@@ -92,7 +92,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Analog Devices AD525x Digital Potentiometers.*AD525X_DPOT.*\\\[.*]" {
+        -re "Analog Devices Digital Potentiometers.*AD525X_DPOT.*\\\[.*]" {
             send "Y\r"
         }
 
