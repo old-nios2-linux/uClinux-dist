@@ -1,5 +1,7 @@
 VER = bluez-utils-2.25
 
+FLTFLAGS += -s 0x2000
+
 CONF_OPTS-y =
 CONF_SBIN-y =
 CONF_OPTS-$(CONFIG_LIB_LIBUSB) += --enable-bccmd
