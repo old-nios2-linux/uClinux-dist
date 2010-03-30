@@ -70,7 +70,7 @@ float           Microseconds,
 /* end of variables for time measurement */
 
 
-main ()
+main(int argc, char *argv[])
 /*****/
 
   /* main program, corresponds to procedures        */
@@ -105,6 +105,13 @@ main ()
         /* Warning: With 16-Bit processors and Number_Of_Runs > 32000,  */
         /* overflow may occur for this array element.                   */
 
+  Number_Of_Runs = 0;
+  if ( argc == 2 ) {
+      if (atoi(argv[1]) > 0) {
+          Number_Of_Runs = atoi(argv[1]);
+      }
+  }
+
   printf ("\n");
   printf ("Dhrystone Benchmark, Version 2.1 (Language: C)\n");
   printf ("\n");
@@ -118,14 +125,17 @@ main ()
     printf ("Program compiled without 'register' attribute\n");
     printf ("\n");
   }
-  printf ("Please give the number of runs through the benchmark: ");
-  fflush (stdout);
-  {
-    int n;
-    scanf ("%d", &n);
-    Number_Of_Runs = n;
+
+  if (!Number_Of_Runs) {
+      printf ("Please give the number of runs through the benchmark: ");
+      fflush (stdout);
+      {
+          int n;
+          scanf ("%d", &n);
+          Number_Of_Runs = n;
+      }
+      printf ("\n");
   }
-  printf ("\n");
 
   printf ("Execution starts, %d runs through Dhrystone\n", Number_Of_Runs);
 
