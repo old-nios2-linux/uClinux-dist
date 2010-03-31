@@ -50,6 +50,7 @@ static char version[] =
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
 #endif
+
 #include "mii.h"
 
 #define MAX_ETH		8		/* Maximum # of interfaces */
@@ -112,7 +113,7 @@ static struct ifreq ifr;
 
 static int mdio_read(int skfd, int location)
 {
-    struct mii_data *mii = (struct mii_data *)&ifr.ifr_data;
+    struct mii_ioctl_data *mii = (struct mii_ioctl_data *)&ifr.ifr_data;
     mii->reg_num = location;
     if (ioctl(skfd, SIOCGMIIREG, &ifr) < 0) {
 	fprintf(stderr, "SIOCGMIIREG on %s failed: %s\n", ifr.ifr_name,
@@ -124,7 +125,7 @@ static int mdio_read(int skfd, int location)
 
 static void mdio_write(int skfd, int location, int value)
 {
-    struct mii_data *mii = (struct mii_data *)&ifr.ifr_data;
+    struct mii_ioctl_data *mii = (struct mii_ioctl_data *)&ifr.ifr_data;
     mii->reg_num = location;
     mii->val_in = value;
     if (ioctl(skfd, SIOCSMIIREG, &ifr) < 0) {
@@ -140,16 +141,18 @@ const struct {
     u_short	value;
 } media[] = {
     /* The order through 100baseT4 matches bits in the BMSR */
-    { "10baseT-HD",	MII_AN_10BASET_HD },
-    { "10baseT-FD",	MII_AN_10BASET_FD },
-    { "100baseTx-HD",	MII_AN_100BASETX_HD },
-    { "100baseTx-FD",	MII_AN_100BASETX_FD },
-    { "100baseT4",	MII_AN_100BASET4 },
-    { "100baseTx",	MII_AN_100BASETX_FD | MII_AN_100BASETX_HD },
-    { "10baseT",	MII_AN_10BASET_FD | MII_AN_10BASET_HD },
+    { "10baseT-HD",	ADVERTISE_10HALF },
+    { "10baseT-FD",	ADVERTISE_10FULL },
+    { "100baseTx-HD",	ADVERTISE_100HALF },
+    { "100baseTx-FD",	ADVERTISE_100FULL },
+    { "100baseT4",	ADVERTISE_100BASE4 },
+    { "100baseTx",	ADVERTISE_100FULL | ADVERTISE_100HALF },
+    { "10baseT",	ADVERTISE_10FULL | ADVERTISE_10HALF },
 };
 #define NMEDIA (sizeof(media)/sizeof(media[0]))
 	
+#define MII_AN_ABILITY_MASK (ADVERTISE_ALL | LPA_100BASE4 | LPA_PAUSE_CAP)
+
 /* Parse an argument list of media types */
 static int parse_media(char *arg)
 {
@@ -216,28 +219,28 @@ int show_basic_mii(int sock, int phy_id)
 
     /* Descriptive rename. */
     bmcr = mii_val[MII_BMCR]; bmsr = mii_val[MII_BMSR];
-    advert = mii_val[MII_ANAR]; lkpar = mii_val[MII_ANLPAR];
+    advert = mii_val[MII_ADVERTISE]; lkpar = mii_val[MII_LPA];
 
     sprintf(buf, "%s: ", ifr.ifr_name);
-    if (bmcr & MII_BMCR_AN_ENA) {
-	if (bmsr & MII_BMSR_AN_COMPLETE) {
+    if (bmcr & BMCR_ANENABLE) {
+	if (bmsr & BMSR_ANEGCOMPLETE) {
 	    if (advert & lkpar) {
-		strcat(buf, (lkpar & MII_AN_ACK) ?
+		strcat(buf, (lkpar & LPA_LPACK) ?
 		       "negotiated" : "no autonegotiation,");
 		strcat(buf, media_list(advert & lkpar, 1));
 		strcat(buf, ", ");
 	    } else {
 		strcat(buf, "autonegotiation failed, ");
 	    }
-	} else if (bmcr & MII_BMCR_RESTART) {
+	} else if (bmcr & BMCR_ANRESTART) {
 	    strcat(buf, "autonegotiation restarted, ");
 	}
     } else {
 	sprintf(buf+strlen(buf), "%s Mbit, %s duplex, ",
-	       (bmcr & MII_BMCR_100MBIT) ? "100" : "10",
-	       (bmcr & MII_BMCR_DUPLEX) ? "full" : "half");
+	       (bmcr & BMCR_SPEED100) ? "100" : "10",
+	       (bmcr & BMCR_FULLDPLX) ? "full" : "half");
     }
-    strcat(buf, (bmsr & MII_BMSR_LINK_VALID) ? "link ok" : "no link");
+    strcat(buf, (bmsr & BMSR_LSTATUS) ? "link ok" : "no link");
 
     if (opt_watch) {
 	if (opt_log) {
@@ -273,29 +276,29 @@ int show_basic_mii(int sock, int phy_id)
 		   ((mii_val[2]<<6)|(mii_val[3]>>10))&0xff,
 		   (mii_val[3]>>4)&0x3f, mii_val[3]&0x0f);
 	printf("  basic mode:   ");
-	if (bmcr & MII_BMCR_RESET)
+	if (bmcr & BMCR_RESET)
 	    printf("software reset, ");
-	if (bmcr & MII_BMCR_LOOPBACK)
+	if (bmcr & BMCR_LOOPBACK)
 	    printf("loopback, ");
-	if (bmcr & MII_BMCR_ISOLATE)
+	if (bmcr & BMCR_ISOLATE)
 	    printf("isolate, ");
-	if (bmcr & MII_BMCR_COLTEST)
+	if (bmcr & BMCR_CTST)
 	    printf("collision test, ");
-	if (bmcr & MII_BMCR_AN_ENA) {
+	if (bmcr & BMCR_ANENABLE) {
 	    printf("autonegotiation enabled\n");
 	} else {
 	    printf("%s Mbit, %s duplex\n",
-		   (bmcr & MII_BMCR_100MBIT) ? "100" : "10",
-		   (bmcr & MII_BMCR_DUPLEX) ? "full" : "half");
+		   (bmcr & BMCR_SPEED100) ? "100" : "10",
+		   (bmcr & BMCR_FULLDPLX) ? "full" : "half");
 	}
 	printf("  basic status: ");
-	if (bmsr & MII_BMSR_AN_COMPLETE)
+	if (bmsr & BMSR_ANEGCOMPLETE)
 	    printf("autonegotiation complete, ");
-	else if (bmcr & MII_BMCR_RESTART)
+	else if (bmcr & BMCR_ANRESTART)
 	    printf("autonegotiation restarted, ");
-	if (bmsr & MII_BMSR_REMOTE_FAULT)
+	if (bmsr & BMSR_RFAULT)
 	    printf("remote fault, ");
-	printf((bmsr & MII_BMSR_LINK_VALID) ? "link ok" : "no link");
+	printf((bmsr & BMSR_LSTATUS) ? "link ok" : "no link");
 	printf("\n  capabilities:%s", media_list(bmsr >> 6, 0));
 	printf("\n  advertising: %s", media_list(advert, 0));
 	if (lkpar & MII_AN_ABILITY_MASK)
@@ -309,7 +312,7 @@ int show_basic_mii(int sock, int phy_id)
 
 static int do_one_xcvr(int skfd, char *ifname, int maybe)
 {
-    struct mii_data *mii = (struct mii_data *)&ifr.ifr_data;
+    struct mii_ioctl_data *mii = (struct mii_ioctl_data *)&ifr.ifr_data;
 
     /* Get the vitals from the interface. */
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
@@ -327,23 +330,23 @@ static int do_one_xcvr(int skfd, char *ifname, int maybe)
 
     if (opt_reset) {
 	printf("resetting the transceiver...\n");
-	mdio_write(skfd, MII_BMCR, MII_BMCR_RESET);
+	mdio_write(skfd, MII_BMCR, BMCR_RESET);
     }
     if (nway_advertise) {
-	mdio_write(skfd, MII_ANAR, nway_advertise | 1);
+	mdio_write(skfd, MII_ADVERTISE, nway_advertise | 1);
 	opt_restart = 1;
     }
     if (opt_restart) {
 	printf("restarting autonegotiation...\n");
 	mdio_write(skfd, MII_BMCR, 0x0000);
-	mdio_write(skfd, MII_BMCR, MII_BMCR_AN_ENA|MII_BMCR_RESTART);
+	mdio_write(skfd, MII_BMCR, BMCR_ANENABLE|BMCR_RESET);
     }
     if (fixed_speed) {
 	int bmcr = 0;
-	if (fixed_speed & (MII_AN_100BASETX_FD|MII_AN_100BASETX_HD))
-	    bmcr |= MII_BMCR_100MBIT;
-	if (fixed_speed & (MII_AN_100BASETX_FD|MII_AN_10BASET_FD))
-	    bmcr |= MII_BMCR_DUPLEX;
+	if (fixed_speed & (ADVERTISE_100FULL|ADVERTISE_100HALF))
+	    bmcr |= BMCR_SPEED100;
+	if (fixed_speed & (ADVERTISE_100FULL|ADVERTISE_10FULL))
+	    bmcr |= BMCR_FULLDPLX;
 	mdio_write(skfd, MII_BMCR, bmcr);
     }
 
@@ -357,7 +360,7 @@ static int do_one_xcvr(int skfd, char *ifname, int maybe)
 
 static void watch_one_xcvr(int skfd, char *ifname, int index)
 {
-    struct mii_data *mii = (struct mii_data *)&ifr.ifr_data;
+    struct mii_ioctl_data *mii = (struct mii_ioctl_data *)&ifr.ifr_data;
     static int status[MAX_ETH] = { 0, /* ... */ };
     int now;
 
