@@ -1,7 +1,7 @@
 /* mail.cgi.c - CGI program that parses comments form, and mails it to
       appropriate user
    Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   $Id: mail.cgi.c,v 1.6 1996/10/24 06:54:10 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved

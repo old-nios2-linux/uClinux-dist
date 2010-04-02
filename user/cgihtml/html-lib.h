@@ -1,10 +1,13 @@
 /* html-lib.h - header file for html-lib.c
-   Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   Eugene Kim, <eekim@eekim.com>
+   $Id: html-lib.h,v 1.7 1997/10/06 08:59:28 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved
 */
+
+#ifndef _HTML_LIB
+#define _HTML_LIB 1
 
 void html_header();
 void mime_header(char *mime);
@@ -25,3 +28,5 @@ void h4(char *header);
 void h5(char *header);
 void h6(char *header);
 void hidden(char *name, char *value);
+
+#endif

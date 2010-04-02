@@ -3,7 +3,7 @@
    the appropriate page.
 
    Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   $Id: index-sample.cgi.c,v 1.1 1995/08/13 21:30:53 eekim Exp $
 
    Copyright (C) 1995 Eugene Eric Kim
    All Rights Reserved

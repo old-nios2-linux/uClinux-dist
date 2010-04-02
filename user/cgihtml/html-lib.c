@@ -1,6 +1,6 @@
 /* html-lib.c - C routines that output various HTML constructs
    Eugene Kim, <eekim@eekim.com>
-   $Id$
+   $Id: html-lib.c,v 1.8 1997/02/03 06:40:23 eekim Exp $
 
    Copyright (C) 1996, 1997 Eugene Eric Kim
    All Rights Reserved

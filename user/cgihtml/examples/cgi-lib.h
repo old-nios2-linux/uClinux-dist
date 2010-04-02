@@ -1,6 +1,6 @@
 /* cgi-lib.h - header file for cgi-lib.c
    Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   $Id: cgi-lib.h,v 1.7 1997/01/21 07:16:56 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved

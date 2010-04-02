@@ -2,7 +2,7 @@
      clicks in default areas.
 
    Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   $Id: ignore.cgi.c,v 1.1 1996/02/18 22:33:27 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved

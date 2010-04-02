@@ -1,6 +1,6 @@
 /* cgi-lib.c - C routines that make writing CGI scripts in C a breeze
    Eugene Kim, <eekim@eekim.com>
-   $Id$
+   $Id: cgi-lib.c,v 1.17 1998/05/04 02:12:34 eekim Exp $
    Motivation: Perl is a much more convenient language to use when
      writing CGI scripts.  Unfortunately, it is also a larger drain on
      the system.  Hopefully, these routines will make writing CGI
@@ -64,7 +64,7 @@ void unescape_url(char *url)
 char *get_DEBUG()
 {
   int bufsize = 1024;
-  char *buffer = malloc(sizeof(char) * bufsize + 1);
+  char *buffer = (char *)malloc(sizeof(char) * bufsize + 1);
   int i = 0;
   char ch;
 
@@ -76,7 +76,7 @@ char *get_DEBUG()
     i++;
     if (i>bufsize) {
       bufsize *= 2;
-      buffer = realloc(buffer,bufsize);
+      buffer = (char *)realloc(buffer,bufsize);
     }
   }
   buffer[i] = '\0';
@@ -87,23 +87,18 @@ char *get_DEBUG()
 
 char *get_POST()
 {
-  int content_length;
+  unsigned int content_length;
   char *buffer;
 
   if (CONTENT_LENGTH != NULL) {
     content_length = atoi(CONTENT_LENGTH);
-    buffer = malloc(sizeof(char) * content_length + 1);
+    buffer = (char *)malloc(sizeof(char) * content_length + 1);
     if (fread(buffer,sizeof(char),content_length,stdin) != content_length) {
       /* consistency error. */
       fprintf(stderr,"caught by cgihtml: input length < CONTENT_LENGTH\n");
       exit(1);
     }
     buffer[content_length] = '\0';
-  }
-  else { /* null content length */
-    /* again, perhaps more detailed, robust error message here */
-    fprintf(stderr,"caught by cgihtml: CONTENT_LENGTH is null\n");
-    exit(1);
   }
   return buffer;
 }
@@ -112,10 +107,8 @@ char *get_GET()
 {
   char *buffer;
 
-  if (QUERY_STRING == NULL) {
-    fprintf(stderr,"caught by cgihtml: QUERY_STRING is null\n");
-    exit(1);
-  }
+  if (QUERY_STRING == NULL)
+    return NULL;
   buffer = newstr(QUERY_STRING);
   return buffer;
 }
@@ -124,12 +117,14 @@ int parse_CGI_encoded(llist *entries, char *buffer)
 {
   int i, j, num, token;
   int len = strlen(buffer);
-  char *lexeme = malloc(sizeof(char) * len + 1);
+  char *lexeme = (char *)malloc(sizeof(char) * len + 1);
   entrytype entry;
   node *window;
 
   list_create(entries);
   window = entries->head;
+  entry.name = NULL;
+  entry.value = NULL;
   i = 0;
   num = 0;
   token = _NAME;
@@ -145,16 +140,19 @@ int parse_CGI_encoded(llist *entries, char *buffer)
       entry.name = newstr(lexeme);
       unescape_url(entry.name);
       if ( (buffer[i] != '=') || (i == len - 1) ) {
-	entry.value = malloc(sizeof(char));
+	entry.value = (char *)malloc(sizeof(char));
 	strcpy(entry.value,"");
 	window = list_insafter(entries, window, entry);
-	free(lexeme);
 	free(entry.name);
+	entry.name = NULL;
 	free(entry.value);
+	entry.value = NULL;
 	if (i == len - 1) /* null value at end of expression */
 	  num++;
-	else /* error in expression */
+	else { /* error in expression */
+	  free(lexeme);
 	  return -1;
+	}
       }
       else
 	token = _VALUE;
@@ -164,7 +162,9 @@ int parse_CGI_encoded(llist *entries, char *buffer)
       unescape_url(entry.value);
       window = list_insafter(entries, window, entry);
       free(entry.name);
+      entry.name = NULL;
       free(entry.value);
+      entry.value = NULL;
       token = _NAME;
       num++;
     }
@@ -172,6 +172,10 @@ int parse_CGI_encoded(llist *entries, char *buffer)
     j = 0;
   }
   free(lexeme);
+  if (entry.name != NULL)
+    free(entry.name);
+  if (entry.value != NULL)
+    free(entry.value);
   return num;
 }
 
@@ -203,12 +207,12 @@ int parse_form_encoded(llist* entries)
   node* window;
   FILE *uploadfile;
   char *uploadfname, *tempstr, *boundary;
-  char *buffer = malloc(sizeof(char) * BUFSIZ + 1);
-  char *prevbuf = malloc(sizeof(char) + BUFSIZ + 1);
-  short isfile,done,start,winbrowser;
+  char *buffer = (char *)malloc(sizeof(char) * BUFSIZ + 1);
+  char *prevbuf = (char *)malloc(sizeof(char) + BUFSIZ + 1);
+  short isfile,done,start;
   int i,j;
   int bytesread,prevbytesread;
-  int buffersize = BUFSIZ;
+  int buffersize;
   int numentries = 0;
 
 #ifdef WINDOWS
@@ -239,7 +243,8 @@ int parse_form_encoded(llist* entries)
     tempstr = newstr(buffer);
     tempstr += (sizeof(char) * 38); /* 38 is header up to name */
     entry.name = tempstr;
-    entry.value = malloc(sizeof(char) * BUFSIZ + 1);
+    entry.value = (char *)malloc(sizeof(char) * BUFSIZ + 1);
+    buffersize = BUFSIZ;
     strcpy(entry.value,"");
     while (*tempstr != '"')
       tempstr++;
@@ -250,7 +255,8 @@ int parse_form_encoded(llist* entries)
       tempstr = strstr(tempstr,"filename=\"");
       tempstr += (sizeof(char) * 10);
       if (strlen(tempstr) >= BUFSIZ)
-	entry.value = realloc(entry.value,sizeof(char) * strlen(tempstr)+1);
+	entry.value = (char *) realloc(entry.value, sizeof(char) *
+				       strlen(tempstr)+1);
       entry.value = tempstr;
       while (*tempstr != '"')
 	tempstr++;
@@ -261,23 +267,24 @@ int parse_form_encoded(llist* entries)
 	 forward slashes.  No need to worry about Internet Explorer, since
 	 it doesn't support HTTP File Upload at all. */
       if (strstr(lower_case(HTTP_USER_AGENT),"win") != 0) {  
-	winbrowser = 1;
-        tempstr = strrchr(entry.value, '\\');
-	tempstr++;
-	entry.value = tempstr;
+	tempstr = strrchr(entry.value, '\\');
+	if (tempstr) {
+	  tempstr++;
+	  entry.value = tempstr;
+	}
       }
-      else
-	winbrowser = 0;
       window = list_insafter(entries,window,entry);
       numentries++;
-      uploadfname = malloc(strlen(UPLOADDIR) + strlen(entry.value) + 2);
-      if (winbrowser)
-	sprintf(uploadfname,"%s\\%s",UPLOADDIR,entry.value);
-      else
-	sprintf(uploadfname,"%s/%s",UPLOADDIR,entry.value);
+      uploadfname = (char *)malloc(strlen(UPLOADDIR)+strlen(entry.value)+2);
+#ifdef WINDOWS
+      sprintf(uploadfname,"%s\\%s",UPLOADDIR,entry.value);
+#else
+      sprintf(uploadfname,"%s/%s",UPLOADDIR,entry.value);
+#endif
       if ( (uploadfile = fopen(uploadfname,"w")) == NULL) {
-	fprintf(stderr,"cgihtml Error: cannot upload file\n");
-	exit(1);
+	/* null filename; for now, just don't save info.  later, save
+	   to default file */
+	isfile = 0;
       }
     }
     else
@@ -293,7 +300,7 @@ int parse_form_encoded(llist* entries)
     while (!done) {
       bytesread = getline(buffer,BUFSIZ);
       buffer[bytesread] = '\0';
-      if (strstr(buffer,boundary) == NULL) {
+      if (bytesread && strstr(buffer,boundary) == NULL) {
 	if (start) {
 	  i = 0;
 	  while (i < bytesread) {
@@ -312,7 +319,8 @@ int parse_form_encoded(llist* entries)
 	    else {
 	      if (j > buffersize) {
 		buffersize += BUFSIZ;
-		entry.value = realloc(entry.value,sizeof(char)*buffersize+1);
+		entry.value = (char *) realloc(entry.value, sizeof(char) *
+					       buffersize+1);
 	      }
 	      entry.value[j] = prevbuf[i];
 	      j++;
@@ -338,7 +346,8 @@ int parse_form_encoded(llist* entries)
 	  else {
 	    if (j > buffersize) {
 	      buffersize += BUFSIZ;
-	      entry.value = realloc(entry.value,sizeof(char)*buffersize+1);
+	      entry.value = (char *) realloc(entry.value, sizeof(char) *
+					     buffersize+1);
 	    }
 	    entry.value[j] = prevbuf[i];
 	    j++;
@@ -350,6 +359,7 @@ int parse_form_encoded(llist* entries)
     if (isfile)
       fclose(uploadfile);
     else {
+      entry.value[j] = '\0';
       window = list_insafter(entries,window,entry);
       numentries++;
       j = 0;
@@ -361,6 +371,7 @@ int parse_form_encoded(llist* entries)
 int read_cgi_input(llist* entries)
 {
   char *input;
+  int status;
 
   /* check for form upload.  this needs to be first, because the
      standard way of checking for POST data is inadequate.  If you
@@ -387,7 +398,16 @@ int read_cgi_input(llist* entries)
     exit(1);
   }
   /* parse the input */
-  return parse_CGI_encoded(entries,input);
+  if (input == NULL)
+    return 0;
+  status = parse_CGI_encoded(entries,input);
+  free(input);
+  return status;
+}
+
+int read_file_upload(llist *entries, int maxfilesize)
+{
+  return parse_form_encoded(entries);
 }
 
 char *cgi_val(llist l, char *name)
@@ -514,8 +534,8 @@ int parse_cookies(llist *entries)
   list_create(entries);
   window = entries->head;
   len = strlen(cookies);
-  entry.name = malloc(sizeof(char) * len + 1);
-  entry.value = malloc(sizeof(char) * len + 1);
+  entry.name = (char *)malloc(sizeof(char) * len + 1);
+  entry.value = (char *)malloc(sizeof(char) * len + 1);
   for (i = 0; i < len; i++) {
     if (cookies[i] == '=') {
       entry.name[j] = '\0';
@@ -626,21 +646,21 @@ char *escape_input(char *str)
 /* takes string and escapes all metacharacters.  should be used before
    including string in system() or similar call. */
 {
-  int i,j = 0;
-  char *new = malloc(sizeof(char) * (strlen(str) * 2 + 1));
+  unsigned int i,j = 0;
+  char *newstring = (char *)malloc(sizeof(char) * (strlen(str) * 2 + 1));
 
   for (i = 0; i < strlen(str); i++) {
     if (!( ((str[i] >= 'A') && (str[i] <= 'Z')) ||
 	   ((str[i] >= 'a') && (str[i] <= 'z')) ||
 	   ((str[i] >= '0') && (str[i] <= '9')) )) {
-      new[j] = '\\';
+      newstring[j] = '\\';
       j++;
     }
-    new[j] = str[i];
+    newstring[j] = str[i];
     j++;
   }
-  new[j] = '\0';
-  return new;
+  newstring[j] = '\0';
+  return newstring;
 }
 
 /* boolean functions */

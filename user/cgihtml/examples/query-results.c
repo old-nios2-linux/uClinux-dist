@@ -1,6 +1,6 @@
 /* query-results.c - generic query program using either GET or POST
    Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   $Id: query-results.c,v 1.7 1997/01/21 07:20:47 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved

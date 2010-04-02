@@ -2,7 +2,7 @@
      to test CGI.
 
    Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   $Id: test.cgi.c,v 1.5 1997/01/21 07:21:11 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved

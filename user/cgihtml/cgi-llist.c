@@ -1,6 +1,6 @@
 /* cgi-llist.c - Minimal linked list library for revised CGI C library
-   Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   Eugene Kim, <eekim@eekim.com>
+   $Id: cgi-llist.c,v 1.5 1998/05/04 01:39:55 eekim Exp $
 
    Copyright (C) 1995 Eugene Eric Kim
    All Rights Reserved
@@ -56,7 +56,7 @@ void list_traverse(llist *l, void (*visit)(entrytype item))
 
 node* list_insafter(llist* l, node* w, entrytype item)
 {
-  node* newnode = malloc(sizeof(node));
+  node* newnode = (node *)malloc(sizeof(node));
 
   newnode->entry.name = newstr(item.name);
   newnode->entry.value = newstr(item.value);
@@ -70,7 +70,7 @@ node* list_insafter(llist* l, node* w, entrytype item)
   else {
     /* insert node after */
     if (newnode == 0) /* can assume that w != NULL */
-      /* ERROR: nothing too insert after */
+      /* ERROR: nothing to insert after */
       exit(1);
     else {
       newnode->next = w->next;
@@ -82,25 +82,17 @@ node* list_insafter(llist* l, node* w, entrytype item)
 
 void list_clear(llist* l)
 {
-  node* lastnode;
-  node* nexttolast;
+  node* nextnode;
   node* current;
 
-  while (l->head != 0) {
-    current = l->head;
-    if (current->next == 0) {
-      free(current);
-      current = 0;
-      l->head = current;
-    }
-    else {
-      while ( current->next != 0 ) {
-	nexttolast = current;
-	lastnode = current->next;
-	current = lastnode;
-      }
-      free(lastnode);
-      nexttolast->next = 0;
-    }
+  current = l->head;
+  while (current) {
+    nextnode=current->next;
+    if (current->entry.name)
+      free(current->entry.name);
+    if (current->entry.value)
+      free(current->entry.value);
+    free(current);
+    current=nextnode;
   }
 }

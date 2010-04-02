@@ -1,5 +1,5 @@
 /* string-lib.h - headers for string-lib.c
-   $Id$
+   $Id: string-lib.h,v 1.3 1997/01/21 07:18:02 eekim Exp $
 */
 
 char *newstr(char *str);

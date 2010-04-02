@@ -1,6 +1,6 @@
 README for cgihtml and complementary utilities
 by Eugene Eric Kim <eekim@eekim.com>
-$Id$
+$Id: README,v 1.9 1997/01/21 07:15:42 eekim Exp $
 ================================================
 
 cgihtml is a collection of CGI parsing and HTML output functions

@@ -1,5 +1,5 @@
 TODO for cgihtml
-$Id$
+$Id: TODO,v 1.7 1997/01/21 07:15:55 eekim Exp $
 ==========================
 
 o Rewrite the API for clarity and portability.

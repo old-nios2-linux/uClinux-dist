@@ -1,6 +1,6 @@
 /* html-lib.h - header file for html-lib.c
    Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   $Id: html-lib.h,v 1.6 1996/10/24 06:54:10 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved

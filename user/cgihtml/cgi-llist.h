@@ -1,10 +1,13 @@
 /* llist.h - Header file for llist.c
-   Eugene Kim, eekim@fas.harvard.edu
-   $Id$
+   Eugene Kim, <eekim@eekim.com>
+   $Id: cgi-llist.h,v 1.2 1997/10/06 08:58:21 eekim Exp $
 
    Copyright (C) 1995 Eugene Eric Kim
    All Rights Reserved
 */
+
+#ifndef _CGI_LLIST
+#define _CGI_LLIST 1
 
 typedef struct {
   char *name;
@@ -27,3 +30,5 @@ short on_list_debug(llist *l, node* w);
 void list_traverse(llist *l, void (*visit)(entrytype item));
 node* list_insafter(llist* l, node* w, entrytype item);
 void list_clear(llist* l);
+
+#endif
