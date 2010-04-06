@@ -10,7 +10,7 @@ send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
 
-proc spectrum_analysis { file_suffix sample_freq freq_range_up freq_range_down } {
+proc spectrum_analysis { file_suffix sample_freq } {
     global case_num
     global result
     global output_dir
@@ -36,43 +36,21 @@ proc spectrum_analysis { file_suffix sample_freq freq_range_up freq_range_down }
         }
     }
 
-#power at the sample freqency should be big enough
-    incr case_num
-    set timeout 10
-    send "grep \"^$sample_freq\..*\[\[:space:]]\[1-9]\[0-9]\\{3,\\}\.\[0-9]\\{6,\\}\" $file_suffix.dft.dat\r"
-    expect ">"
-    send "grep -c \"^$sample_freq\..*\[\[:space:]]\[1-9]\[0-9]\\{3,\\}\.\[0-9]\\{6,\\}\" $file_suffix.dft.dat\r"
-    while 1 {
-        expect {
-            -re "\r\n0\r\n.*>" {
-                lappend result "FAIL"
-                send_user "low power at freqency $sample_freq\n"
-                return
-            }
-            -re "\r\n\[1-9]\[0-9]*\r\n.*>" {
-                case_pass $case_num
-                break
-            }
-            timeout {
-                lappend result "FAIL"
-                send_user "timeout\n"
-                return
-            }
-        }
+    if { $sample_freq < 1000 } {
+        set freq_range [ expr $sample_freq / 10 ]
+        set match_pattern "$freq_range\[0-9]\{1\}\.\[0-9]\{6\}\t\[0-9]\{4,\}\.\[0-9]\{6\}.*>"
+    } else {
+        set freq_range [ expr $sample_freq / 100 ]
+        set match_pattern "$freq_range\[0-9]\{2\}\.\[0-9]\{6\}\t\[0-9]\{4,\}\.\[0-9]\{6\}.*>"
     }
 
-#make sure power is near sample freqency
     incr case_num
     set timeout 10
-    send "grep \"\[\[:space:]]\[1-9]\[0-9]\\{3\\}\.\[0-9]\\{6,\\}\" $file_suffix.dft.dat | grep -v \"^$freq_range_up.\\\.\" | grep -cv \"^$freq_range_down.\\\.\"\r"
+    send_user "freq_range=$freq_range\n"
+    send "sort -rn +1 $file_suffix.dft.dat | head -n 1\r"
     while 1 {
         expect {
-            -re "\r\n\[1-9]\[0-9]*\r\n.*>" {
-                lappend result "FAIL"
-                send_user "too much power at unwanted freqency\n"
-                return
-            }
-            -re "\r\n0\r\n.*>" {
+            -re $match_pattern {
                 case_pass $case_num
                 break
             }
@@ -198,11 +176,9 @@ for {set count 0} {$count < $file_num} {incr count} {
     sleep 2
     set file_suffix [lindex [lindex $file_info $count] 0]
     set sample_freq [lindex [lindex $file_info $count] 1]
-    set freq_range_up [ expr $sample_freq / 10 ]
-    set freq_range_down [ expr $freq_range_up - 1 ]
 
     step "Spectrum test with $file_suffix.wav, frequency $sample_freq"
-    spectrum_analysis $file_suffix $sample_freq $freq_range_up $freq_range_down
+    spectrum_analysis $file_suffix $sample_freq
     send_user "\nThis round of test [lindex $result $count]\n"
 }
 
