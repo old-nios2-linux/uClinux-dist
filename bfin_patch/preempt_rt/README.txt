@@ -1,4 +1,4 @@
-This patch enables preempt-rt for blackfin - this patch will be sent to upstream preempt-rt tree, once the blackfin SMP fix patch is in upstream.
+This patch enables preempt-rt for blackfin - this patch will be sent to upstream preempt-rt tree, once the blackfin SMP fix patch(svn revision #8034, #8039) is in upstream.
 
 To use the patch:
 
