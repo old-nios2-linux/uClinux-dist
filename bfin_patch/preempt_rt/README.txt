@@ -11,3 +11,4 @@ You will need to fix some trivial patch failure for linux-kernel/Makefile, linux
 
 This patch has been tested on BF537-STAMP, BF561-ezkit(with SMP).
 
+The cyclictest shows there is huge schedule latency even PREEMPT_RT is enabled. Please refer to bug [#5814].
