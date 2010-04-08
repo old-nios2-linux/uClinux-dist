@@ -9,3 +9,5 @@ You will need to fix some trivial patch failure for linux-kernel/Makefile, linux
 
 3. Apply bfin_preempt-rt.patch
 
+This patch has been tested on BF537-STAMP, BF561-ezkit(with SMP).
+
