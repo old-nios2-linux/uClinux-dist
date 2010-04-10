@@ -145,11 +145,22 @@ int openhttp(char *url)
 		for (;;) {
 			if (httpreadline(fd, buf, sizeof(buf)) < 0)
 				return(-1);
-			if ((buf[0] == '\n') || (buf[0] == '\r'))
+			if (!relocated && ((buf[0] == '\n') || (buf[0] == '\r')))
 				break;
 			if (strncmp(buf, "Location:", 9) == 0) {
 				strncpy(relocurl, buf+10, sizeof(relocurl));
 				up = relocurl;
+				printf("redirecting to %s\n", relocurl);
+			}
+			if (strstr(buf, "audio/x-scpls")) {
+				printf("playlist\n");
+				relocated++;
+			}
+			if (relocated && strncmp (buf, "File1=", 6) == 0) {
+				strncpy(relocurl, buf+6, sizeof(relocurl));
+				up = relocurl;
+				printf("redirecting to %s\n", relocurl);
+				break;
 			}
 		}
 	} while (relocated);
