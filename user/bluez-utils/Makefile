@@ -1,6 +1,6 @@
 VER = bluez-utils-2.25
 
-FLTFLAGS += -s 0x2000
+FLTFLAGS += -s 0x4000
 
 CONF_OPTS-y =
 CONF_SBIN-y =
