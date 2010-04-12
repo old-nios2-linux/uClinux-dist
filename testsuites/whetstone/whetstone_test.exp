@@ -33,7 +33,7 @@ while 1 {
     }
 }
 
-spawn /bin/sh
+spawn /bin/bash
 
 sleep 3
 
@@ -57,6 +57,9 @@ incr case_num
 send "time make user/whetstone_only TONLY=results IP=$targetip | grep \"^|\" | sort -rn -t \"|\" +4\r"
 while 1 {
     expect {
+        -re "rcp:.*No such file or directory" {
+            case_fail $case_num
+        }
         -re "uclinux-dist>" {
             case_pass $case_num
             break

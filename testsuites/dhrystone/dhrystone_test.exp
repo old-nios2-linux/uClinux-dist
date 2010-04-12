@@ -33,7 +33,7 @@ while 1 {
     }
 }
 
-spawn /bin/sh
+spawn /bin/bash
 
 sleep 3
 
