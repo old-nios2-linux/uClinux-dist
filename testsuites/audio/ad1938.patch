@@ -1,0 +1,33 @@
+Index: sound/soc/codecs/ad193x.c
+===================================================================
+--- sound/soc/codecs/ad193x.c	(revision 8642)
++++ sound/soc/codecs/ad193x.c	(working copy)
+@@ -343,7 +343,7 @@
+ 	/* sata delay=1, adc aux mode */
+ 	snd_soc_write(codec, AD193X_ADC_CTRL1, 0x43);
+ 	/* pll input: mclki/xi */
+-	snd_soc_write(codec, AD193X_PLL_CLK_CTRL0, 0x99); /* mclk=24.576Mhz: 0x9D; mclk=12.288Mhz: 0x99 */
++	snd_soc_write(codec, AD193X_PLL_CLK_CTRL0, 0x9D); /* mclk=24.576Mhz: 0x9D; mclk=12.288Mhz: 0x99 */
+ 	snd_soc_write(codec, AD193X_PLL_CLK_CTRL1, 0x04);
+ 
+ 	ret = snd_soc_register_codec(codec);
+Index: sound/soc/blackfin/bf5xx-ad193x.c
+===================================================================
+--- sound/soc/blackfin/bf5xx-ad193x.c	(revision 8642)
++++ sound/soc/blackfin/bf5xx-ad193x.c	(working copy)
+@@ -56,13 +56,13 @@
+ 	int ret = 0;
+ 	/* set cpu DAI configuration */
+ 	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_DSP_A |
+-		SND_SOC_DAIFMT_NB_IF | SND_SOC_DAIFMT_CBM_CFM);
++		SND_SOC_DAIFMT_IB_IF | SND_SOC_DAIFMT_CBM_CFM);
+ 	if (ret < 0)
+ 		return ret;
+ 
+ 	/* set codec DAI configuration */
+ 	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_DSP_A |
+-		SND_SOC_DAIFMT_NB_IF | SND_SOC_DAIFMT_CBM_CFM);
++		SND_SOC_DAIFMT_IB_IF | SND_SOC_DAIFMT_CBM_CFM);
+ 	if (ret < 0)
+ 		return ret;
+ 
