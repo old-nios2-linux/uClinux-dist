@@ -406,6 +406,12 @@ config LIB_SDL_TTF
 	  code a font rendering routine themselves.
 	  http://www.libsdl.org/projects/SDL_ttf/
 
+config LIB_LIBSNDFILE
+	bool "Build libsndfile"
+	help
+	  a library for reading and writing files containing sampled sound
+	  http://www.mega-nerd.com/libsndfile/
+
 config LIB_SPEEX
 	bool "Build speex"
 	help
