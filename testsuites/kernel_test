@@ -1545,8 +1545,14 @@ do
       cp $UCLINUX_DIST_PATH_BAK/linux-2.6.x/.config linux-2.6.x/
       cp $UCLINUX_DIST_PATH_BAK/config/.config config/
 
+      if [ ${AUTO_RUN_STATUS[$(( n + 3 ))]} -eq 1  ] ; then
+          audio_dev="audio_ad1836"
+      elif [ ${AUTO_RUN_STATUS[$(( n + 5 ))]} -eq 1  ] ; then
+          audio_dev="audio_ad1938"
+      fi
+
       cd $UCLINUX_DIST_TESTSUITES/power
-      ./build_power_audio_tdm_kernel.exp $BOARD_TYPE >/dev/null  2>&1
+      ./build_power_audio_tdm_kernel.exp $BOARD_TYPE $audio_dev >/dev/null  2>&1
       sleep 30
 
       if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]

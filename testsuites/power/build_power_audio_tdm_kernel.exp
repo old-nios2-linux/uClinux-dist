@@ -6,9 +6,25 @@
 
 source  ../kernel_config.exp
 source  ../board_info.exp
+
+if { $argc < 2} {
+    puts "Please input: board_type, audio_dev"
+    puts "audio_dev: audio_ad1836, audio_ad1938"
+    exit
+}
+set audio_dev [lindex $argv 1]
+
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
+if { $audio_dev == "audio_ad1938" } {
+    step "Change settings for ad1938 driver."
+    cd $uclinux_path/linux-2.6.x
+    if [ catch {exec patch -p0 < $uclinux_path/testsuites/audio/ad1938.patch} ] {
+        send_user "$errorInfo\n"
+        exit
+    }
+}
 
 cd $uclinux_path/testsuites
 step "Make default config."
