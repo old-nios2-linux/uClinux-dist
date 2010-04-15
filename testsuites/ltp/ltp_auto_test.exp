@@ -858,6 +858,7 @@ proc run_LTP_test { filename command torun mode} {
    global ipaddr
    global kernel_prompt
    global board_type
+   global printk_level
 
    step "Start to test \[$filename\]"
 
@@ -951,6 +952,12 @@ proc run_LTP_test { filename command torun mode} {
                 $filename == "fchown03" || \
                 $filename == "fchown04" } {
       catch {exec rcp $LTP_TESTCASES_DIR/change_owner root@$ipaddr:/bin}
+   }
+
+   if { $filename == "setrlimit01" } {
+       set timeout 5
+       send "echo 0 > /proc/sys/kernel/printk\r"
+       expect $kernel_prompt
    }
 
    step "get test case \[$filename\] from server"
@@ -1101,6 +1108,12 @@ proc run_LTP_test { filename command torun mode} {
              }
          }
       }
+   }
+
+   if { $filename == "setrlimit01" } {
+       set timeout 5
+       send "echo $printk_level > /proc/sys/kernel/printk\r"
+       expect $kernel_prompt
    }
 
    if {$result_flag == $LTP_CRASH} {
@@ -2503,6 +2516,22 @@ set i 0
 # Walk through the result_matrix
 
 step "begin test"
+set timeout 5
+send "cat /proc/sys/kernel/printk\r"
+while 1 {
+    expect {
+        -re "(\[0-9])\t.*$kernel_prompt" {
+            set printk_level $expect_out(1,string)
+            break
+        }
+        timeout {
+            send_user "get printk level timeout\r"
+            set printk_level 7
+            break
+        }
+    }
+}
+
 for {set i 0} {$i < [llength $result_matrix]} {incr i} {
    # get the next row of the matrix
    set x [lindex $result_matrix $i]
