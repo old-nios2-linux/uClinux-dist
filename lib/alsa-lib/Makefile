@@ -27,4 +27,4 @@ romfs:
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_AC97 -E CONFIG_SND_BF5XX_MMAP_SUPPORT $(VER)/src/conf/cards/AD1980-no-mmap.conf /usr/share/alsa/cards/AD1980.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_SSM2602 $(VER)/src/conf/cards/SSM2602.conf /usr/share/alsa/cards/SSM2602.conf
 	$(ROMFSINST) -e CONFIG_SND_USB_AUDIO $(VER)/src/conf/cards/USB-Audio.conf /usr/share/alsa/cards/USB-Audio.conf
-
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_ADAU1371 $(VER)/src/conf/cards/ADAU1371.conf /usr/share/alsa/cards/ADAU1371.conf
