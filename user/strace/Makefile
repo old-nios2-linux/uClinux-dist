@@ -1,6 +1,6 @@
-VER = strace-4.5.19
+VER = strace-4.5.20
 
-FLTFLAGS += -s 20000
+FLTFLAGS += -s 0x5000
 
 AUTOTOOLS_ALL_DEPS = .check
 
