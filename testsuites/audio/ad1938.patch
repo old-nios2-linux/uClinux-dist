@@ -1,19 +1,6 @@
-Index: sound/soc/codecs/ad193x.c
-===================================================================
---- sound/soc/codecs/ad193x.c	(revision 8642)
-+++ sound/soc/codecs/ad193x.c	(working copy)
-@@ -343,7 +343,7 @@
- 	/* sata delay=1, adc aux mode */
- 	snd_soc_write(codec, AD193X_ADC_CTRL1, 0x43);
- 	/* pll input: mclki/xi */
--	snd_soc_write(codec, AD193X_PLL_CLK_CTRL0, 0x99); /* mclk=24.576Mhz: 0x9D; mclk=12.288Mhz: 0x99 */
-+	snd_soc_write(codec, AD193X_PLL_CLK_CTRL0, 0x9D); /* mclk=24.576Mhz: 0x9D; mclk=12.288Mhz: 0x99 */
- 	snd_soc_write(codec, AD193X_PLL_CLK_CTRL1, 0x04);
- 
- 	ret = snd_soc_register_codec(codec);
 Index: sound/soc/blackfin/bf5xx-ad193x.c
 ===================================================================
---- sound/soc/blackfin/bf5xx-ad193x.c	(revision 8642)
+--- sound/soc/blackfin/bf5xx-ad193x.c	(revision 8652)
 +++ sound/soc/blackfin/bf5xx-ad193x.c	(working copy)
 @@ -56,13 +56,13 @@
  	int ret = 0;
@@ -31,3 +18,12 @@ Index: sound/soc/blackfin/bf5xx-ad193x.c
  	if (ret < 0)
  		return ret;
  
+@@ -77,7 +77,7 @@
+ 	if (ret < 0)
+ 		return ret;
+ 
+-#if 0
++#if 1
+ 	/* if input frequency is not 12288000, we need set pll */
+ 	ret = snd_soc_dai_set_pll(codec_dai, 0, 0,
+ 			24576000, 12288000);
