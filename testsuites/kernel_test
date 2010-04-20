@@ -1013,7 +1013,13 @@ do
   else
       sleep 30
       ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
-      sleep 30
+
+      if [ $RESET_BOARD -eq 1  ] ; then
+          cd $UCLINUX_DIST_TESTSUITES
+          ./reset_board.exp  >/dev/null  2>&1 
+          sleep 10
+      fi
+
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1065,7 +1071,13 @@ do
   else
       sleep 30
       ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
-      sleep 30
+
+      if [ $RESET_BOARD -eq 1  ] ; then
+          cd $UCLINUX_DIST_TESTSUITES
+          ./reset_board.exp  >/dev/null  2>&1 
+          sleep 10
+      fi
+
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1117,7 +1129,13 @@ do
   else
       sleep 30
       ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
-      sleep 30
+
+      if [ $RESET_BOARD -eq 1  ] ; then
+          cd $UCLINUX_DIST_TESTSUITES
+          ./reset_board.exp  >/dev/null  2>&1 
+          sleep 10
+      fi
+
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1170,7 +1188,13 @@ do
   else
       sleep 30
       ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
-      sleep 30
+
+      if [ $RESET_BOARD -eq 1  ] ; then
+          cd $UCLINUX_DIST_TESTSUITES
+          ./reset_board.exp  >/dev/null  2>&1 
+          sleep 10
+      fi
+
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1277,7 +1301,13 @@ do
   else
       sleep 30
       ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
-      sleep 30
+
+      if [ $RESET_BOARD -eq 1  ] ; then
+          cd $UCLINUX_DIST_TESTSUITES
+          ./reset_board.exp  >/dev/null  2>&1 
+          sleep 10
+      fi
+
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
