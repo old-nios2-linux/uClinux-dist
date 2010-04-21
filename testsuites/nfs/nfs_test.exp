@@ -87,7 +87,7 @@ incr case_num
 send -s "umount /mnt\r"
 while 1 {
     expect {
-        $kernel_prompt {
+        -re $kernel_prompt {
             send_user "nfs umount.\n"
             case_pass $case_num
             break
