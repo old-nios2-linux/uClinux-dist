@@ -9,31 +9,14 @@ step "Spawn kermit"
 source ../spawn_kermit.exp
 
 step "Reboot the kernel."
-source ../reboot_kernel.exp 
+source ../reboot_kernel.exp
 
 step "Start testing."
+sleep 10
 set case_num 0
 
-send "\r"
-expect  -re $kernel_prompt
-
 send "ifconfig eth0 $targetip up\r"
-while 1 {
-   sleep 3
-   expect {
-      ">" {
-         puts "ifconfig set success.\n"
-         break
-      }
-
-      timeout {
-            puts "Fail ifconfig. "
-            break
-         }
-     }
-}
-
-
+expect -re $kernel_prompt
 
 if [ catch { exec make clean } ] {
     send_user "\nFAIL: Clean src directory\n"
@@ -95,8 +78,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
