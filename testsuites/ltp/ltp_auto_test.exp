@@ -2318,10 +2318,14 @@ for {set i 0} {$i < 50} {incr i} {
    while 1 {
       expect {
 
-         -re "Kernel panic" {
-            report "kernel panic detected... trying to recover from it"
-            recover
-            break
+         -re "Kernel panic|Hardware Trace:" {
+            report "Kernel panic detected, exit LTP test!"
+            reset_board
+            expect "Hit any key"
+            send "\r"
+            expect ">"
+            all_done
+            exit
          }
 
          -re "Sash command shell.*/> " {
