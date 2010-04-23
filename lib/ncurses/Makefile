@@ -24,12 +24,12 @@ export PATH := $(ROOTDIR)/lib/ncurses/build-host-$(VER)/progs:$(PATH)
 include $(ROOTDIR)/tools/autotools.mk
 
 host-build:
-	$(MAKE) -C build-host-$(VER)/include
-	$(MAKE) -C build-host-$(VER)/progs tic
+	$(MAKE) -C $(BUILDDIR_HOST)/include
+	$(MAKE) -C $(BUILDDIR_HOST)/progs tic
 
 post-build::
 ifeq ($(CONFIG_USER_NCURSES_TESTS),y)
-	$(MAKE) -C build-$(VER)/test
+	$(MAKE) -C $(BUILDDIR)/test
 endif
 
 romfs:
