@@ -173,7 +173,7 @@ set timeout 180
 send "bootm 0x1000000\r"
 while 1 {
     expect {
-        -re "Kernel panic|Hardware trace:" {
+        -re "Kernel panic|Hardware Trace:" {
             sleep 5
             case_fail $case_num
         }

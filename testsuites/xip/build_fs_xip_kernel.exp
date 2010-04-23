@@ -30,13 +30,13 @@ if [ catch {exec patch -p0 < $uclinux_path/testsuites/xip/partition.patch} ] {
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
 cd $uclinux_path/testsuites
-source  make_cut_busybox_config.exp
+source make_cut_busybox_config.exp
 
 cd $uclinux_path/testsuites
-source  make_cut_fs_config.exp
+source make_cut_fs_config.exp
 
 cd $uclinux_path
 set timeout 300
@@ -93,7 +93,7 @@ while 1 {
 
         -re "Kernel support for FDPIC ELF binaries.*BINFMT_ELF_FDPIC.*\\\[.*]" {
             if { $format == "fdpic" } {
-                send  "Y\r"
+                send "Y\r"
             } else {
                 send "N\r"
             }
@@ -101,7 +101,7 @@ while 1 {
 
         -re "Kernel support for flat binaries.*BINFMT_FLAT.*\\\[.*]" {
             if { $format == "shared-flat" } {
-                send  "Y\r"
+                send "Y\r"
             } else {
                 send "N\r"
             }
@@ -109,7 +109,7 @@ while 1 {
 
         -re "Enable shared FLAT support.*BINFMT_SHARED_FLAT.*\\\[.*]" {
             if { $format == "shared-flat" } {
-                send  "Y\r"
+                send "Y\r"
             } else {
                 send "N\r"
             }
@@ -117,9 +117,9 @@ while 1 {
 
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
             if { $format == "fdpic" } {
-                send  "4\r"
+                send "4\r"
             } elseif { $format == "shared-flat" } {
-                send  "3\r"
+                send "3\r"
             } else {
                 send "4\r"
             }
@@ -127,7 +127,7 @@ while 1 {
 
         -re "Install ELF shared libraries.*INSTALL_ELF_SHARED_LIBS.*\\\[.*]" {
             if { $format == "shared-flat" } {
-                send  "N\r"
+                send "N\r"
             } else {
                 send "Y\r"
             }
