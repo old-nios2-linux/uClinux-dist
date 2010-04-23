@@ -18,7 +18,15 @@ if { $argc < 2} {
     exit
 }
 
+set HAVE_KERNEL_ONLY_IMAGE 1
 set HAVE_ROMFS_IMAGE 1
+
+step "Change partition"
+cd $uclinux_path/linux-2.6.x
+if [ catch {exec patch -p0 < $uclinux_path/testsuites/xip/partition.patch} ] {
+    send_user "$errorInfo\n"
+    exit
+}
 
 cd $uclinux_path/testsuites
 step "Make config."
@@ -43,8 +51,8 @@ while 1 {
             send "y\r"
         }
 
-        -re "Kernel executes from.*(\[0-9]). ROM.*choice.*\\\[.*]" {
-            send "$expect_out(1,string)\r"
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "Initial RAM filesystem and RAM disk.*BLK_DEV_INITRD.*\\\[.*]" {
@@ -117,10 +125,6 @@ while 1 {
             }
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         -re "Install ELF shared libraries.*INSTALL_ELF_SHARED_LIBS.*\\\[.*]" {
             if { $format == "shared-flat" } {
                 send  "N\r"
@@ -152,7 +156,7 @@ while 1 {
 
 cd $uclinux_path/testsuites
 step "Make kernel"
-source   make_kernel.exp
+source make_kernel.exp
 
 step "Make image without libgfortran"
 if [ catch {exec rm [glob $uclinux_path/romfs/lib/libgfortran*]} ] {
@@ -164,11 +168,11 @@ if [ catch {exec sed --in-place "/syslogd/ d" $uclinux_path/romfs/etc/inittab} ]
 }
 
 cd $uclinux_path/testsuites
-source   make_image.exp
+source make_image.exp
 
 cd $uclinux_path/testsuites
 step "Copy linux image"
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
