@@ -54,7 +54,7 @@ while 1 {
 
 incr case_num
 set timeout 10
-send "mkdosfs -F 32 /dev/$mmc_dev\r"
+send "time mkdosfs -F 32 /dev/$mmc_dev\r"
 while 1 {
     expect {
         -re "No such .*$kernel_prompt" {
@@ -74,7 +74,7 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "mount -t msdos /dev/$mmc_dev /mnt/mmc\r"
+send "mount -t vfat /dev/$mmc_dev /mnt/mmc\r"
 while 1 {
     expect {
         -re "mount.*failed.*$kernel_prompt" {
@@ -312,7 +312,7 @@ while 1 {
 
 incr case_num
 set timeout 10
-send "mkdosfs -F 32 /dev/$mmc_dev2\r"
+send "time mkdosfs -F 32 /dev/$mmc_dev2\r"
 while 1 {
     expect {
         -re "No such .*$kernel_prompt" {
@@ -332,7 +332,7 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "mount -t msdos /dev/$mmc_dev2 /mnt/mmc2\r"
+send "mount -t vfat /dev/$mmc_dev2 /mnt/mmc2\r"
 while 1 {
     expect {
         -re "mount.*failed.*$kernel_prompt" {
@@ -503,7 +503,7 @@ while 1 {
 }
 
 
-step "Start bonnie++ test"
+step "TEST - Use MMC/SD as root FS"
 
 set timeout 10
 send "fdisk /dev/$mmc_dev\r"
@@ -608,52 +608,6 @@ sleep 10
 
 incr case_num
 set timeout 5
-send "mount -t ext2 /dev/$mmc_dev1 /mnt\r"
-while 1 {
-    expect {
-        -re "mount.*failed.*$kernel_prompt" {
-            send_user "mount EXT2 FS fail, test fail\n"
-            case_fail $case_num
-        }
-        -re $kernel_prompt {
-            send_user "mount EXT2 FS done, test pass\n"
-            case_pass $case_num
-            break
-        }
-        timeout {
-            send_user "mount EXT2 FS timeout, test fail\n"
-            case_fail $case_num
-        }
-    }
-}
-
-set timeout 3600
-incr case_num
-send "time bonnie++ -u root -d /mnt -s 200M\r"
-while 1 {
-    expect {
-        -re "Hardware Trace" {
-            send_user "bonnie++ failed\n"
-            case_fail $case_num
-        }
-        -re "Latency.*$kernel_prompt" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            send_user "bonnie++ timeout\n"
-            case_fail $case_num
-        }
-    }
-}
-
-
-step "TEST - Use MMC/SD as root FS"
-source ../reboot_kernel.exp
-sleep 10
-
-incr case_num
-set timeout 5
 send "mkdir /mnt/rootfs\r"
 expect -re $kernel_prompt
 send "mount /dev/$mmc_dev1 /mnt/rootfs\r"
@@ -748,72 +702,15 @@ set timeout 180
 send -s "run mmcboot\r"
 while 1 {
     expect {
-        -re "Kernel panic" {
-            send_user "kernel panic detected..."
+        -re "Kernel panic|Hardware Trace:" {
+            sleep 5
             case_fail $case_num
         }
-
-        -re "Sash command shell.*/>" {
-            send_user "successful boot attempt"
-            case_pass $case_num
-            break
-        }
-
         -re $kernel_prompt {
             send_user "successful boot attempt"
             case_pass $case_num
             break
         }
-
-        -re "Linux version (.*) " {
-            set linux_version $expect_out(1,string)
-        }
-
-# Look for gcc version N.N[.N[.N]]
-        -re "gcc version (\[0-9](\.\[0-9]+)+)" {
-            set gcc_version [lindex $expect_out(0,string) 2]
-        }
-
-# Look for text followed by 1 or more spaces or tabs
-# followed by = followed by 1 or more spaces or tabs
-# followed by (0xNNNNNN-0xNNNNNN)
-        -re "text\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_text $expect_out(1,string)
-        }
-
-        -re "data\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_data $expect_out(1,string)
-        }
-
-        -re "bss\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_bss $expect_out(1,string)
-        }
-
-        -re "rootfs\[\x20\t]+=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_rootfs $expect_out(1,string)
-        }
-
-# Note that here we're looking for zero or 1 space. Doh!
-        -re "stack\[\x20\t]?=\[\x20\t]+(0x\[0-9a-fA-F]+-0x.....\[0-9a-fA-F]+)" {
-            set map_stack $expect_out(1,string)
-        }
-
-        -re "\[Ii]nstruction \[Cc]ache \[Ee]nabled" {
-# set instruction_cache_boot_flag $CACHE_ENABLED
-        }
-
-        -re "\[Ii]nstruction \[Cc]ache \[Dd]isabled" {
-# set instruction_cache_boot_flag $CACHE_DISABLED
-        }
-
-        -re "\[Dd]ata \[Cc]ache \[Ee]nabled" {
-# set data_cache_boot_flag $CACHE_ENABLED
-        }
-
-        -re "\[Dd]ata \[Cc]ache \[Dd]isabled" {
-#set data_cache_boot_flag $CACHE_DISABLED
-        }
-
         timeout {
             send_user "failed boot attempt"
             case_fail $case_num
@@ -848,8 +745,137 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-send_user "Ending $argv0\n"
 
+step "Start bonnie++ test"
+
+source ../reboot_kernel.exp
+sleep 5
+
+set timeout 10
+send "fdisk /dev/$mmc_dev\r"
+expect -re "Command.*:"
+send "p\r"
+set timeout 10
+while 1 {
+    expect {
+        -re "/dev/$mmc_dev1" {
+            send "d\r"
+            expect -re "Partition number.*"
+            send "1\r"
+            expect -re "Command.*"
+            break
+        }
+        eof {
+            break
+        }
+        timeout {
+            break
+        }
+    }
+}
+
+set timeout 10
+send "fdisk /dev/$mmc_dev\r"
+expect -re "Command.*:"
+send "n\r"
+expect -re "primary partition.*"
+send "p\r"
+expect -re "Partition number.*"
+send "1\r"
+expect -re "First cylinder.*"
+send "\r"
+expect -re "Last cylinder.*"
+send "\r"
+expect -re "Command.*"
+send "t\r"
+expect -re "Partition number.*"
+send "1\r"
+expect -re "Hex code.*:"
+send "b\r"
+expect -re "Changed system type.*:"
+send "p\r"
+expect -re "Command.*"
+send "w\r"
+expect -re $kernel_prompt
+send_user "Whole card is created as fat32\n"
+
+
+incr case_num
+set timeout 5
+send "ls /dev/$mmc_dev*\r"
+while 1 {
+    expect {
+        -re "$mmc_dev.*$mmc_dev1.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 10
+send "time mkdosfs -F 32 /dev/$mmc_dev1\r"
+while 1 {
+    expect {
+        -re "No such .*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re "mkdosfs \[0-9]\.\[0-9]+.*$kernel_prompt" {
+            send_user "mkdosfs done, test pass\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "mkdosfs timeout, test fail\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 5
+send "mount -t vfat /dev/$mmc_dev1 /mnt\r"
+while 1 {
+    expect {
+        -re "mount.*failed.*$kernel_prompt" {
+            send_user "mount DOS FS fail, test fail\n"
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            send_user "mount DOS FS done, test pass\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "mount DOS FS timeout, test fail\n"
+            case_fail $case_num
+        }
+    }
+}
+
+set timeout 3600
+incr case_num
+send "time bonnie++ -u root -d /mnt -s 200M\r"
+while 1 {
+    expect {
+        -re "Hardware Trace" {
+            send_user "bonnie++ failed\n"
+            case_fail $case_num
+        }
+        -re "Latency.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "bonnie++ timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
+all_pass
+send_user "Ending $argv0\n"
 log_file
