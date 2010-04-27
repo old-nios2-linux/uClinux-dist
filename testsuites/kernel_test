@@ -1733,7 +1733,56 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
     do
 
         FORMAT=`echo $format|tr 'a-z' 'A-Z'`
-        echo  "Testing xip app in $format..."
+        echo  "Test kernel xip in $format..."
+
+        rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
+        cd $UCLINUX_DIST_PATH/
+        cp -a  $UCLINUX_DIST_PATH_BAK/linux-2.6.x  .
+        cp $UCLINUX_DIST_PATH_BAK/config/.config config
+        cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
+        rm -rf romfs/ images/
+
+        cd $UCLINUX_DIST_PATH/
+        make clean > /dev/null 2>&1
+
+        cd $UCLINUX_DIST_TESTSUITES/xip
+        ./build_kernel_xip_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
+        if [ ! -f $UCLINUX_DIST_PATH/images/vmImage ]
+        then
+            echo "$0:   Error, failed."
+            tail -50 ./build_kernel_xip_kernel_log
+        else
+            sleep 30
+            ./kernel_xip_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
+        fi
+
+        cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.kernel_xip.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.kernel_xip.$format
+        cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.kernel_xip.$format
+        mv $UCLINUX_DIST_TESTSUITES/xip/build_kernel_xip_kernel_log $THIS_LOG/build_kernel_xip_${format}_kernel_log
+        mv $UCLINUX_DIST_TESTSUITES/xip/kernel_xip_test_log $THIS_LOG/kernel_xip_${format}_test_log
+
+        #make sure kernel can boot up before next xip test
+        cp $THIS_LOG/uImage.policy /tftpboot/uImage
+
+        cd $UCLINUX_DIST_PATH/
+        make clean > /dev/null 2>&1
+
+        sleep 30
+
+        if [ $RESET_BOARD -eq 1  ] ; then
+            cd $UCLINUX_DIST_TESTSUITES
+            ./reset_board.exp  >/dev/null  2>&1
+            sleep 10
+        fi
+
+    done
+
+    for format in $APP_FORMAT
+    do
+
+        FORMAT=`echo $format|tr 'a-z' 'A-Z'`
+        echo  "Test when whole root fs is userspace xip in $format..."
 
         rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
         cd $UCLINUX_DIST_PATH/
@@ -1756,15 +1805,15 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
             ./fs_xip_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
         fi
 
-        cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.xip.$format
-        cp $UCLINUX_DIST_PATH/images/rootfs.romfs $THIS_LOG/rootfs.romfs.xip.$format
-        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.xip.$format
-        cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.xip.$format
+        cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.fs_xip.$format
+        cp $UCLINUX_DIST_PATH/images/rootfs.romfs $THIS_LOG/rootfs.romfs.fs_xip.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.fs_xip.$format
+        cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.fs_xip.$format
         mv $UCLINUX_DIST_TESTSUITES/xip/build_fs_xip_kernel_log $THIS_LOG/build_fs_xip_${format}_kernel_log
         mv $UCLINUX_DIST_TESTSUITES/xip/fs_xip_test_log $THIS_LOG/fs_xip_${format}_test_log
 
         #make sure kernel can boot up before next xip test
-        cp $THIS_LOG/uImage.policy /tftpboot/linux
+        cp $THIS_LOG/uImage.policy /tftpboot/uImage
 
         cd $UCLINUX_DIST_PATH/
         make clean > /dev/null 2>&1
@@ -1814,7 +1863,7 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
         mv $UCLINUX_DIST_TESTSUITES/xip/xip_userspace_test_log $THIS_LOG/xip_userspace_${format}_test_log
 
         #make sure kernel can boot up before next xip test
-        cp $THIS_LOG/uImage.policy /tftpboot/linux
+        cp $THIS_LOG/uImage.policy /tftpboot/uImage
 
         cd $UCLINUX_DIST_PATH/
         make clean > /dev/null 2>&1
