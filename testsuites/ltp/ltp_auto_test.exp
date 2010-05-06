@@ -859,6 +859,7 @@ proc run_LTP_test { filename command torun mode} {
    global kernel_prompt
    global board_type
    global printk_level
+   global errorInfo
 
    step "Start to test \[$filename\]"
 
