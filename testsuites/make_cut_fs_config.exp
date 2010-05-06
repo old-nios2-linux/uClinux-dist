@@ -34,6 +34,14 @@ while 1 {
             send "N\r"
         }
 
+        -re "Networking support.*NET.*\\\[.*]" {
+            if { $file_name == "./build_fs_xip_kernel.exp" } {
+                send "N\r"
+            } else {
+                send "\r"
+            }
+        }
+
         -re "Ethernet.*1000 Mbit.*NETDEV_1000.*\\\[.*]" {
             send "N\r"
         }
