@@ -20,7 +20,10 @@ if { $argc < 2} {
 
 cd $uclinux_path/testsuites
 step "Make clean."
-source  make_clean.exp
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
 
 cd $uclinux_path/testsuites
 step "Make config."
@@ -31,13 +34,11 @@ step "Make config."
 source  make_config_reserve_mem.exp
 
 # Following make specific configuration for this case.
-
 cd $uclinux_path
 set timeout 300
 spawn make config
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }

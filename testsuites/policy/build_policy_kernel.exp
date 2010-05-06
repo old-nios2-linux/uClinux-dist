@@ -12,15 +12,14 @@ if { $board_type == "BF548-EZKIT" } {
 }
 
 cd $uclinux_path/testsuites
-
-#step "Make clean."
-
-source  make_clean.exp
+step "Make clean."
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
 source  make_default_config.exp
 
 # Following make specific configuration for this case.

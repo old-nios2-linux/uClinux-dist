@@ -9,7 +9,10 @@ set env(EXT2_BLOCKS) "20480"
 
 cd $uclinux_path/testsuites
 step "Make clean."
-source  make_clean.exp
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
 
 cd $uclinux_path/testsuites
 step "Make config."
@@ -23,7 +26,6 @@ spawn make config
 
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }

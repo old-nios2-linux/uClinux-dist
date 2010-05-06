@@ -24,7 +24,10 @@ if { $audio_dev == "audio_ad1938" } {
 
 cd $uclinux_path/testsuites
 step "Make clean."
-source make_clean.exp
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
 
 cd $uclinux_path/testsuites
 step "Make config"
