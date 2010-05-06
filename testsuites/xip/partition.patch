@@ -1,6 +1,6 @@
 Index: arch/blackfin/mach-bf533/boards/ezkit.c
 ===================================================================
---- arch/blackfin/mach-bf533/boards/ezkit.c	(revision 8660)
+--- arch/blackfin/mach-bf533/boards/ezkit.c	(revision 8690)
 +++ arch/blackfin/mach-bf533/boards/ezkit.c	(working copy)
 @@ -79,7 +79,7 @@
  		.size       = 0x40000,
@@ -13,7 +13,7 @@ Index: arch/blackfin/mach-bf533/boards/ezkit.c
  	},
 Index: arch/blackfin/mach-bf561/boards/ezkit.c
 ===================================================================
---- arch/blackfin/mach-bf561/boards/ezkit.c	(revision 8660)
+--- arch/blackfin/mach-bf561/boards/ezkit.c	(revision 8690)
 +++ arch/blackfin/mach-bf561/boards/ezkit.c	(working copy)
 @@ -241,10 +241,6 @@
  		.size       = 0x40000,
@@ -26,11 +26,11 @@ Index: arch/blackfin/mach-bf561/boards/ezkit.c
  		.name       = "file system(nor)",
  		.size       = MTDPART_SIZ_FULL,
  		.offset     = MTDPART_OFS_APPEND,
-Index: arch/blackfin/mach-bf518/boards/ezbrd.c
+Index: arch/blackfin/mach-bf527/boards/ezbrd.c
 ===================================================================
---- arch/blackfin/mach-bf518/boards/ezbrd.c	(revision 8660)
-+++ arch/blackfin/mach-bf518/boards/ezbrd.c	(working copy)
-@@ -42,10 +42,6 @@
+--- arch/blackfin/mach-bf527/boards/ezbrd.c	(revision 8690)
++++ arch/blackfin/mach-bf527/boards/ezbrd.c	(working copy)
+@@ -101,10 +101,6 @@
  		.size       = 0x40000,
  		.offset     = 0,
  	}, {
@@ -43,7 +43,7 @@ Index: arch/blackfin/mach-bf518/boards/ezbrd.c
  		.offset     = MTDPART_OFS_APPEND,
 Index: arch/blackfin/mach-bf527/boards/ezkit.c
 ===================================================================
---- arch/blackfin/mach-bf527/boards/ezkit.c	(revision 8660)
+--- arch/blackfin/mach-bf527/boards/ezkit.c	(revision 8690)
 +++ arch/blackfin/mach-bf527/boards/ezkit.c	(working copy)
 @@ -186,10 +186,6 @@
  		.size       = 0x40000,
@@ -56,9 +56,24 @@ Index: arch/blackfin/mach-bf527/boards/ezkit.c
  		.name       = "file system(nor)",
  		.size       = MTDPART_SIZ_FULL,
  		.offset     = MTDPART_OFS_APPEND,
+Index: arch/blackfin/mach-bf518/boards/ezbrd.c
+===================================================================
+--- arch/blackfin/mach-bf518/boards/ezbrd.c	(revision 8690)
++++ arch/blackfin/mach-bf518/boards/ezbrd.c	(working copy)
+@@ -42,10 +42,6 @@
+ 		.size       = 0x40000,
+ 		.offset     = 0,
+ 	}, {
+-		.name       = "linux kernel(nor)",
+-		.size       = 0x1C0000,
+-		.offset     = MTDPART_OFS_APPEND,
+-	}, {
+ 		.name       = "file system(nor)",
+ 		.size       = MTDPART_SIZ_FULL,
+ 		.offset     = MTDPART_OFS_APPEND,
 Index: arch/blackfin/mach-bf537/boards/stamp.c
 ===================================================================
---- arch/blackfin/mach-bf537/boards/stamp.c	(revision 8660)
+--- arch/blackfin/mach-bf537/boards/stamp.c	(revision 8690)
 +++ arch/blackfin/mach-bf537/boards/stamp.c	(working copy)
 @@ -445,12 +445,8 @@
  		.size       = 0x40000,
@@ -76,7 +91,7 @@ Index: arch/blackfin/mach-bf537/boards/stamp.c
  		.name       = "MAC Address(nor)",
 Index: arch/blackfin/mach-bf538/boards/ezkit.c
 ===================================================================
---- arch/blackfin/mach-bf538/boards/ezkit.c	(revision 8660)
+--- arch/blackfin/mach-bf538/boards/ezkit.c	(revision 8690)
 +++ arch/blackfin/mach-bf538/boards/ezkit.c	(working copy)
 @@ -827,10 +827,6 @@
  		.size       = 0x40000,
@@ -91,7 +106,7 @@ Index: arch/blackfin/mach-bf538/boards/ezkit.c
  		.offset     = MTDPART_OFS_APPEND,
 Index: arch/blackfin/mach-bf548/boards/ezkit.c
 ===================================================================
---- arch/blackfin/mach-bf548/boards/ezkit.c	(revision 8660)
+--- arch/blackfin/mach-bf548/boards/ezkit.c	(revision 8690)
 +++ arch/blackfin/mach-bf548/boards/ezkit.c	(working copy)
 @@ -905,10 +905,6 @@
  		.size       = 0x40000,
