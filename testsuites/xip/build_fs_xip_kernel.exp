@@ -21,6 +21,13 @@ if { $argc < 2} {
 set HAVE_KERNEL_ONLY_IMAGE 1
 set HAVE_ROMFS_IMAGE 1
 
+cd $uclinux_path/testsuites
+step "Make clean."
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
+
 step "Change partition"
 cd $uclinux_path/linux-2.6.x
 if [ catch {exec patch -p0 < $uclinux_path/testsuites/xip/partition.patch} ] {

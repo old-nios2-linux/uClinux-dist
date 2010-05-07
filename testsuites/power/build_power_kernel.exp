@@ -9,6 +9,12 @@ source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
+cd $uclinux_path/testsuites
+step "Make clean."
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
 
 cd $uclinux_path/testsuites
 step "Make default config."

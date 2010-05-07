@@ -10,18 +10,22 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
+step "Make clean."
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
 
+cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
-# Following make specific configuration for this case.
 
+# Following make specific configuration for this case.
 cd $uclinux_path
 set timeout 300
 spawn make config
-
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -162,17 +166,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 log_file
-
 send_user "\nKernel building for NetAudio test finishes!\n"

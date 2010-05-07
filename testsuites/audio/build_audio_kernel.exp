@@ -17,6 +17,13 @@ log_file $title
 send_user "Starting $argv0\n"
 send_log "\n#### build kernel for $audio_dev\n"
 
+cd $uclinux_path/testsuites
+step "Make clean."
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
+
 if { $audio_dev == "audio_ad73322" } {
     step "Apply ad73322 patch."
     cd $uclinux_path/linux-2.6.x

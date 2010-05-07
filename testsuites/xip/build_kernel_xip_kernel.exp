@@ -21,6 +21,13 @@ if { $argc < 2} {
 set HAVE_KERNEL_ONLY_IMAGE 1
 
 cd $uclinux_path/testsuites
+step "Make clean."
+if { [source make_clean.exp] != 0 } {
+    send_user "\n\nFail to make clean. Exit!\n\n"
+    exit
+}
+
+cd $uclinux_path/testsuites
 step "Make config."
 source make_default_config.exp
 

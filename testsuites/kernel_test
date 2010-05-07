@@ -999,9 +999,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
 
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
-
   cd $UCLINUX_DIST_TESTSUITES/audio
   ./build_audio_kernel.exp $BOARD_TYPE audio_ad1836 >/dev/null  2>&1
 
@@ -1056,9 +1053,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/config/.config config
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
-
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
 
   cd $UCLINUX_DIST_TESTSUITES/audio 
   ./build_audio_kernel.exp $BOARD_TYPE audio_ad73311 >/dev/null  2>&1
@@ -1115,9 +1109,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
 
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
-
   cd $UCLINUX_DIST_TESTSUITES/audio
   ./build_audio_kernel.exp $BOARD_TYPE audio_ad1938 >/dev/null  2>&1
 
@@ -1173,9 +1164,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/config/.config config
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
-
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
 
   cd $UCLINUX_DIST_TESTSUITES/audio
   ./build_audio_kernel.exp $BOARD_TYPE audio_adau1371 >/dev/null  2>&1
@@ -1234,9 +1222,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
 
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
-
   cd $UCLINUX_DIST_TESTSUITES/audio
   ./build_audio_kernel.exp $BOARD_TYPE audio_ad73322 >/dev/null  2>&1
 
@@ -1286,9 +1271,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/config/.config config
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
-
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
 
   cd $UCLINUX_DIST_TESTSUITES/audio 
   ./build_audio_kernel.exp $BOARD_TYPE audio_ssm2603 >/dev/null  2>&1
@@ -1438,9 +1420,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
 
-  cd $UCLINUX_DIST_PATH/
-  make clean > /dev/null 2>&1
-
   cd $UCLINUX_DIST_TESTSUITES/power
   ./build_power_kernel.exp $BOARD_TYPE >/dev/null  2>&1
   sleep 30
@@ -1501,8 +1480,6 @@ do
   if [ ${AUTO_RUN_STATUS[$(( n + 4 ))]} -eq 1  ] || [ ${AUTO_RUN_STATUS[$(( n + 17 ))]} -eq 1  ] ; then
 
       cd $UCLINUX_DIST_PATH/
-      make clean > /dev/null 2>&1
-
       cp $UCLINUX_DIST_PATH_BAK/linux-2.6.x/.config linux-2.6.x/
       cp $UCLINUX_DIST_PATH_BAK/config/.config config/
 
@@ -1570,8 +1547,6 @@ do
       echo  "Testing power with I2S TDM mode Audio drivers..."
 
       cd $UCLINUX_DIST_PATH/
-      make clean > /dev/null 2>&1
-
       cp $UCLINUX_DIST_PATH_BAK/linux-2.6.x/.config linux-2.6.x/
       cp $UCLINUX_DIST_PATH_BAK/config/.config config/
 
@@ -1742,9 +1717,6 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
         cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
         rm -rf romfs/ images/
 
-        cd $UCLINUX_DIST_PATH/
-        make clean > /dev/null 2>&1
-
         cd $UCLINUX_DIST_TESTSUITES/xip
         ./build_kernel_xip_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
         if [ ! -f $UCLINUX_DIST_PATH/images/vmImage ]
@@ -1790,9 +1762,6 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
         cp $UCLINUX_DIST_PATH_BAK/config/.config config
         cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
         rm -rf romfs/ images/
-
-        cd $UCLINUX_DIST_PATH/
-        make clean > /dev/null 2>&1
 
         cd $UCLINUX_DIST_TESTSUITES/xip
         ./build_fs_xip_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
@@ -1840,9 +1809,6 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
         cp $UCLINUX_DIST_PATH_BAK/config/.config config
         cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
         rm -rf romfs/ images/
-
-        cd $UCLINUX_DIST_PATH/
-        make clean > /dev/null 2>&1
 
         cd $UCLINUX_DIST_TESTSUITES/xip
         ./build_xip_userspace_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
@@ -2345,11 +2311,6 @@ do
   cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
   rm -rf romfs/ images/
 
-  if [ ${MANUAL_TESTCASE[$i]} == "netaudio" ] ; then
-      cd $UCLINUX_DIST_PATH/ 
-      make clean > /dev/null 2>&1
-  fi
-
   if [ ${MANUAL_TESTCASE[$i]} == "ndso" ] || [ ${MANUAL_TESTCASE[$i]} == "awg" ] ; then
   cd $UCLINUX_DIST_TESTSUITES/spiadc
   elif [ ${MANUAL_TESTCASE[$i]} == "sport_uart" ] ; then
@@ -2395,7 +2356,7 @@ do
   echo  "End testing ${MANUAL_TESTCASE[$i]}..."
   fi
 done
-  
- 
+
+
 echo  "Testing Done."
 exit 0
