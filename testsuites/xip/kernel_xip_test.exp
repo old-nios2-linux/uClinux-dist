@@ -17,9 +17,119 @@ append TITLE " ($format)"
 step "Spawn kermit"
 source ../spawn_kermit.exp
 
-step "Start testing."
+step "Prepare romfs in /tftpboot\n"
+spawn /bin/bash
+set host_spawn_id $spawn_id
+
 set case_num 0
+incr case_num
+set timeout 15
+send "su -\r"
+while 1 {
+    expect {
+        -re "\[pP]assword" {
+            send "$password\r"
+            continue
+        }
+        -re "\[eE]rror|\[fF]ail" {
+            case_fail $case_num
+        }
+        -re "#" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 30
+send "rm -fr /tftpboot/romfs\r"
+while 1 {
+    expect {
+        -re "(\[eE]rror|\[fF]ail|rm:).*#" {
+            send_user "remove /tftpboot/romfs fail\n"
+            case_fail $case_num
+        }
+        -re "#" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "remove /tftpboot/romfs timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 30
+send "cp -a $uclinux_path/romfs /tftpboot/\r"
+while 1 {
+    expect {
+        -re "(\[eE]rror|\[fF]ail|cp:).*#" {
+            send_user "Copy romfs to /tftpboot fail\n"
+            case_fail $case_num
+        }
+        -re "#" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "Copy romfs to /tftpboot timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 30
+send "mkdir /tftpboot/romfs/dev; cd /tftpboot/romfs/dev\r"
+while 1 {
+    expect {
+        -re "(\[eE]rror|\[fF]ail|mkdir:|cd:).*#" {
+            send_user "Create device folder fail\n"
+            case_fail $case_num
+        }
+        -re "dev #" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "Create device folder timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 30
+send "mknod -m 666 null c 1 3; mknod -m 666 zero c 1 5; mknod -m 600 console c 5 1; mkdir pts\r"
+while 1 {
+    expect {
+        -re "(\[eE]rror|\[fF]ail|mknod:|mkdir:).*#" {
+            send_user "Create device nodes fail\n"
+            case_fail $case_num
+        }
+        -re "#" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "Create device nodes timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
+
+step "Start testing."
 set timeout 10
+
+set spawn_id $kermit_spawn_id
+sleep 5
 
 incr case_num
 send_user "Try to figure out if we are in u-boot or the kernel"
@@ -159,7 +269,22 @@ while 1 {
         -re "Kernel panic|Hardware Trace:" {
             case_fail $case_num
         }
-        -re "$kernel_prompt" {
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 180
+send "version\r"
+while 1 {
+    expect {
+        -re $kernel_prompt {
             case_pass $case_num
             break
         }
