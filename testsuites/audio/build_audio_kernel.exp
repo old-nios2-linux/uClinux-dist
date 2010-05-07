@@ -165,7 +165,7 @@ while 1 {
         }
 
         -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
-            if { $audio_dev == "audio_ssm2603" || $board_type == "BF527-EZKIT" } {
+            if { $board_type == "BF527-EZKIT" } {
                 send "1\r"
             } else {
                 send "0\r"
