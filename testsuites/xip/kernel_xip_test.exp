@@ -145,7 +145,7 @@ while 1 {
     }
 }
 
-send "set bootargs root=/dev/nfs rw nfsroot=\$\(serverip\):/home/test/work/cruise/checkouts/uclinux-dist/romfs,tcp,nfsvers=3 console=ttyBF$def_uart_port,57600\r"
+send "set bootargs root=/dev/nfs rw nfsroot=\$\(serverip\):/tftpboot/romfs console=ttyBF$def_uart_port,57600\r"
 expect -re $uboot_prompt
 
 send "run addip\r"
