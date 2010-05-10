@@ -1765,7 +1765,7 @@ if [ ${AUTO_RUN_STATUS[$(( n + 15 ))]} -eq 1  ] ; then
 
         cd $UCLINUX_DIST_TESTSUITES/xip
         ./build_fs_xip_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
-        if [ ! -f $UCLINUX_DIST_PATH/images/rootfs.romfs ]
+        if [ ! -f $UCLINUX_DIST_PATH/images/rootfs.romfs ] || [ ! -f $UCLINUX_DIST_PATH/images/vmImage ]
         then
             echo "$0:   Error, failed."
             tail -50 ./build_fs_xip_kernel_log
