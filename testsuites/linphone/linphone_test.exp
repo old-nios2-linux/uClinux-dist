@@ -71,16 +71,18 @@ incr case_num
 spawn linphonec 
 set host_linphonec_id $spawn_id
 while 1 {
-      expect {
-	"linphonec>" {
-                case_pass $case_num
-	 	break
-         }
-         timeout {
-                case_fail $case_num
-		exit
-         }
-      }
+    expect {
+        "cannot find card" {
+            case_fail $case_num
+        }
+        "linphonec>" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
 set spawn_id $kermit_spawn_id
