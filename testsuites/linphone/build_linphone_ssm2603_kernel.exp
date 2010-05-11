@@ -4,7 +4,7 @@
 # Build Kernel for Linphone test
 #
 source ../kernel_config.exp
-source  ../board_info.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -23,7 +23,7 @@ send "/VER\r"
 while 1 {
     expect -re "VER = (linphone-\[0-9]+.\[0-9]+.\[0-9]+)" {
         set linphone_version $expect_out(1,string)
-        send_user "Linphone version is  $linphone_version"
+        send_user "Linphone version is $linphone_version"
         break
     }
 }
@@ -33,7 +33,7 @@ expect eof
 
 step "Apply linphone patch."
 cd $uclinux_path/user/linphone/$linphone_version
-if [ catch {exec patch -p1 <  $uclinux_path/testsuites/linphone/linphone.patch} ] {
+if [ catch {exec patch -p1 < $uclinux_path/testsuites/linphone/linphone.patch} ] {
     send_user "$errorInfo\n"
     exit
 }
@@ -47,7 +47,7 @@ if { [source make_clean.exp] != 0 } {
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 cd $uclinux_path
@@ -63,8 +63,12 @@ while 1 {
             send "y\r"
         }
 
-        -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
-            send "2\r"
+        -re "I2C support \\\(I2C\\\).*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Blackfin TWI I2C support.*I2C_BLACKFIN_TWI.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "Sound card support.*SOUND.*\\\[.*]" {
@@ -72,10 +76,6 @@ while 1 {
         }
 
         -re "Advanced Linux Sound Architecture.*SND.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Sequencer support.*SND_SEQUENCER.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -87,28 +87,40 @@ while 1 {
             send "Y\r"
         }
 
-        -re "AD1836 Audio support for BF53x.*SND_BLACKFIN_AD1836.*\\\[.*]" {
-            send "N\r"
-        }
-
-        -re "Cascaded AD73322 Audio support for BF53x.*SND_BFIN_AD73322.*\\\[.*]" {
-            send "N\r"
-        }
-
         -re "ALSA for SoC audio support.*SND_SOC.*\\\[.*]" {
             send "Y\r"
         }
 
         -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SoC SSM2602 Audio support for BF52x ezkit.*SND_BF5XX_SOC_SSM2602.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SoC AD73311.*Audio support for Blackfin.*SND_BF5XX_SOC_AD73311.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF5xx chip.*SND_BF5XX_TDM.*\\\[.*]" {
             send "N\r"
         }
 
         -re "SoC AC97 Audio for the ADI BF5xx chip.*SND_BF5XX_AC97.*\\\[.*]" {
-            send "Y\r"
+            send "N\r"
         }
 
-        -re "SoC AD1980/1 Audio support for BF5xx.*SND_BF5XX_SOC_AD1980.*\\\[.*]" {
-            send "Y\r"
+        -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT" } {
+                send "1\r"
+            } else {
+                send "0\r"
+            }
+        }
+
+        -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
+            send "2\r"
         }
 
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
@@ -161,18 +173,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
+source copy_image.exp
 
-source   copy_image.exp
-
-
+send_user "Ending $argv0\n"
 log_file
-
-send_user "\nKernel building for Linphone test finishes!\n"

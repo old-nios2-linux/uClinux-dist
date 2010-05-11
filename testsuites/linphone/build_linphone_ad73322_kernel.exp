@@ -4,7 +4,7 @@
 # Build Kernel for Linphone test
 #
 source ../kernel_config.exp
-source  ../board_info.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -23,7 +23,7 @@ send "/VER\r"
 while 1 {
     expect -re "VER = (linphone-\[0-9]+.\[0-9]+.\[0-9]+)" {
         set linphone_version $expect_out(1,string)
-        send_user "Linphone version is  $linphone_version"
+        send_user "Linphone version is $linphone_version"
         break
     }
 }
@@ -33,7 +33,14 @@ expect eof
 
 step "Apply linphone patch."
 cd $uclinux_path/user/linphone/$linphone_version
-if [ catch {exec patch -p1 <  $uclinux_path/testsuites/linphone/linphone.patch} ] {
+if [ catch {exec patch -p1 < $uclinux_path/testsuites/linphone/linphone.patch} ] {
+    send_user "$errorInfo\n"
+    exit
+}
+
+step "Apply ad73322 patch."
+cd $uclinux_path/linux-2.6.x
+if [ catch {exec patch -p1 < $uclinux_path/bfin_patch/ad73322_patch/old_sound_ad73322.patch} ] {
     send_user "$errorInfo\n"
     exit
 }
@@ -47,7 +54,7 @@ if { [source make_clean.exp] != 0 } {
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 cd $uclinux_path
@@ -71,10 +78,6 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Sequencer support.*SND_SEQUENCER.*\\\[.*]" {
-            send "Y\r"
-        }
-
         -re "OSS Mixer API.*SND_MIXER_OSS.*\\\[.*]" {
             send "Y\r"
         }
@@ -85,14 +88,6 @@ while 1 {
 
         -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN.*\\\[.*]" {
             send "M\r"
-        }
-
-        -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
-            send "N\r"
-        }
-
-        -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF5xx chip.*SND_BF5XX_TDM.*\\\[.*]" {
-            send "N\r"
         }
 
         -re "Cascaded AD73322 Audio support for BF53x.*SND_BFIN_AD73322.*\\\[.*]" {
@@ -161,18 +156,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
+source copy_image.exp
 
-source   copy_image.exp
-
-
+send_user "Ending $argv0\n"
 log_file
-
-send_user "\nKernel building for Linphone test finishes!\n"
