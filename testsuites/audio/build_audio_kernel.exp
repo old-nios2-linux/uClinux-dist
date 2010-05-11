@@ -5,7 +5,7 @@ source  ../board_info.exp
 
 if { $argc < 2} {
     puts "Please input: board_type, audio_dev"
-    puts "audio_dev: audio_ssm2603, audio_ad73311, audio_adau1371, audio_ad1836, audio_ad1938, audio_ad73322"
+    puts "audio_dev: audio_ssm2603, audio_ad73311, audio_adau1361, audio_adau1371, audio_ad1836, audio_ad1938, audio_ad73322"
     exit
 }
 
@@ -67,7 +67,7 @@ while 1 {
 
 #some sound card need blackfin I2C driver
         -re "I2C support \\\(I2C\\\).*\\\[.*]" {
-            if { $audio_dev == "audio_ssm2603" || $audio_dev == "audio_ad73311" || $audio_dev == "audio_adau1371" || $audio_dev == "audio_ad1938" } {
+            if { $audio_dev == "audio_ssm2603" || $audio_dev == "audio_ad73311" || $audio_dev == "audio_ad1938" || [string match "audio_adau*" $audio_dev] } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -75,7 +75,7 @@ while 1 {
         }
 
         -re "Blackfin TWI I2C support.*I2C_BLACKFIN_TWI.*\\\[.*]" {
-            if { $audio_dev == "audio_ssm2603" || $audio_dev == "audio_ad73311" || $audio_dev == "audio_adau1371" } {
+            if { $audio_dev == "audio_ssm2603" || $audio_dev == "audio_ad73311" || [string match "audio_adau*" $audio_dev] } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -109,7 +109,7 @@ while 1 {
         }
 
         -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
-            if { $audio_dev == "audio_ssm2603" || $audio_dev == "audio_ad73311" || $audio_dev == "audio_adau1371" } {
+            if { $audio_dev == "audio_ssm2603" || $audio_dev == "audio_ad73311" || [string match "audio_adau*" $audio_dev] } {
                 send "Y\r"
             } else {
                 send "N\r"
@@ -134,6 +134,14 @@ while 1 {
 
         -re "SoC ADAU1371 Audio support.*SND_BF5XX_SOC_ADAU1371.*\\\[.*]" {
             if { $audio_dev == "audio_adau1371" } {
+                send "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "SoC ADAU1361 Audio support.*SND_BF5XX_SOC_ADAU1361.*\\\[.*]" {
+            if { $audio_dev == "audio_adau1361" } {
                 send "Y\r"
             } else {
                 send "N\r"
