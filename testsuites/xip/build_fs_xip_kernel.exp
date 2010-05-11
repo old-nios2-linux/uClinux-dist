@@ -94,10 +94,6 @@ while 1 {
             send "$expect_out(1,string)\r"
         }
 
-        -re "Enable shared FLAT support \\\(BINFMT_SHARED_FLAT\\\).*\\\[././.]" {
-            send "Y\r"
-        }
-
         -re "Kernel support for FDPIC ELF binaries.*BINFMT_ELF_FDPIC.*\\\[.*]" {
             if { $format == "fdpic" } {
                 send "Y\r"
