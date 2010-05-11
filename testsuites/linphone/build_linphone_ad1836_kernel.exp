@@ -4,7 +4,7 @@
 # Build Kernel for Linphone test
 #
 source ../kernel_config.exp
-source  ../board_info.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -17,7 +17,7 @@ if { [source make_clean.exp] != 0 } {
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 cd $uclinux_path
@@ -33,40 +33,47 @@ while 1 {
             send "y\r"
         }
 
-        -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
-            send "2\r"
-        }
-
         -re "Sound card support.*SOUND.*\\\[.*]" {
-            send "M\r"
+            send "Y\r"
         }
 
         -re "Advanced Linux Sound Architecture.*SND.*\\\[.*]" {
-            send "M\r"
+            send "Y\r"
         }
 
         -re "OSS Mixer API.*SND_MIXER_OSS.*\\\[.*]" {
-            send "M\r"
+            send "Y\r"
         }
 
         -re "OSS PCM.*digital audio.*API.*SND_PCM_OSS\\\).*\\\[.*]" {
-            send "M\r"
+            send "Y\r"
+        }
+
+        -re "ALSA for SoC audio support.*SND_SOC.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
+            send "N\r"
         }
 
         -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF5xx chip.*SND_BF5XX_TDM.*\\\[.*]" {
-            send "M\r"
+            send "Y\r"
         }
 
         -re "SoC AD183X Audio support for BF5xx.*SND_BF5XX_SOC_AD183X.*\\\[.*]" {
-            send "M\r"
+            send "Y\r"
         }
 
         -re "SoC AC97 Audio for the ADI BF5xx chip.*SND_BF5XX_AC97.*\\\[.*]" {
             send "N\r"
         }
 
+        -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
+            send "2\r"
+        }
+
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
-            #choose FDPIC
             send "4\r"
         }
 
@@ -78,7 +85,15 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Build eXosip.*LIB_LIBEXOSIP.*\\\[.*]" {
+        -re "mp3play.*USER_MP3PLAY_MP3PLAY.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "vplay.*USER_VPLAY_VPLAY.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "vrec.*USER_VPLAY_VREC.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -112,16 +127,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
