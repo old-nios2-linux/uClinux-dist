@@ -28,3 +28,5 @@ romfs:
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_SSM2602 $(VER)/src/conf/cards/SSM2602.conf /usr/share/alsa/cards/SSM2602.conf
 	$(ROMFSINST) -e CONFIG_SND_USB_AUDIO $(VER)/src/conf/cards/USB-Audio.conf /usr/share/alsa/cards/USB-Audio.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_ADAU1371 $(VER)/src/conf/cards/ADAU1371.conf /usr/share/alsa/cards/ADAU1371.conf
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_ADAU1361 $(VER)/src/conf/cards/ADAU1361.conf /usr/share/alsa/cards/ADAU1361.conf
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_ADAU1373 $(VER)/src/conf/cards/ADAU1373.conf /usr/share/alsa/cards/ADAU1373.conf

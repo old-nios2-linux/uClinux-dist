@@ -12,6 +12,8 @@ cfg_files = aliases.conf \
 	AD73322.conf \
 	SSM2602.conf \
 	ADAU1371.conf \
+	ADAU1361.conf \
+	ADAU1373.conf \
 	AU8810.conf \
 	AU8820.conf \
 	AU8830.conf \
