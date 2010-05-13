@@ -1,23 +1,7 @@
 Index: sound/soc/blackfin/bf5xx-ad193x.c
 ===================================================================
---- sound/soc/blackfin/bf5xx-ad193x.c	(revision 8652)
+--- sound/soc/blackfin/bf5xx-ad193x.c	(revision 8708)
 +++ sound/soc/blackfin/bf5xx-ad193x.c	(working copy)
-@@ -56,13 +56,13 @@
- 	int ret = 0;
- 	/* set cpu DAI configuration */
- 	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_DSP_A |
--		SND_SOC_DAIFMT_NB_IF | SND_SOC_DAIFMT_CBM_CFM);
-+		SND_SOC_DAIFMT_IB_IF | SND_SOC_DAIFMT_CBM_CFM);
- 	if (ret < 0)
- 		return ret;
- 
- 	/* set codec DAI configuration */
- 	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_DSP_A |
--		SND_SOC_DAIFMT_NB_IF | SND_SOC_DAIFMT_CBM_CFM);
-+		SND_SOC_DAIFMT_IB_IF | SND_SOC_DAIFMT_CBM_CFM);
- 	if (ret < 0)
- 		return ret;
- 
 @@ -77,7 +77,7 @@
  	if (ret < 0)
  		return ret;
