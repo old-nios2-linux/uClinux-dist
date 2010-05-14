@@ -33,7 +33,7 @@ proc alsa_rec_play {format channel rate file_type} {
     }
 
     incr case_num
-    set timeout 10
+    set timeout 15
     send -s "arecord -t $file_type -c $channel_num -f $format -r $rate -d 5 $file_type\n"
     while 1 {
         expect {
@@ -97,7 +97,7 @@ proc alsa_rec2play {format channel rate file_type} {
     }
 
     incr case_num
-    set timeout 10
+    set timeout 15
     send -s "arecord -t $file_type -c $channel_num -f $format -r $rate -d 5 |aplay\n"
     while 1 {
         expect {
@@ -280,7 +280,7 @@ while 1 {
 
     send_log "record while play...\n"
     incr case_num
-    set timeout 20
+    set timeout 30
     send -s "arecord -t wav -c 2 -f S16_LE -r 11000 -d 15 aaa\n"
     while 1 {
         expect {

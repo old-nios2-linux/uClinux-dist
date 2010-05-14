@@ -1017,6 +1017,7 @@ do
           sleep 10
       fi
 
+      cd $UCLINUX_DIST_TESTSUITES/audio
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1072,6 +1073,7 @@ do
           sleep 10
       fi
 
+      cd $UCLINUX_DIST_TESTSUITES/audio
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1127,6 +1129,7 @@ do
           sleep 10
       fi
 
+      cd $UCLINUX_DIST_TESTSUITES/audio
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1183,6 +1186,7 @@ do
           sleep 10
       fi
 
+      cd $UCLINUX_DIST_TESTSUITES/audio
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
@@ -1290,6 +1294,7 @@ do
           sleep 10
       fi
 
+      cd $UCLINUX_DIST_TESTSUITES/audio
       ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
       ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
   fi
