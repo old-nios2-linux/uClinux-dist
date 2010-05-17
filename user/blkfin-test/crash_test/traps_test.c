@@ -194,13 +194,8 @@ void unknown_instruction(void)
 /* Illegal instruction combination -                   EXCAUSE 0x22 */
 void illegal_instruction(void)
 {
-	/* this relies on anomaly 05000074, but since that has applied to
-	 * every Blackfin core and there are no plans on fixing it, it
-	 * shouldn't be a problem.  these .long's expand into:
-	 * R0 = R0 << 0x1 || [ P0 ] = P3 || NOP;
-	 * thus avoiding the gas check on this combo
-	 */
-	asm volatile(".long 0x8008ce82; .long 0x00009343;");
+	/* P0 = [P0++] */
+	asm volatile(".dw 0x9040");
 }
 
 /* Data access CPLB protection violation -             EXCAUSE 0x23 */
