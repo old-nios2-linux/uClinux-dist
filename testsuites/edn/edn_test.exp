@@ -21,7 +21,7 @@ sleep 5
 send "\r"
 expect -re $kernel_prompt
 
-set timeout 300
+set timeout 600
 incr case_num
 send "edn\r"
 while 1 {
