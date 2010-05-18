@@ -1,7 +1,7 @@
 #!/usr/bin/expect --
 
 #
-# Build Kernel for power test with I2S Audio (SSM2602/AD73311/ADAU1371)
+# Build Kernel for power test with I2S Audio (SSM2602/AD73311/ADAU1373)
 #
 
 source  ../kernel_config.exp
@@ -104,7 +104,7 @@ while 1 {
             }
         }
 
-        -re "SoC ADAU1371 Audio support.*SND_BF5XX_SOC_ADAU1371.*\\\[.*]" {
+        -re "SoC ADAU1373 Audio support.*SND_BF5XX_SOC_ADAU1373.*\\\[.*]" {
             send "M\r"
         }
 

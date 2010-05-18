@@ -133,14 +133,14 @@ expect -re $kernel_prompt
 
 set timeout 20
 incr case_num
-send "modprobe i2c-bfin-twi; modprobe snd_adau1371\r"
+send "modprobe i2c-bfin-twi; modprobe snd_adau1373\r"
 while 1 {
     expect {
         -re "(modprobe:|No such|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             send_user "Install module failed!\r"
             case_fail $case_num
         }
-        -nocase -re "I2C TWI Contoller.*asoc.*ADAU1371.*mapping ok.*$kernel_prompt" {
+        -nocase -re "I2C TWI Contoller.*asoc.*ADAU1373.*mapping ok.*$kernel_prompt" {
             break
         }
         timeout {
@@ -152,7 +152,7 @@ while 1 {
 send "lsmod\r"
 while 1 {
     expect {
-        -re "snd_adau1371.*i2c_bfin_twi.*$kernel_prompt" {
+        -re "snd_adau1373.*i2c_bfin_twi.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -274,7 +274,7 @@ while 1 {
 
 set timeout 20
 incr case_num
-send "modprobe -r snd_adau1371; modprobe -r i2c-bfin-twi\r"
+send "modprobe -r snd_adau1373; modprobe -r i2c-bfin-twi\r"
 while 1 {
     expect {
         -re "(modprobe:|No such|\[eE]rror|\[fF]ail).*$kernel_prompt" {
@@ -297,7 +297,7 @@ incr case_num
 send "lsmod\r"
 while 1 {
     expect {
-        -re "snd_adau1371|i2c_bfin_twi" {
+        -re "snd_adau1373|i2c_bfin_twi" {
             case_fail $case_num
         }
         -re $kernel_prompt {
