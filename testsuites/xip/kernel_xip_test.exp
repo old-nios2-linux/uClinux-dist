@@ -28,6 +28,7 @@ send "su -\r"
 while 1 {
     expect {
         -re "\[pP]assword" {
+            sleep 2
             send "$password\r"
             continue
         }
