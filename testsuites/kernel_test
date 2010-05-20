@@ -1009,7 +1009,7 @@ do
       tail -50 ./build_audio_ad1836_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE audio_ad1836 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1018,17 +1018,15 @@ do
       fi
 
       cd $UCLINUX_DIST_TESTSUITES/audio
-      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE audio_ad1836 >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE audio_ad1836 >/dev/null 2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.audio_ad1836
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.audio_ad1836
-  cp $UCLINUX_DIST_TESTSUITES/audio/build_audio_ad1836_kernel_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/audio/one_channel_audio_test_log $THIS_LOG/one_channel_audio_ad1836_test_log
-  cp $UCLINUX_DIST_TESTSUITES/audio/audio_data_test_log $THIS_LOG/audio_data_test_log.ad1836
-  cp $UCLINUX_DIST_TESTSUITES/audio/snd2fftw_test_log $THIS_LOG/snd2fftw_test_log.ad1836
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_ad1836
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_ad1836
+  cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
   mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ad1836
 
   cd $UCLINUX_DIST_PATH/
@@ -1065,7 +1063,7 @@ do
       tail -50 ./build_audio_ad73311_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE audio_ad73311 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1074,17 +1072,15 @@ do
       fi
 
       cd $UCLINUX_DIST_TESTSUITES/audio
-      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE audio_ad73311 >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE audio_ad73311 >/dev/null 2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.audio_ad73311
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.audio_ad73311
-  cp $UCLINUX_DIST_TESTSUITES/audio/build_audio_ad73311_kernel_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/audio/one_channel_audio_test_log $THIS_LOG/one_channel_audio_ad73311_test_log
-  cp $UCLINUX_DIST_TESTSUITES/audio/audio_data_test_log $THIS_LOG/audio_data_test_log.ad73311
-  cp $UCLINUX_DIST_TESTSUITES/audio/snd2fftw_test_log $THIS_LOG/snd2fftw_test_log.ad73311
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_ad73311
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_ad73311
+  cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
   mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ad73311
 
   cd $UCLINUX_DIST_PATH/
@@ -1121,7 +1117,7 @@ do
       tail -50 ./build_audio_ad1938_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE audio_ad1938 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1130,17 +1126,15 @@ do
       fi
 
       cd $UCLINUX_DIST_TESTSUITES/audio
-      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE audio_ad1938 >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE audio_ad1938 >/dev/null 2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.audio_ad1938
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.audio_ad1938
-  cp $UCLINUX_DIST_TESTSUITES/audio/build_audio_ad1938_kernel_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/audio/one_channel_audio_test_log $THIS_LOG/one_channel_audio_ad1938_test_log
-  cp $UCLINUX_DIST_TESTSUITES/audio/audio_data_test_log $THIS_LOG/audio_data_test_log.ad1938
-  cp $UCLINUX_DIST_TESTSUITES/audio/snd2fftw_test_log $THIS_LOG/snd2fftw_test_log.ad1938
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_ad1938
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_ad1938
+  cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
   mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ad1938
 
   cd $UCLINUX_DIST_PATH/
@@ -1178,7 +1172,7 @@ do
       tail -50 ./build_audio_adau1373_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE audio_adau1373 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1187,17 +1181,15 @@ do
       fi
 
       cd $UCLINUX_DIST_TESTSUITES/audio
-      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE audio_adau1373 >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE audio_adau1373 >/dev/null 2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.audio_adau1373
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.audio_adau1373
-  cp $UCLINUX_DIST_TESTSUITES/audio/build_audio_adau1373_kernel_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/audio/one_channel_audio_test_log $THIS_LOG/one_channel_audio_adau1373_test_log
-  cp $UCLINUX_DIST_TESTSUITES/audio/audio_data_test_log $THIS_LOG/audio_data_test_log.adau1373
-  cp $UCLINUX_DIST_TESTSUITES/audio/snd2fftw_test_log $THIS_LOG/snd2fftw_test_log.adau1373
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_adau1373
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_adau1373
+  cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
   mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.adau1373
 
   cd $UCLINUX_DIST_PATH/
@@ -1238,17 +1230,15 @@ do
       sleep 30
       ./ad73322_test.exp $BOARD_TYPE >/dev/null  2>&1
       sleep 30
-      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE audio_ad73322 >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE audio_ad73322 >/dev/null 2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.audio_ad73322
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.audio_ad73322
-  cp $UCLINUX_DIST_TESTSUITES/audio/build_audio_ad73322_kernel_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/audio/ad73322_test_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/audio/audio_data_test_log $THIS_LOG/audio_data_test_log.ad73322
-  cp $UCLINUX_DIST_TESTSUITES/audio/snd2fftw_test_log $THIS_LOG/snd2fftw_test_log.ad73322
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_ad73322
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_ad73322
+  cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
   mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ad73322
 
   cd $UCLINUX_DIST_PATH/
@@ -1286,7 +1276,7 @@ do
       tail -50 ./build_audio_ssm2603_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE >/dev/null  2>&1
+      ./one_channel_audio_test.exp $BOARD_TYPE audio_ssm2603 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1295,17 +1285,15 @@ do
       fi
 
       cd $UCLINUX_DIST_TESTSUITES/audio
-      ./audio_data_test.exp $BOARD_TYPE >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE >/dev/null 2>&1
+      ./audio_data_test.exp $BOARD_TYPE audio_ssm2603 >/dev/null 2>&1
+      ./snd2fftw_test.exp $BOARD_TYPE audio_ssm2603 >/dev/null 2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.audio_ssm2603
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.audio_ssm2603
-  cp $UCLINUX_DIST_TESTSUITES/audio/build_audio_ssm2603_kernel_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/audio/one_channel_audio_test_log $THIS_LOG/one_channel_audio_ssm2603_test_log
-  cp $UCLINUX_DIST_TESTSUITES/audio/audio_data_test_log $THIS_LOG/audio_data_test_log.ssm2603
-  cp $UCLINUX_DIST_TESTSUITES/audio/snd2fftw_test_log $THIS_LOG/snd2fftw_test_log.ssm2603
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_ssm2603
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_ssm2603
+  cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
   mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ssm2603
 
   cd $UCLINUX_DIST_PATH/

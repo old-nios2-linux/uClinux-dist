@@ -5,9 +5,21 @@
 #
 
 source ../kernel_config.exp
-log_file [log_file_name "$argv0"]
+
+if { $argc < 2} {
+    puts "Please input: board_type, audio_dev"
+    puts "Refer to build_audio_kernel.exp for audio_dev."
+    exit
+}
+
+set audio_dev [lindex $argv 1]
+set title ${audio_dev}_data_test_log
+log_file $title
+
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
+append TITLE " ($audio_dev)"
+
 
 step "Start kermit."
 source ../spawn_kermit.exp
@@ -207,7 +219,6 @@ rec_from_pc 1000  255
 rec_from_pc 2000  255
 rec_from_pc 3000  255
 
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
 log_file
