@@ -4,3 +4,4 @@ busybox-1.16.1-indexcgi.patch
 busybox-1.16.1-ash.patch
 busybox-1.16.1-sed.patch
 busybox-1.16.1-cpio.patch
+busybox-1.16.1-dhcpd.patch
