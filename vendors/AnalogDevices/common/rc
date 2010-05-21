@@ -48,6 +48,14 @@ mount -t tmpfs tmp /tmp -o nosuid,nodev
 [ -d /proc/bus/usb ] && mount -t usbfs usbfs /proc/bus/usb
 
 #
+# Needed if you plan on doing anything USB gadget related
+#
+if grep -qs gadgetfs /proc/filesystems ; then
+	mkdir -p /dev/gadget
+	mount -t gadgetfs gadgetfs /dev/gadget
+fi
+
+#
 # Needed if you run an NFS server on the board
 #
 grep -qs nfsd /proc/filesystems && mount -t nfsd nfsd /proc/fs/nfsd
