@@ -63,8 +63,8 @@ config USER_BLACKFIN_SRAMALLOC_TEST
 	bool "sram_alloc/sram_free test"
 config USER_BLACKFIN_ERESTART_TEST
 	bool "erestart test"
-config USER_IIO_ADIS16300_TEST
-	bool "adis16300 test"
+config USER_IIO_RING_TEST
+	bool "Analog Devices IIO device ring test"
 config CAMERA_TEST
 	bool "camera test"
 config STRING_TEST

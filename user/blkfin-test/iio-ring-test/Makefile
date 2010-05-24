@@ -1,5 +1,5 @@
-EXEC = adis16300_test
-OBJS = adis16300.o
+EXEC = iioring
+OBJS = iio-ring.o
 
 all: $(EXEC)
 
