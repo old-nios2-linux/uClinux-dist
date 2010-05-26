@@ -31,6 +31,7 @@ romfs::
 	$(ROMFSINST) -s bin /sbin
 
 	$(ROMFSINST) /etc/inittab
+	$(MAKE) romfs.config.shells
 	$(ROMFSINST) -o $(CONFIG_LIB_DIRECTFB_FORCE)$(CONFIG_LIB_DIRECTFB) /etc/directfbrc
 
 	set -e ; \

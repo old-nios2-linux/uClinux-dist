@@ -57,6 +57,20 @@ endif
 
 ############################################################################
 #
+# Random helper targets
+#
+
+ifeq ($(CONFIG_USER_LOGIN_LOGIN)$(CONFIG_USER_BUSYBOX_LOGIN),)
+LOGIN_SHELL = -/bin/sh
+else
+LOGIN_SHELL = /bin/login -f root
+endif
+romfs.config.shells:
+	$(ROMFSINST) -E CONFIG_USER_INIT_CONSOLE_SH -a "console:linux:$(LOGIN_SHELL)" /etc/inittab
+	$(ROMFSINST) -e CONFIG_VT -a "tty0:linux:$(LOGIN_SHELL)" /etc/inittab
+
+############################################################################
+#
 # File system targets
 #
 

@@ -31,6 +31,7 @@ romfs::
 	$(ROMFSINST) -s bin /sbin
 
 	$(ROMFSINST) /etc/inittab
+	$(MAKE) romfs.config.shells
 
 	set -e ; \
 	for f in $(ETC_FILES-y) ; do \

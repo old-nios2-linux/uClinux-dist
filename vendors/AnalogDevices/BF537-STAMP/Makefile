@@ -34,8 +34,7 @@ romfs::
 	$(ROMFSINST) -s bin /sbin
 
 	$(ROMFSINST) /etc/inittab
-	$(ROMFSINST) -e CONFIG_VT -E CONFIG_USER_LOGIN_LOGIN -E CONFIG_USER_BUSYBOX_LOGIN \
-		-a "tty0:linux:-/bin/sh" /etc/inittab
+	$(MAKE) romfs.config.shells
 
 	set -e ; \
 	for f in $(ETC_FILES-y) ; do \
