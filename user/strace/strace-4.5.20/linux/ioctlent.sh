@@ -79,10 +79,13 @@ if [ -e $dir/Kbuild ]; then
 			grep -v '^asm-'
 		echo "$asm/* asm-generic/*"
 	)
+	# special case: some headers aren't exported directly
+	files="${files} media/* net/bluetooth/* pcmcia/*"
 else
 	# older kernel so just assume some headers
 	files="linux/* $asm/* asm-generic/* scsi/* sound/*"
 fi
+echo "$files"
 
 # Build the list of all ioctls
 # Example output:
