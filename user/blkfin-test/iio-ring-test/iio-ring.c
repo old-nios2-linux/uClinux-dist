@@ -216,7 +216,7 @@ int main(int argc, char **argv)
 			for (k = 0; k < num_vals; k++) {
 				__s16 val = *(__s16 *)(&data[i*scan_size
 							     + (k)*2]);
-				printf("%04x ", val);
+				printf("%04x ", (unsigned short)val);
 			}
 			printf(" %lld\n",
 			       *(__s64 *)(&data[(i + 1)
