@@ -85,7 +85,6 @@ else
 	# older kernel so just assume some headers
 	files="linux/* $asm/* asm-generic/* scsi/* sound/*"
 fi
-echo "$files"
 
 # Build the list of all ioctls
 # Example output:
