@@ -52,6 +52,9 @@ while 1 {
 send -s "flash_eraseall -j /dev/mtd$pnor_rootfs_num\r"
 while 1 {
     expect {
+        -re "(\[fF]ail|\[eE]rror).*$kernel_prompt" {
+            case_fail $case_num
+        }
         -re "complete.*$kernel_prompt" {
             case_pass $case_num
             break
@@ -101,7 +104,7 @@ set timeout 60
 send -s "mount -t jffs2 /dev/mtdblock$pnor_rootfs_num /mnt\n"
 while 1 {
     expect {
-        -re "(\[eE]rror|\[fF]ail|mount:).*$kernel_prompt" {
+        -re "(\[eE]rror|\[fF]ail|mount:|not found).*$kernel_prompt" {
             case_fail $case_num
         }
         -re $kernel_prompt {
