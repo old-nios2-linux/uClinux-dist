@@ -17,18 +17,20 @@ cd $uclinux_path
 set timeout 300
 set baud_rate_done_flag 0
 spawn make config
-
 #Since the i2c support is located after input device driver but some config in input need i2c to be selected, so run two rounds of selection.
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "I2C support.*I2C\[^_].*\\\[.*]" {
@@ -56,7 +58,7 @@ while 1 {
         }
 
         -re  "\\\(.*\\\) \\\[.*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -77,17 +79,19 @@ while 1 {
 }
 
 spawn make config
-
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "Generic input layer.*\\\[.*]" {
@@ -135,7 +139,7 @@ while 1 {
         }
 
         -re  "\\\(.*\\\) \\\[.*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -156,15 +160,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"
