@@ -16,62 +16,54 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 step "Start $TITLE\r"
-
-set timeout 10
 set case_num 0
 
+set timeout 10
 incr case_num
 send -s "strace date\r"
 while 1 {
-expect {
+    expect {
         -re "ioctl.*time" {
-                expect "exit(0)"
-                case_pass $case_num
-                break
-
+            expect "exit(0)"
+            case_pass $case_num
+            break
         }
         timeout {
-                case_fail $case_num
-                exit
+            case_fail $case_num
         }
- }
+    }
 }
 
 incr case_num
 send -s "strace pwd\r"
 while 1 {
-expect {
+    expect {
         -re "ioctl.*getcwd" {
-                expect "exit(0)"
-                case_pass $case_num
-                break
-
+            expect "exit(0)"
+            case_pass $case_num
+            break
         }
         timeout {
-                case_fail $case_num
-                exit
+            case_fail $case_num
         }
-  }
+    }
 }
 
 incr case_num
 send -s "strace ls /home\r"
 while 1 {
-expect {
+    expect {
         -re "ioctl.*lstat" {
-                expect "exit(0)"
-                case_pass $case_num
-                break
+            expect "exit(0)"
+            case_pass $case_num
+            break
         }
         timeout {
-                case_fail $case_num
-                exit
+            case_fail $case_num
         }
-  }
+    }
 }
 
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
 log_file
-
