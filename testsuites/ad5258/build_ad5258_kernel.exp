@@ -1,16 +1,15 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source  ../board_info.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
-
 cd $uclinux_path
 set timeout 300
 set baud_rate_done_flag 0
@@ -20,13 +19,16 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "I2C support.*I2C\[^_].*\\\[.*]" {
@@ -53,8 +55,8 @@ while 1 {
             }
         }
 
-        -re  "\\\(.*\\\) \\\[.*]" {
-            sleep .01
+        -re "\\\(.*\\\) \\\[.*]" {
+            sleep .05
             send "\r"
         }
 
@@ -75,17 +77,19 @@ while 1 {
 }
 
 spawn make config
-
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "Misc devices.*MISC_DEVICES.*\\\[.*]" {
@@ -96,8 +100,12 @@ while 1 {
             send "Y\r"
         }
 
-        -re  "\\\(.*\\\) \\\[.*]" {
-            sleep .01
+        -re "support I2C bus connection.*AD525X_DPOT_I2C.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "\\\(.*\\\) \\\[.*]" {
+            sleep .05
             send "\r"
         }
 
@@ -118,16 +126,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
