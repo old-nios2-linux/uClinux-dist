@@ -24,12 +24,10 @@ else
 
  echo -e "QUIT=$QUIT `date`\n2222 $whole_command_line"  >> test_runtime_control_log
  script_name=`echo $whole_command_line | awk '{print $12}'`
- if [ "$script_name" == "./build_qt_kernel.exp" ] ; then
+ if [ "$script_name" == "./build_qt_kernel.exp" ] || [ "$script_name" == "./ltp_auto_test.exp" ] || [ "$script_name" == "./spimmc_test.exp" ] || [ "$script_name" == "./sdiommc_test.exp" ]; then
      sleep 7200
  elif [ "$script_name" == "./gadget_fs_bulk_test.exp" ] || [ "$script_name" == "./gadget_fs_control_test.exp" ] || [ "$script_name" == "./gadget_zero_bulk_test.exp" ] || [ "$script_name" == "./gadget_zero_control_test.exp" ] ; then
      sleep 3800
- elif [ "$script_name" == "./ltp_auto_test.exp" ] ; then
-     sleep 7200
  else
      sleep 6000
  fi
