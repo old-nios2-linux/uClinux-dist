@@ -14,6 +14,10 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Memory Technology Device .*MTD.* support.*MTD.*\\\[.*]" {
             send -s "Y\r"
         }
@@ -55,10 +59,6 @@ while 1 {
 
         -re "mkfs.jffs2.*USER_MTDUTILS_MKFSJFFS2.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {

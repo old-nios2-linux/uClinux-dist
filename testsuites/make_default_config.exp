@@ -16,6 +16,10 @@ while 1 {
             send "$expect_out(1,string)\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Default all settings.*lose changes.*DEFAULTS_OVERRIDE.*\\\[.*]" {
             if { $file_name == "./build_policy_kernel.exp" } {
                 send "y\r"
@@ -24,12 +28,8 @@ while 1 {
             }
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
