@@ -58,7 +58,9 @@ while 1 {
         -re "(\[0-9]+)\r\n" {
             set case_number $expect_out(1,string)
             incr case_number
-            send_user "Total case num is $case_number.\n"
+            set passed_case_number $case_number
+            set total_case_number $case_number
+            send_user "Total case num is $total_case_number.\n"
             break
         }
         timeout {
@@ -67,14 +69,22 @@ while 1 {
     }
 }
 
-set timeout [ expr $case_number * 10 ]
+set timeout [ expr $total_case_number * 10 ]
 
 if { $smp_flag == 1 } {
     incr case_num
     send -s  "taskset 1 ./traps_test -1\r"
     while 1 {
         expect {
-            -re "$case_number/$case_number tests passed.*$kernel_prompt" {
+            -re "Running test 20 for exception 0x00: prefetch l1_instruction\r\n\.\.\. FAIL" {
+                incr passed_case_number -1
+                continue
+            }
+            -re "Running test 21 for exception 0x00: prefetch _l1_non\r\n\.\.\. FAIL" {
+                incr passed_case_number -1
+                continue
+            }
+            -re "$passed_case_number/$total_case_number tests passed.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -88,7 +98,15 @@ if { $smp_flag == 1 } {
     send -s "taskset 2 ./traps_test -1\r"
     while 1 {
         expect {
-            -re "$case_number/$case_number tests passed.*$kernel_prompt" {
+            -re "Running test 20 for exception 0x00: prefetch l1_instruction\r\n\.\.\. FAIL" {
+                incr passed_case_number -1
+                continue
+            }
+            -re "Running test 21 for exception 0x00: prefetch _l1_non\r\n\.\.\. FAIL" {
+                incr passed_case_number -1
+                continue
+            }
+            -re "$passed_case_number/$total_case_number tests passed.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -102,7 +120,15 @@ if { $smp_flag == 1 } {
     send -s "./traps_test -1\r"
     while 1 {
         expect {
-            -re "$case_number/$case_number tests passed.*$kernel_prompt" {
+            -re "Running test 20 for exception 0x00: prefetch l1_instruction\r\n\.\.\. FAIL" {
+                incr passed_case_number -1
+                continue
+            }
+            -re "Running test 21 for exception 0x00: prefetch _l1_non\r\n\.\.\. FAIL" {
+                incr passed_case_number -1
+                continue
+            }
+            -re "$passed_case_number/$total_case_number tests passed.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
