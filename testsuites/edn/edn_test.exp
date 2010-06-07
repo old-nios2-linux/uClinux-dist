@@ -21,9 +21,9 @@ sleep 5
 send "\r"
 expect -re $kernel_prompt
 
-set timeout 1200
+set timeout 1800
 incr case_num
-send "edn\r"
+send "time edn\r"
 while 1 {
     expect {
         -re "Hardware Trace" {
@@ -36,13 +36,14 @@ while 1 {
         }
         timeout {
             send_log "timeout\n"
+            send "\3\r"
+            set timeout 180
+            expect -re $kernel_prompt
             case_fail $case_num
         }
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
