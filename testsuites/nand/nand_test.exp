@@ -417,7 +417,6 @@ send -s "telnet $targetip\r"
 expect {
     -re $kernel_prompt {
         case_pass $case_num
-        break
     }
     timeout {
         send_user "Failed inital telnet\n"
