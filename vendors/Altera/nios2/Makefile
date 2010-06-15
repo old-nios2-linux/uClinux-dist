@@ -24,6 +24,8 @@ ROMFS_DIRS-$(CONFIG_USER_BOA_SRC_BOA) += home/httpd home/httpd/cgi-bin etc/boa v
 ETC_FILES-$(CONFIG_USER_BOA_SRC_BOA) += boa.conf
 WEB_FILES-$(CONFIG_USER_BOA_SRC_BOA) += boa.conf index.html favicon.ico
 
+MKFS_JFFS2_FLAGS = -l -p -e 128
+
 all::
 
 romfs.post:: romfs.shared.libs
