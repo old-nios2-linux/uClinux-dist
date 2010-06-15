@@ -1,4 +1,6 @@
-VER = libgpg-error-1.7
+# http://www.gnupg.org/download/#libgpg-error
+
+VER = libgpg-error-1.8
 
 include $(ROOTDIR)/tools/autotools.mk
 
