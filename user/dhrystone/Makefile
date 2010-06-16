@@ -15,7 +15,7 @@ endif
 all: $(EXEC)
 
 $(EXEC): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) -lm $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) -lm $(LDLIBS)
 
 romfs:
 	$(ROMFSINST) /bin/$(EXEC)
@@ -27,12 +27,22 @@ $(OBJS): dhry.h
 
 results:
 	cpu=`rsh -l root $(IP) 'grep "cpu MHz" /proc/cpuinfo' | awk -F ":" '{print $$2}' | awk -F "/" '{print $$1}' | sed 's/^[ \t]*//;s/[ \t]*$$//'` ;\
-	echo "^ Flags ((standard ''CFLAGS'' include ''$(CFLAGS)''))  ^  size (bytes)  ^  Loops  ^  Dhrystones per Second ((Based on $(CC))) ^  Dhrystone MIPS ((DMIPS is obtained when the Dhrystone score is divided by 1,757 (the number of Dhrystones per second obtained on the VAX 11/780, nominally a 1 MIPS machine))  ^  DMIPS/MHz  ^";\
-	( for level in -O{s,0,1,2,3}{" "," -fomit-frame-pointer"}{" "," -static"} ; do \
+	echo "testing on $$cpu MHz with $$CC" ;\
+	cflags=`echo $(CFLAGS) | sed -e 's:-O[0-3s]::g' -e 's/[[:space:]][[:space:]]*/ /g'`; \
+	echo "^ Flags ((standard ''CFLAGS'' include ''$${cflags}''))  ^  size (bytes)  ^  Loops  ^  Dhrystones per Second ((Based on $(CC))) ^  Dhrystone MIPS ((DMIPS is obtained when the Dhrystone score is divided by 1,757 (the number of Dhrystones per second obtained on the VAX 11/780, nominally a 1 MIPS machine))  ^  DMIPS/MHz  ^";\
+	( for level in -O{s,0,1,2,3}{" "," -fomit-frame-pointer"}{" "," -static"}{""," -ffast-math"}{""," -funroll-loops"}{""," -funsafe-loop-optimizations"} ; do \
+	    if [ -z "$${CONFIG_FMT_USE_FDPIC_ELF}" -a `echo $${level} | grep static | wc -l` -eq 1 ] ; then \
+		continue; \
+	    fi; \
 	    echo -n "| ''$${level}'' " | sed 's/ [ ]*/ /g' | sed "s/ '' /''/" ; \
 	    touch dhry.h;\
-	    $(MAKE) -s all CFLAGS="$(CFLAGS) $${level} -w" ;\
-	    ls -l $(EXEC) | awk '{ORS = ""; print "  | " $$5 "  | $(ITT)  |  "}' ; \
+	    $(MAKE) -s --no-print-directory all CFLAGS="$${cflags} $${level} -w" ;\
+	    if [ -n "$${CONFIG_FMT_USE_FDPIC_ELF}" ] ; then \
+		$(CROSS)strip $(EXEC); \
+	    fi;\
+	    find ./ -name $(EXEC) -printf " |  %s  |  " ;\
+	    tmp=`md5sum $(EXEC) | awk '{print $$1}'`;\
+	    printf " $$tmp |  $(ITT)  |  " ; \
 	    rcp $(EXEC) root@$(IP):/var/$(EXEC) ; \
 	    tmp=`rsh -l root $(IP) /var/$(EXEC) $(ITT)` ;\
 	    echo $$cpu $$tmp | awk '{print $$NF "  |  " $$NF/1757 "  |  " $$NF/(1757*$$1) "  |" }' ; \
