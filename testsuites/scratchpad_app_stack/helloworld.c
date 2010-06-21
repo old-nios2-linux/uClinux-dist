@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #define TEST_SCRATCHPAD_LOW      0xffb00000
 #define TEST_SCRATCHPAD_HIGH     0xffb01000
