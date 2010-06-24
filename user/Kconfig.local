@@ -94,6 +94,8 @@ config BOUNDARY_ANOMALY_TEST
 	bool "boundary fetches anomaly test"
 config NMI_WDT_TEST
 	bool "nmi_wdt test"
+config AD7160_RAW_TEST
+	bool "AD7160-RAW interface test"
 endmenu
 
 
