@@ -36,6 +36,10 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Support for generic platform NAND driver.*MTD_NAND_PLATFORM.*\\\[.*]" {
             #conflict with TFT LCD
             send "N\r"
@@ -67,6 +71,14 @@ while 1 {
 
         -re "Varitronix COG-T350MCQB TFT LCD display.*FB_BFIN_T350MCQB.*\\\[.*]" {
             if { $board_type == "BF527-EZKIT" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT-V2" } {
                 send "M\r"
             } else {
                 send "N\r"
@@ -150,12 +162,8 @@ while 1 {
             send "Y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -176,17 +184,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 log_file
-
-send_user "\nKernel building for MicroWin driver test finishes!\n"
