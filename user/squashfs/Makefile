@@ -1,10 +1,11 @@
+#ignore CONFIG_USER_SQUASHFS_MKSQUASHFS7Z for squashfs 4.0
 VER = squashfs4.0
 
 all:
 
 build-y :=
 build-$(CONFIG_USER_SQUASHFS_MKSQUASHFS) += mksquashfs
-build-$(CONFIG_USER_SQUASHFS_MKSQUASHFS7Z) += mksquashfs7z
+#build-$(CONFIG_USER_SQUASHFS_MKSQUASHFS7Z) += mksquashfs7z
 ifneq ($(build-y),)
 all: build
 endif
@@ -27,6 +28,6 @@ clean:
 
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_SQUASHFS_MKSQUASHFS build/mksquashfs /bin/mksquashfs
-	$(ROMFSINST) -e CONFIG_USER_SQUASHFS_MKSQUASHFS7Z build-host/mksquashfs7z /bin/mksquashfs7z
+#	$(ROMFSINST) -e CONFIG_USER_SQUASHFS_MKSQUASHFS7Z build-host/mksquashfs7z /bin/mksquashfs7z
 
 .PHONY: all clean romfs build build-host
