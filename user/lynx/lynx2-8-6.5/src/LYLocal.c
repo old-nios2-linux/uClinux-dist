@@ -382,7 +382,11 @@ static int LYExecv(const char *path,
 #else
 	execv(path, argv);
 #endif
+#ifdef __uClinux__
+	_exit(EXIT_FAILURE);	/* execv failed, give wait() something to look at */
+#else
 	exit(EXIT_FAILURE);	/* execv failed, give wait() something to look at */
+#endif
 	/*NOTREACHED */
 
     default:			/* parent */
