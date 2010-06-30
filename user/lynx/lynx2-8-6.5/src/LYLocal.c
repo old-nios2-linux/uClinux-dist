@@ -364,7 +364,11 @@ static int LYExecv(const char *path,
 
     rc = 1;			/* It will work */
     stop_curses();
+#ifdef __uClinux__
+    pid = vfork();		/* fork and execute command */
+#else
     pid = fork();		/* fork and execute command */
+#endif
 
     switch (pid) {
     case -1:
