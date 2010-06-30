@@ -1,7 +1,7 @@
 #!/usr/bin/expect --
 
 #
-# Build Kernel for BF548-EZKIT and BF527-EZKIT USB device test
+# Build Kernel for BF548-EZKIT and BF527-EZKIT USB device power test
 #
 
 source ../kernel_config.exp
@@ -73,7 +73,7 @@ while 1 {
         }
 
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -182,7 +182,7 @@ while 1 {
         }
 
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -204,11 +204,11 @@ while 1 {
 
 cd $uclinux_path/testsuites
 step "Make"
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-#step "Copy linux"
-#source   copy_image.exp
+step "Copy linux"
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
