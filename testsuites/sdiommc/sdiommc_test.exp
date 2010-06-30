@@ -793,13 +793,13 @@ send "t\r"
 expect -re "Partition number.*"
 send "1\r"
 expect -re "Hex code.*:"
-send "b\r"
+send "83\r"
 expect -re "Changed system type.*:"
 send "p\r"
 expect -re "Command.*"
 send "w\r"
 expect -re $kernel_prompt
-send_user "Whole card is created as fat32\n"
+send_user "Whole card is created as ext2\n"
 
 
 incr case_num
@@ -818,20 +818,20 @@ while 1 {
 }
 
 incr case_num
-set timeout 10
-send "time mkdosfs -F 32 /dev/$mmc_dev1\r"
+set timeout 120
+send "time mke2fs /dev/$mmc_dev1\r"
 while 1 {
     expect {
         -re "No such .*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "mkdosfs \[0-9]\.\[0-9]+.*$kernel_prompt" {
-            send_user "mkdosfs done, test pass\n"
+        -re "Writing superblocks and filesystem accounting information: done.*$kernel_prompt" {
+            send_user "mke2fs done, test pass\n"
             case_pass $case_num
             break
         }
         timeout {
-            send_user "mkdosfs timeout, test fail\n"
+            send_user "mke2fs timeout, test fail\n"
             case_fail $case_num
         }
     }
@@ -839,20 +839,20 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "mount -t vfat /dev/$mmc_dev1 /mnt\r"
+send "mount -t ext2 /dev/$mmc_dev1 /mnt\r"
 while 1 {
     expect {
         -re "mount.*failed.*$kernel_prompt" {
-            send_user "mount DOS FS fail, test fail\n"
+            send_user "mount EXT2 FS fail, test fail\n"
             case_fail $case_num
         }
         -re $kernel_prompt {
-            send_user "mount DOS FS done, test pass\n"
+            send_user "mount EXT2 FS done, test pass\n"
             case_pass $case_num
             break
         }
         timeout {
-            send_user "mount DOS FS timeout, test fail\n"
+            send_user "mount EXT2 FS timeout, test fail\n"
             case_fail $case_num
         }
     }
@@ -860,7 +860,7 @@ while 1 {
 
 set timeout 3600
 incr case_num
-send "time bonnie++ -u root -d /mnt -s 100M\r"
+send "time bonnie++ -u root -d /mnt -s 200M\r"
 while 1 {
     expect {
         -re "Hardware Trace" {
