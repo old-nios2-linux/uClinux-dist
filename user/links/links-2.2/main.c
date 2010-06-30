@@ -242,7 +242,7 @@ void end_dump(struct object_request *r, void *p)
 	if (dmp == D_SOURCE) {
 		if (ce) {
 			struct fragment *frag;
-nextfrag:
+			nextfrag:
 			foreach(frag, ce->frag) if (frag->offset <= dump_pos && frag->offset + frag->length > dump_pos) {
 				int l = frag->length - (dump_pos - frag->offset);
 				int w = hard_write(oh, frag->data + dump_pos - frag->offset, l);
@@ -281,7 +281,7 @@ nextfrag:
 		o.framename = "";
 		if (!(fd->f_data = cached_format_html(fd, r, r->url, &o, NULL))) goto term_1;
 		dump_to_file(fd->f_data, oh);
-term_1:
+		term_1:
 		reinit_f_data_c(fd);
 		mem_free(fd);
 	}
@@ -291,7 +291,7 @@ term_1:
 		retval = RET_ERROR;
 		goto terminate;
 	}
-terminate:
+	terminate:
 	terminate_loop = 1;
 }
 
@@ -315,7 +315,7 @@ void init(void)
 
 	utf8_table=get_cp_index("UTF-8");
 
-	/* OS/2 has some stupid bug and the pipe must be created before socket :-/ */
+/* OS/2 has some stupid bug and the pipe must be created before socket :-/ */
 	if (c_pipe(terminal_pipe)) {
 		error("ERROR: can't create pipe for internal communication");
 		retval = RET_FATAL;
@@ -350,9 +350,9 @@ void init(void)
 	init_cookies();
 	u = parse_options(g_argc - 1, g_argv + 1);
 	if (!u) {
-ttt:
+		ttt:
 		initialize_all_subsystems_2();
-tttt:
+		tttt:
 		terminate_loop = 1;
 		return;
 	}
