@@ -6,6 +6,10 @@
 
 #include "links.h"
 
+#ifdef __uClinux__
+#include <pthread.h>
+#endif
+
 int retval = RET_OK;
 
 void unhandle_basic_signals(struct terminal *);
@@ -46,6 +50,18 @@ void sig_ign(void *x)
 {
 }
 
+#ifdef __uClinux__
+static void mythread(void *data)
+{
+	pid_t pid;
+	pid = *(pid_t *)data;
+	while (1) {
+		sleep(1);
+		kill(pid, SIGCONT);
+	}
+}
+#endif
+
 int fg_poll_timer = -1;
 
 void sig_tstp(struct terminal *t)
@@ -54,6 +70,9 @@ void sig_tstp(struct terminal *t)
 #if defined (SIGCONT) && defined(SIGTTOU) && defined(HAVE_GETPID)
 	pid_t pid = getpid();
 	pid_t newpid;
+#ifdef __uClinux__
+	pthread_t thread;
+#endif
 #endif
 	if (!F) {
 		block_itrm(1);
@@ -64,6 +83,9 @@ void sig_tstp(struct terminal *t)
 	}
 #endif
 #if defined (SIGCONT) && defined(SIGTTOU) && defined(HAVE_GETPID)
+#ifdef __uClinux__
+	pthread_create(&thread, NULL, mythread, &pid);
+#else
 	if (!(newpid = fork())) {
 		while (1) {
 			sleep(1);
@@ -71,9 +93,14 @@ void sig_tstp(struct terminal *t)
 		}
 	}
 #endif
+#endif
 	raise(SIGSTOP);
 #if defined (SIGCONT) && defined(SIGTTOU) && defined(HAVE_GETPID)
+#ifdef __uClinux__
+	if(thread) pthread_cancel(thread);
+#else
 	if (newpid != -1) kill(newpid, SIGKILL);
+#endif     /* end __uClinux__ */
 #endif
 #endif
 	if (fg_poll_timer != -1) kill_timer(fg_poll_timer);
@@ -215,7 +242,7 @@ void end_dump(struct object_request *r, void *p)
 	if (dmp == D_SOURCE) {
 		if (ce) {
 			struct fragment *frag;
-			nextfrag:
+nextfrag:
 			foreach(frag, ce->frag) if (frag->offset <= dump_pos && frag->offset + frag->length > dump_pos) {
 				int l = frag->length - (dump_pos - frag->offset);
 				int w = hard_write(oh, frag->data + dump_pos - frag->offset, l);
@@ -254,7 +281,7 @@ void end_dump(struct object_request *r, void *p)
 		o.framename = "";
 		if (!(fd->f_data = cached_format_html(fd, r, r->url, &o, NULL))) goto term_1;
 		dump_to_file(fd->f_data, oh);
-		term_1:
+term_1:
 		reinit_f_data_c(fd);
 		mem_free(fd);
 	}
@@ -264,7 +291,7 @@ void end_dump(struct object_request *r, void *p)
 		retval = RET_ERROR;
 		goto terminate;
 	}
-	terminate:
+terminate:
 	terminate_loop = 1;
 }
 
@@ -288,7 +315,7 @@ void init(void)
 
 	utf8_table=get_cp_index("UTF-8");
 
-/* OS/2 has some stupid bug and the pipe must be created before socket :-/ */
+	/* OS/2 has some stupid bug and the pipe must be created before socket :-/ */
 	if (c_pipe(terminal_pipe)) {
 		error("ERROR: can't create pipe for internal communication");
 		retval = RET_FATAL;
@@ -323,9 +350,9 @@ void init(void)
 	init_cookies();
 	u = parse_options(g_argc - 1, g_argv + 1);
 	if (!u) {
-		ttt:
+ttt:
 		initialize_all_subsystems_2();
-		tttt:
+tttt:
 		terminate_loop = 1;
 		return;
 	}

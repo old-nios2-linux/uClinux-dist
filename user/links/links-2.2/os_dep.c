@@ -1494,7 +1494,11 @@ int start_thread(void (*fn)(void *, int), void *ptr, int l)
 	if (c_pipe(p) < 0) return -1;
 	fcntl(p[0], F_SETFL, O_NONBLOCK);
 	fcntl(p[1], F_SETFL, O_NONBLOCK);
+#ifdef __uClinux__
+	if (!(f = vfork())) {
+#else
 	if (!(f = fork())) {
+#endif
 		close_fork_tty();
 		close(p[0]);
 		fn(ptr, p[1]);

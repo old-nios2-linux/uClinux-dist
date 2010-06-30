@@ -115,7 +115,11 @@ void smb_func(struct connection *c)
 		return;
 	}
 	c->from = 0;
+#ifdef __uClinux__
+	r = vfork();
+#else
 	r = fork();
+#endif
 	if (r == -1) {
 		mem_free(host);
 		mem_free(port);

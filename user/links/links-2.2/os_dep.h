@@ -60,7 +60,9 @@ static inline int dir_sep(char x) { return x == '/'; }
 #endif
 #define ASSOC_BLOCK
 #define ASSOC_CONS_XWIN
-
+#ifdef __uClinux__
+#define NO_FORK_ON_EXIT
+#endif
 #elif defined(OS2)
 
 static inline int dir_sep(char x) { return x == '/' || x == '\\'; }
