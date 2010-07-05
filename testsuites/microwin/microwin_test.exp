@@ -2,11 +2,8 @@
 
 source  ../kernel_config.exp
 source  ../board_info.exp
-
 log_file [log_file_name "$argv0"]
-
 send_user "Starting $argv0\n"
-
 set TITLE [title "$argv0"]
 
 step "Spawn kermit"
@@ -32,6 +29,8 @@ if { $board_type == "BF548-EZKIT" } {
     set module "bf54x_lq043fb"
 } elseif {$board_type == "BF527-EZKIT" } {
     set module "bfin_t350mcqb_fb"
+} elseif {$board_type == "BF527-EZKIT-V2" } {
+    set module "bfin-lq035q1-fb"
 } elseif { $board_type == "BF537-STAMP" } {
     set module "bf537_lq035"
 } else {
@@ -200,9 +199,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file

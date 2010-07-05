@@ -54,7 +54,11 @@ while 1 {
         }
 
         -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN.*\\\[.*]" {
-            send "M\r"
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "Y\r"
+            } else {
+                send "M\r"
+            }
         }
 
         -re "SHARP LQ043 TFT LCD.*BF548 EZKIT.*\\\[.*]" {
@@ -119,7 +123,7 @@ while 1 {
 
         -re "Screeen PixType.*Packed.*choice.*\\\[.*]" {
             #here we choose Packed-8bit-Palette
-            send "1\r"
+            send "4\r"
         }
 
         -re "Have File IO.*USER_MICROWIN_HAVE_FILEIO.*\\\[.*]" {
