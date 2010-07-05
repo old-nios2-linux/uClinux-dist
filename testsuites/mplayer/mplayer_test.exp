@@ -30,6 +30,9 @@ if { $board_type == "BF548-EZKIT" } {
 } elseif {$board_type == "BF527-EZKIT" } {
     set video_module "bfin_t350mcqb_fb"
     set audio_module "snd_ssm2602"
+} elseif {$board_type == "BF527-EZKIT-V2" } {
+    set video_module "bfin-lq035q1-fb"
+    set audio_module "snd_ssm2602"
 } elseif {$board_type == "BF537-STAMP" } {
     set video_module "bf537_lq035"
     set audio_module "snd_ad73311"

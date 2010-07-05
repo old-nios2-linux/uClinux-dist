@@ -172,7 +172,7 @@ while 1 {
         }
 
        -re "Disable DMA.*always use PIO.*MUSB_PIO_ONLY.*\\\[.*]" {
-            if { ( $board_type == "BF526-EZBRD" || $board_type == "BF527-EZKIT" ) && ( $revision == "0.0" || $revision == "0.1") } {
+            if { ( $board_type == "BF526-EZBRD" || [string match "BF527-EZKIT*" $board_type] ) && ( $revision == "0.0" || $revision == "0.1") } {
                 send -s "Y\r"
             } else {
                 send -s "\r"

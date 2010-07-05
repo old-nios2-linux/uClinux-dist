@@ -27,7 +27,7 @@ if { $board_type == "BF537-STAMP" || $board_type == "BF533-STAMP" } {
 
 set bootargs 		 $bootargs_param1
 
-}  elseif { $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" || $board_type == "BF518F-EZBRD" || $board_type == "BF526-EZBRD" } {
+}  elseif { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF518F-EZBRD" || $board_type == "BF526-EZBRD" } {
 #set bootargs 		 $bootargs_param3
 exit 1
 }
@@ -41,7 +41,7 @@ set chip_select 1
 set chip_select 2
 }
 
-send -s "set bootargs $bootargs\r" 
+send -s "set bootargs $bootargs\r"
 expect ">"
 send -s "save\r"
 expect ">"
@@ -50,7 +50,7 @@ expect ">"
 set case_num 0
 
 incr case_num
-  
+
 send -s "sf probe $chip_select\r"
 
 while 1 {
@@ -58,7 +58,7 @@ set timeout 500
 expect {
 
 	"now current device" {
-        expect $uboot_prompt 
+        expect $uboot_prompt
 	set probe_sf_flag $TEST_PASS
 	break
 	}
@@ -87,7 +87,7 @@ while 1 {
 		set write_sf_flag $TEST_PASS
 		break
 	    }
-    
+
 	    timeout {
 		send_user "ERROR: write sf error\n"
 		set temp_status_flag $TEST_FAIL
@@ -108,7 +108,7 @@ expect {
         -re "Bytes transferred = \[0-9]+ \\\((\[0-9a-fA-F]+) hex\\\)" {
                 set image_size $expect_out(1,string)
                 send_user "Image size is $image_size\n"
-                expect  $uboot_prompt   
+                expect  $uboot_prompt
                 break
         }
 	
@@ -120,7 +120,7 @@ expect {
 	}
 }
 }
- 
+
 send -s "sf write 0x1000000 $spi_kernel_start_addr 0x$image_size\r"
 
 while 1 {
@@ -130,7 +130,7 @@ while 1 {
 		set write_sf_flag $TEST_PASS
 		break
 	    }
-    
+
 	    timeout {
 		send_user "ERROR: write sf error\n"
 		set temp_status_flag $TEST_FAIL
@@ -138,7 +138,7 @@ while 1 {
 	    }
 	}
     }
-sleep 1  
+sleep 1
 send -s "sf read 0x2000000 $spi_kernel_start_addr 0x$image_size\r"
 
 while 1 {
@@ -148,7 +148,7 @@ while 1 {
 		set read_sf_flag $TEST_PASS
 		break
 	    }
-    
+
 	    timeout {
 		send_user "ERROR: read sf error\n"
 		set temp_status_flag $TEST_FAIL
@@ -168,7 +168,7 @@ while 1 {
 		set temp_status_flag $TEST_PASS
 		break
 	    }
-    
+
 	    timeout {
 		send_user "ERROR: compare sf error\n"
 		set temp_status_flag $TEST_FAIL
@@ -179,7 +179,7 @@ while 1 {
     }
 
 ################################################################################################################
-     
+
 set timeout 120
 
 send -s "tftp 0x1000000 $jffs2_rootfs_image\r"
@@ -189,7 +189,7 @@ expect {
          -re "Bytes transferred = \[0-9]+ \\\((\[0-9a-fA-F]+) hex\\\)" {
                 set image_size $expect_out(1,string)
                 send_user "Image size is $image_size\n"
-                expect  $uboot_prompt   
+                expect  $uboot_prompt
                 break
         }
 	
@@ -211,7 +211,7 @@ while 1 {
 		set write_sf_flag $TEST_PASS
 		break
 	    }
-    
+
 	    timeout {
 		send_user "ERROR: write sf error\n"
 		set temp_status_flag $TEST_FAIL
@@ -219,9 +219,7 @@ while 1 {
 	    }
 	}
     }
-  
 
-    
 send -s "bootm 0x2000000\r"
 while 1 {
 	set timeout 35
@@ -232,16 +230,16 @@ while 1 {
 		send_user "Boot from spi flash success\n"
 		break
 	    }
-    
+
 	    timeout {
                 case_fail $case_num
                 exit	
 	    }
 	}
     }
-   
+
 incr case_num
-send -s "\r" 
+send -s "\r"
 sleep 3
 send -s "reboot\r"
 set timeout 100
@@ -257,7 +255,7 @@ expect {
                 exit
         }
         timeout {
-               exit 
+               exit
         }
 }
 }
@@ -266,5 +264,5 @@ send_log "\n"
 send_log "\n$TITLE ............\[PASS\]\n"
 
 log_file
-send_user "Ending $argv0\n" 
-exit 0	  
+send_user "Ending $argv0\n"
+exit 0

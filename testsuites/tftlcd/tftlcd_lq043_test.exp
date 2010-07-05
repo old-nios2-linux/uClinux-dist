@@ -27,6 +27,11 @@ if { $board_type == "BF548-EZKIT" } {
     set module "bf54x_lq043fb"
 } elseif {$board_type == "BF527-EZKIT" } {
     set module "bfin_t350mcqb_fb"
+} elseif {$board_type == "BF527-EZKIT-V2" } {
+    set module "bfin-lq035q1-fb"
+} else {
+    send_user "Wrong board type!\n"
+    case_fail $case_num
 }
 
 incr case_num
@@ -44,7 +49,7 @@ while 1 {
 }
 
 incr case_num
-send "lsmod\r" 
+send "lsmod\r"
 while 1 {
     expect {
         -re "$module.*$kernel_prompt" {
@@ -105,13 +110,13 @@ while 1 {
 
 set timeout 5
 incr case_num
-send "lsmod\r" 
+send "lsmod\r"
 while 1 {
     expect {
         -re "$module.*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "Used by\r\n$kernel_prompt" {         
+        -re "Used by\r\n$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -122,7 +127,5 @@ while 1 {
 }
 
 all_pass
-
 send_user "Ending $argv0\n"
-
 log_file

@@ -14,48 +14,43 @@ send_user "Starting $argv0\n"
 set argc [llength $argv]
 
 if { $argc < 1} {
-puts "Please input: board_type [ port type : serial_uart or sport_uart ] [line connection: normal or switch] ."
-exit
+    puts "Please input: board_type [ port type : serial_uart or sport_uart ] [line connection: normal or switch] ."
+    exit
 }
 
 set port_type serial_uart
 if { $argc >= 2} {
-set port_type [lindex $argv 1]
+    set port_type [lindex $argv 1]
 }
 
-set line_connection normal 
+set line_connection normal
 if { $argc >= 3} {
-set line_connection [lindex $argv 2]
+    set line_connection [lindex $argv 2]
 }
 
 if { $line_connection == "normal" } {
-
-set kermit_ttydev $ttydev
-set ttydev_for_testcase_use $ttyUSBdev
-
+    set kermit_ttydev $ttydev
+    set ttydev_for_testcase_use $ttyUSBdev
 } elseif { $line_connection == "switch" } {
-
-set kermit_ttydev $ttyUSBdev
-set ttydev_for_testcase_use $ttydev
+    set kermit_ttydev $ttyUSBdev
+    set ttydev_for_testcase_use $ttydev
 }
 
 if {  $port_type== "sport_uart" } {
-
-set ttyBFdev /dev/ttySS0
-
+    set ttyBFdev /dev/ttySS0
 } elseif { $port_type== "serial_uart" } {
+    if { [string match "BF527-EZKIT*" $board_type] } {
+        set ttyBFdev /dev/ttyBF0
+    } elseif { $board_type == "BF548-EZKIT" } {
+        set ttyBFdev /dev/ttyBF3
+    } elseif { $board_type == "BF537-STAMP" } {
+        set ttyBFdev /dev/ttyBF1
+    } else {
+        set ttyBFdev /dev/ttyBF1
+    }
 
-if { $board_type == "BF527-EZKIT" } {
-set ttyBFdev /dev/ttyBF0
-} elseif { $board_type == "BF548-EZKIT" } {
-set ttyBFdev /dev/ttyBF3
-} elseif { $board_type == "BF537-STAMP" } {
-set ttyBFdev /dev/ttyBF1
-} else {
-set ttyBFdev /dev/ttyBF1
 }
 
-}
 set ext_uart_port [ string index $ttyBFdev end ]
 send_log "ext_uart_port is $ext_uart_port"
 send_log "port_type $port_type ttydev_for_testcase_use $ttydev_for_testcase_use"
@@ -185,7 +180,7 @@ set timeout 100
 while 1 {
 send -s " cat $save_file > $ttydev_for_testcase_use  \r"
 expect {
-         -re  "$sh_prompt" { 
+         -re  "$sh_prompt" {
           break }
          timeout {
          send_log " send data failed...\n"
@@ -226,7 +221,7 @@ send "\r"
 while 1 {
 expect {
         -re "$kernel_prompt" {
-          send_log "Catted file is got on target.\n" 
+          send_log "Catted file is got on target.\n"
           break }
           timeout {
           case_fail $case_num
@@ -415,7 +410,7 @@ incr case_num
 step "Start kermit."
 if { $line_connection == "normal" } {
 
-set kermit_ttydev $ttyUSBdev 
+set kermit_ttydev $ttyUSBdev
 
 } elseif { $line_connection == "switch" } {
 
@@ -441,11 +436,7 @@ set timeout 20
         }
 }
 
-
-
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
 log_file
 

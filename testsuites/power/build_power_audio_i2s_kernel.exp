@@ -61,7 +61,7 @@ while 1 {
 
 #Audio Output
         -re "Sound card support.*SOUND.*\\\[.*]" {
-            if { $board_type == "BF537-STAMP" || $board_type == "BF533-STAMP" || $board_type == "BF527-EZKIT" || $board_type == "BF548-EZKIT" } {
+            if { $board_type == "BF537-STAMP" || $board_type == "BF533-STAMP" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF548-EZKIT" } {
                 send "Y\r"
             } else {
                 send "N\r"
@@ -121,7 +121,7 @@ while 1 {
         }
 
         -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "1\r"
             } else {
                 send "0\r"

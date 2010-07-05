@@ -177,7 +177,7 @@ while 1 {
      }
 }
 
-if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
 
 	if { $TransRate > 4000 && $Throughput > 85 } {
 	

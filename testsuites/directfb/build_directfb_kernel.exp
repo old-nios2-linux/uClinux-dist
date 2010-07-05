@@ -90,6 +90,13 @@ while 1 {
             }
         }
 
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
 
 #Virtual terminal & frame buffer
 #Set SW5.1-SW5.3 to off, or no display on screen.
@@ -177,7 +184,7 @@ while 1 {
         }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
+            if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -187,7 +194,7 @@ while 1 {
         -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
             if { $board_type == "BF548-EZKIT" } {
                 send "N\r"
-            } elseif { $board_type == "BF527-EZKIT" } {
+            } elseif { [string match "BF527-EZKIT*" $board_type] } {
                 send "Y\r"
             } else {
                 send "\r"

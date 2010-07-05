@@ -98,7 +98,7 @@ while 1 {
         }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[./././.]" {
-            if { $board_type == "BF527-EZKIT" || $board_type == "BF548-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] || $board_type == "BF548-EZKIT" } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -108,7 +108,7 @@ while 1 {
         -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
             if { $board_type == "BF548-EZKIT" } {
                 send "N\r"
-            } elseif { $board_type == "BF527-EZKIT" } {
+            } elseif { [string match "BF527-EZKIT*" $board_type] } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -137,7 +137,7 @@ while 1 {
         }
 
         -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "M\r"
             } else {
                 send "N\r"
@@ -145,7 +145,7 @@ while 1 {
         }
 
         -re "SoC SSM2602 Audio support for BF52x ezkit.*SND_BF5XX_SOC_SSM2602.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "M\r"
             } else {
                 send "N\r"
@@ -202,7 +202,7 @@ while 1 {
         }
 
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -223,15 +223,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"

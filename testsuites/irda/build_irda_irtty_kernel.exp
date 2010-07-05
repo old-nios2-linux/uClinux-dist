@@ -10,13 +10,10 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
 source  make_default_config.exp
 
 # Following make specific configuration for this case.
-
 cd $uclinux_path
 set timeout 300
 set baud_rate_done_flag 0
@@ -83,7 +80,7 @@ while 1 {
 
 #BF527: default serial port is on UART1, open UART0 for IRTTY_SIR
         -re "Enable UART0.*SERIAL_BFIN_UART0.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -119,7 +116,7 @@ while 1 {
         }
 
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -140,16 +137,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file

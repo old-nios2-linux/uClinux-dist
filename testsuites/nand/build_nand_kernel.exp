@@ -42,7 +42,7 @@ while 1 {
         }
 
         -re "Blackfin on-chip NAND Flash Controller driver.*MTD_NAND_BF5XX.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" || $board_type == "BF526-EZBRD" } {
+            if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF526-EZBRD" } {
                 send -s "Y\r"
             } else {
                 send -s "\r"
@@ -58,7 +58,7 @@ while 1 {
         }
 
         -re "Blackfin on-chip MAC support.*BFIN_MAC.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" || $board_type == "BF526-EZBRD" } {
+            if { [string match "BF527-EZKIT*" $board_type] || $board_type == "BF526-EZBRD" } {
                 send -s "M\r"
             } else {
                 send -s "\r"
@@ -149,12 +149,11 @@ while 1 {
 
 if { $bfin_make_status == "failure" } {
     puts "ERROR: Error somewhere during make"
-
 }
 
 cd $uclinux_path/testsuites
 step "Copy linux"
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file

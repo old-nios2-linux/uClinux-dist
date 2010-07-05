@@ -24,7 +24,7 @@ expect "Attached SCSI removable disk"
 send "\r"
 expect -re $kernel_prompt
 
-if { $board_type == "BF527-EZKIT" } {
+if { [string match "BF527-EZKIT*" $board_type] } {
     set usb_dev sda
     set usb_dev1 sda1
     set usb_dev2 sda2

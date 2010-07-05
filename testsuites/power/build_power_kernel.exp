@@ -35,6 +35,10 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Virtual terminal.*VT.*\\\[.*]" {
             send "N\r"
         }
@@ -66,7 +70,11 @@ while 1 {
         }
 
         -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN.*\\\[.*]" {
-            send "M\r"
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "Y\r"
+            } else {
+                send "M\r"
+            }
         }
 
         -re "Support for frame buffer devices.*FB.*\\\[.*]" {
@@ -97,6 +105,14 @@ while 1 {
             }
         }
 
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
+
         -re "Blackfin ADV7393 Video encoder on uClinux.*FB_BFIN_7393.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" || $board_type == "BF533-STAMP" } {
                 send "M\r"
@@ -122,12 +138,8 @@ while 1 {
             send "Y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -148,17 +160,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make kernel"
-
 source   make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux image"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"
-
 log_file

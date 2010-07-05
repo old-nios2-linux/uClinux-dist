@@ -105,7 +105,7 @@ while 1 {
         }
 
         -re "Varitronix COG-T350MCQB TFT LCD display.*FB_BFIN_T350MCQB.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "M\r"
             } else {
                 send "N\r"
@@ -170,7 +170,7 @@ while 1 {
 #        }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
+            if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
                 send "Y\r"
             } else {
                 send "\r"

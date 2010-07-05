@@ -43,7 +43,7 @@ while 1 {
         }
 
         -re "SCSI device support \\\(SCSI\\\).*\\\[./././.]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "y\r"
             } else {
                 send "\r"

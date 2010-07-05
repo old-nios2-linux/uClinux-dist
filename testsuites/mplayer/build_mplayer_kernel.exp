@@ -80,6 +80,14 @@ while 1 {
             }
         }
 
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
+
         -re "Blackfin ADV7393 Video encoder on uClinux.*FB_BFIN_7393.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
                 send "M\r"
@@ -123,7 +131,7 @@ while 1 {
         }
 
         -re "SoC SSM2602 Audio support for BF52x ezkit.*SND_BF5XX_SOC_SSM2602.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "M\r"
             } else {
                 send "N\r"
@@ -147,7 +155,7 @@ while 1 {
         }
 
         -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
-            if { $board_type == "BF527-EZKIT" } {
+            if { [string match "BF527-EZKIT*" $board_type] } {
                 send "1\r"
             } else {
                 send "0\r"
@@ -179,7 +187,7 @@ while 1 {
         }
 
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -200,15 +208,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"

@@ -38,11 +38,11 @@ while 1 {
             }
         }
 
-        -re "I2C support.*I2C\[^_].*\\\[.*]" {             
+        -re "I2C support.*I2C\[^_].*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "I2C device interface.*I2C_CHARDEV.*\\\[.*]" {            
+        -re "I2C device interface.*I2C_CHARDEV.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -54,43 +54,43 @@ while 1 {
             }
         }
 
-        -re "Blackfin TWI I2C support.*I2C_BLACKFIN_TWI.*\\\[.*]" {   
-            if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {             
+        -re "Blackfin TWI I2C support.*I2C_BLACKFIN_TWI.*\\\[.*]" {
+            if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
                 send "Y\r"
             } else {
                 send "\r"
-            }	             
+            }
         }
 
-        -re "Blackfin TWI I2C clock.*I2C_BLACKFIN_TWI_CLK_KHZ.*\\\[.*]" {   
-            if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {             
+        -re "Blackfin TWI I2C clock.*I2C_BLACKFIN_TWI_CLK_KHZ.*\\\[.*]" {
+            if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
                 send "50\r"
             } else {
                 send "\r"
-            }	             
+            }
         }
 
-        -re "Generic input layer.*needed for keyboard, mouse.*INPUT.*\\\[.*]" {            
+        -re "Generic input layer.*needed for keyboard, mouse.*INPUT.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "Event interface.*INPUT_EVDEV.*\\\[.*]" {            
+        -re "Event interface.*INPUT_EVDEV.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "Keyboards.*INPUT_KEYBOARD.*\\\[.*]" {            
-            if { $board_type == "BF548-EZKIT" || $board_type == "BF527-EZKIT" } {
+        -re "Keyboards.*INPUT_KEYBOARD.*\\\[.*]" {
+            if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
                 send "N\r"
             } else {
                 send "\r"
             }
         }
 
-        -re "Miscellaneous devices.*INPUT_MISC.*\\\[.*]" {            
+        -re "Miscellaneous devices.*INPUT_MISC.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "User level driver support.*INPUT_UINPUT.*\\\[.*]" {            
+        -re "User level driver support.*INPUT_UINPUT.*\\\[.*]" {
             send "Y\r"
         }
 
