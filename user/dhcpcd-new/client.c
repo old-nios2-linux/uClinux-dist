@@ -412,6 +412,20 @@ timeval_subtract (result, x, y)
   return x->tv_sec < y->tv_sec;
 }
 /*****************************************************************************/
+static time_t monotime(t)
+time_t *t;
+{
+  struct timespec ts;
+  int ret;
+
+  ret = clock_gettime(CLOCK_MONOTONIC, &ts);
+  if (ret < 0)
+    return (time_t)-1;
+  if (t)
+    *t = ts.tv_sec;
+  return ts.tv_sec;
+}
+/*****************************************************************************/
 int dhcpSendAndRecv(xid,msg,buildUdpIpMsg)
 unsigned xid,msg;
 void (*buildUdpIpMsg)(unsigned);
@@ -1363,7 +1377,7 @@ void (*buildDhcpMsg)(unsigned);
 	   ((unsigned char *)&DhcpIface.ciaddr)[2],
 	   ((unsigned char *)&DhcpIface.ciaddr)[3]);
   if ( dhcpSendAndRecv(xid,DHCP_ACK,buildDhcpMsg) ) return &dhcpInit;
-  ReqSentTime=time(NULL);
+  ReqSentTime=monotime(NULL);
   DebugSyslog(LOG_DEBUG,
     "DHCP_ACK received from %s (%u.%u.%u.%u)\n",DhcpMsgRecv->sname,
     ((unsigned char *)DhcpOptions.val[dhcpServerIdentifier])[0],
@@ -1414,7 +1428,7 @@ void *dhcpBound()
       openSocket();
       return &dhcpRenew;
     }
-  i=ReqSentTime+ntohl(*(unsigned int *)DhcpOptions.val[dhcpT1value])-time(NULL);
+  i=ReqSentTime+ntohl(*(unsigned int *)DhcpOptions.val[dhcpT1value])-monotime(NULL);
   if ( i > 0 )
     alarm(i);
   else
@@ -1432,7 +1446,7 @@ void *dhcpRenew()
 {
   int i;
   if ( sigsetjmp(env,0xffff) ) return &dhcpRebind;
-  i = ReqSentTime+ntohl(*(unsigned int *)DhcpOptions.val[dhcpT2value])-time(NULL);
+  i = ReqSentTime+ntohl(*(unsigned int *)DhcpOptions.val[dhcpT2value])-monotime(NULL);
   if ( i > 0 )
     alarm(i);
   else
@@ -1448,7 +1462,7 @@ void *dhcpRenew()
 	   ((unsigned char *)&DhcpIface.siaddr)[2],
 	   ((unsigned char *)&DhcpIface.siaddr)[3]);
   if ( dhcpSendAndRecv(random(),DHCP_ACK,&buildDhcpRenew) ) return &dhcpRebind;
-  ReqSentTime=time(NULL);
+  ReqSentTime=monotime(NULL);
   DebugSyslog(LOG_DEBUG,
     "DHCP_ACK received from %s (%u.%u.%u.%u)\n",DhcpMsgRecv->sname,
     ((unsigned char *)DhcpOptions.val[dhcpServerIdentifier])[0],
@@ -1468,7 +1482,7 @@ void *dhcpRebind()
   if ( RenewTimeout > 0 )
     return &dhcpStop;
 
-  i = ReqSentTime+ntohl(*(unsigned int *)DhcpOptions.val[dhcpIPaddrLeaseTime])-time(NULL);
+  i = ReqSentTime+ntohl(*(unsigned int *)DhcpOptions.val[dhcpIPaddrLeaseTime])-monotime(NULL);
   if ( i > 0 )
     alarm(i);
   else
@@ -1481,7 +1495,7 @@ void *dhcpRebind()
 	   ((unsigned char *)&DhcpIface.ciaddr)[2],
 	   ((unsigned char *)&DhcpIface.ciaddr)[3]);
   if ( dhcpSendAndRecv(random(),DHCP_ACK,&buildDhcpRebind) ) return &dhcpStop;
-  ReqSentTime=time(NULL);
+  ReqSentTime=monotime(NULL);
   DebugSyslog(LOG_DEBUG,
     "DHCP_ACK received from %s (%u.%u.%u.%u)\n",DhcpMsgRecv->sname,
     ((unsigned char *)DhcpOptions.val[dhcpServerIdentifier])[0],
