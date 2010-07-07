@@ -277,7 +277,7 @@
 	{"linux/fb.h",	"FBIOGET_HWCINFO",	0x4616},
 	{"linux/fb.h",	"FBIOPUT_MODEINFO",	0x4617},
 	{"linux/fb.h",	"FBIOGET_DISPINFO",	0x4618},
-	{"linux/ivtvfb.h",	"FBIO_WAITFORVSYNC",	0x4620},
+	{"linux/fb.h",	"FBIO_WAITFORVSYNC",	0x4620},
 	{"linux/arcfb.h",	"FBIO_WAITEVENT",	0x4688},
 	{"linux/arcfb.h",	"FBIO_GETCONTROL2",	0x4689},
 	{"video/sstfb.h",	"SSTFB_GET_VGAPASS",	0x46dd},
