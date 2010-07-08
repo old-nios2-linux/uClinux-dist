@@ -151,7 +151,7 @@ if { $board_type == "BF548-EZKIT" } {
 } elseif {$board_type == "BF527-EZKIT" } {
     set module "bfin_t350mcqb_fb"
 } elseif {$board_type == "BF527-EZKIT-V2" } {
-    set module "bfin-lq035q1-fb"
+    set module "bfin_lq035q1_fb"
 } elseif { $board_type == "BF537-STAMP" } {
     set module "bf537_lq035"
 }
@@ -339,9 +339,6 @@ if { $standby_fail == 0 } {
     case_fail $case_num
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n" 
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file

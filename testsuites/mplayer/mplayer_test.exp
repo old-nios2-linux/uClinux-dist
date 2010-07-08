@@ -31,7 +31,7 @@ if { $board_type == "BF548-EZKIT" } {
     set video_module "bfin_t350mcqb_fb"
     set audio_module "snd_ssm2602"
 } elseif {$board_type == "BF527-EZKIT-V2" } {
-    set video_module "bfin-lq035q1-fb"
+    set video_module "bfin_lq035q1_fb"
     set audio_module "snd_ssm2602"
 } elseif {$board_type == "BF537-STAMP" } {
     set video_module "bf537_lq035"
@@ -56,7 +56,7 @@ while 1 {
 }
 
 incr case_num
-send "lsmod\r" 
+send "lsmod\r"
 while 1 {
     expect {
         -re "$video_module.*$kernel_prompt" {
@@ -87,7 +87,7 @@ while 1 {
 }
 
 incr case_num
-send "lsmod\r" 
+send "lsmod\r"
 while 1 {
     expect {
         -re "$audio_module.*$kernel_prompt" {
@@ -130,9 +130,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n" 
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file

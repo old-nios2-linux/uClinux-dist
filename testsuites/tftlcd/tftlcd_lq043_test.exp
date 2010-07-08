@@ -28,7 +28,7 @@ if { $board_type == "BF548-EZKIT" } {
 } elseif {$board_type == "BF527-EZKIT" } {
     set module "bfin_t350mcqb_fb"
 } elseif {$board_type == "BF527-EZKIT-V2" } {
-    set module "bfin-lq035q1-fb"
+    set module "bfin_lq035q1_fb"
 } else {
     send_user "Wrong board type!\n"
     case_fail $case_num
