@@ -155,7 +155,7 @@ nod /dev/mtdblock2 640 0 0 b 31 2
 nod /dev/mtdblock3 640 0 0 b 31 3
 nod /dev/random 666 0 0 c 1 8
 nod /dev/urandom 666 0 0 c 1 9
-nod /dev/ttyJ0 666 0 0 c 232 16
+nod /dev/ttyJ0 666 0 0 c 204 186
 nod /dev/button 666 0 0 c 62 0
 nod /dev/spi0 666 0 0 c 135 0
 nod /dev/spi1 666 0 0 c 135 1
