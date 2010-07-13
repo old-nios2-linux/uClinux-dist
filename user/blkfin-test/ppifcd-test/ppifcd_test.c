@@ -25,12 +25,21 @@
 
 #include "i2c.h"
 #include "gpio.h"
+#define USE_GENERIC_PPI_DRIVER 	 /* use generic ppi driver instead of ppifcd */
+#ifdef USE_GENERIC_PPI_DRIVER
+#include "bfin_ppi.h"
+#else
 #include "adsp-ppifcd.h"
+#endif
 
 int WriteIMG(char *, unsigned long);
 
 #define I2C_DEVICE      "/dev/i2c-0"
+#ifdef USE_GENERIC_PPI_DRIVER
+#define PPI_DEVICE      "/dev/ppi0"
+#else
 #define PPI_DEVICE      "/dev/ppi"
+#endif
 #define VERSION         "0.1"
 
 /****************************************************************************/
@@ -365,17 +374,42 @@ int main(int argc, char *argv[])
 		free(buffer);
 		exit(1);
 	}
-
+#ifdef USE_GENERIC_PPI_DRIVER
+	ioctl(fd, CMD_PPI_CLK_EDGE, CFG_PPI_CLK_EDGE_FALL);
+	ioctl(fd, CMD_PPI_XFR_TYPE, CFG_PPI_XFR_TYPE_NON646);
+	ioctl(fd, CMD_PPI_PORT_CFG, CFG_PPI_PORT_CFG_XSYNC23);
+	ioctl(fd, CMD_PPI_SET_DIMS, CFG_PPI_DIMS_2D);
+	ioctl(fd, CMD_PPI_LINELEN, WIDTH  );
+	ioctl(fd, CMD_PPI_NUMLINES, HEIGHT);
+#else
 	ioctl(fd, CMD_PPI_SET_PIXELS_PER_LINE, WIDTH);
 	ioctl(fd, CMD_PPI_SET_LINES_PER_FRAME, HEIGHT);
-
+#endif
 	if (usetrigger) {
+#ifdef USE_GENERIC_PPI_DRIVER
+		//ioctl(fd, CMD_PPI_TRIG_EDGE, CFG_PPI_TRIG_EDGE_RISE);
+		if(gpio_export(trigger_strobe)) {
+			printf("open error gpio%d\n", trigger_strobe);
+			return -1;
+		}
+		gpio_value(trigger_strobe, 0);
+		gpio_dir_out(trigger_strobe);
+
+#else
 		ioctl(fd, CMD_SET_TRIGGER_GPIO, trigger_strobe);
+#endif
 	}
 
 	/* Read the raw image data from the PPI */
 
 	for (i = 0; i < cnt; i++) {
+#ifdef USE_GENERIC_PPI_DRIVER 
+		if(usetrigger) {
+			gpio_value(trigger_strobe, 1);
+			mydelay(1);
+			gpio_value(trigger_strobe, 0);
+		}
+#endif
 
 		gettimeofday(&o, NULL);
 
@@ -438,6 +472,11 @@ int main(int argc, char *argv[])
 
 	gpio_unexport(led);
 	gpio_unexport(standby);
+#ifdef USE_GENERIC_PPI_DRIVER
+	if(usetrigger) {
+		gpio_unexport(trigger_strobe);
+	}
+#endif
 
 	if (board == 533)
 		gpio_unexport(FS3);
