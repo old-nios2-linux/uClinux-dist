@@ -37,6 +37,19 @@
 #include <sys/klog.h>
 
 #define NULL_PTR		0x00000000
+/*
+ * Hardware Error interrupt for "External Memory Address Error" is triggered
+ * ahead of data misaligned exception(0x24) and data access CPLB miss
+ * exception(0x26) on bf533 if:
+ * 1) read from an odd address outside real memory region.
+ * 2) rts to an odd address outside real memory region.
+ *
+ * Use POPULATED_ODD in real memory (<32M) for test against exception 0x24.
+ * Because CPLB entry can't be easily invalidated from user space, tests
+ * agait exception 0x26 has no walkaround for bf533. Just don't run these
+ * tests on bf533.
+ */
+#define POPULATED_ODD		0x01654321
 #define UNPOPULATED_EVEN	0x87654320
 #define UNPOPULATED_ODD		0x87654321
 
@@ -203,24 +216,24 @@ void illegal_instruction(void)
 /* Data access misaligned address violation -          EXCAUSE 0x24 */
 void data_read_odd_address(void)
 {
-	int *i = (void *)UNPOPULATED_ODD;
+	int *i = (void *)POPULATED_ODD;
 	printf("%i\n", *i);
 }
 
 void data_write_odd_address(void)
 {
-	int *i = (void *)UNPOPULATED_ODD;
+	int *i = (void *)POPULATED_ODD;
 	*i = 0;
 }
 
 void stack_odd_address(void)
 {
-	_bad_stack_set(UNPOPULATED_ODD);
+	_bad_stack_set(POPULATED_ODD);
 }
 
 void stack_push_odd_address(void)
 {
-	bad_stack_push(UNPOPULATED_ODD);
+	bad_stack_push(POPULATED_ODD);
 }
 
 /* Unrecoverable event -                               EXCAUSE 0x25 */
