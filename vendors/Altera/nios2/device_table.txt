@@ -62,7 +62,7 @@
 #/dev/loop	b	640	0	0	7	0	0	1	-
 /dev/ptmx	c	666	0	0	5	2	0	0	-
 /dev/ttyS 	c	755	0	0	4	64	0	1	1
-/dev/ttyJ0	c	755	0	0	232	16	0	0	-
+/dev/ttyJ0	c	755	0	0	204	186	0	0	-
 /dev/ttyUSB	c	664	0	0	188	0	0	1	1
 /dev/psaux	c	640	0	0	10	1	0	0	-
 /dev/rtc0	c	640	0	0	254	0	0	0	-
