@@ -50,13 +50,12 @@
 #include "cgivars.h"
 #include "htmllib.h"
 #include "pflags.h"
-#include "adsp-ppifcd.h"
+#include "bfin_ppi.h"
 
 extern int i2c_write_register(char * , unsigned	char , unsigned	char , unsigned	short );
 extern int i2c_read_register(char *	, unsigned char	, unsigned char	);
 extern int i2c_dump_register(char *	, unsigned char	, unsigned short , unsigned	short );
 extern int i2c_scan_bus(char * );
-int	set_gpio(char *	, char*	);
 void capture(int , char	**,	char **);
 void reset_reg(int , char **, char **);
 void prg_reg(int , char	**,	char **);
@@ -79,10 +78,10 @@ void MI350_init(void);
 #define	HEIGHT			1024
 #endif
 
-#define	MICRON_STANDBY	"/dev/pf8"
-#define	MICRON_TRIGGER	"/dev/pf6"
-#define	MICRON_LED		"/dev/pf11"
-#define	FS3				"/dev/pf3"
+#define	MICRON_STANDBY	(8)
+#define	MICRON_TRIGGER	(6)
+#define	MICRON_LED      (11)
+#define	FS3				(3)
 
 #undef USETRIGGER
 
@@ -247,7 +246,15 @@ for	(i=0; postvars[i]; i+= 2) {
 	}
 }
 
-	set_gpio(MICRON_STANDBY, "0");
+	gpio_export(MICRON_STANDBY);
+	gpio_dir_out(MICRON_STANDBY);
+	gpio_value(MICRON_STANDBY, 0);
+
+	gpio_export(FS3);
+	gpio_dir_out(FS3);
+
+	gpio_export(MICRON_LED);
+	gpio_dir_out(MICRON_LED);
 
 	switch(cgiinfo.cmd)
 	{
@@ -267,7 +274,10 @@ for	(i=0; postvars[i]; i+= 2) {
 		break;
 	}
 
-	set_gpio(MICRON_STANDBY, "1");
+	gpio_value(MICRON_STANDBY, 1);
+	gpio_unexport(MICRON_STANDBY);
+	gpio_unexport(FS3);
+	gpio_unexport(MICRON_LED);
 
   exit(0);
 
@@ -312,11 +322,9 @@ void capture(int form_method, char **getvars, char **postvars)
 	int	fd;
 	char * buffer;
 
-		set_gpio(MICRON_STANDBY, "0");
-		set_gpio(FS3, "0");
-		set_gpio(MICRON_LED, "1");
-		set_gpio(MICRON_TRIGGER, "0");
-
+		gpio_value(MICRON_STANDBY, 0);
+		gpio_value(FS3, 0);
+		gpio_value(MICRON_LED, 1);
 
 
 	/* Allocate	meory for the raw image	and	BMP	Header */
@@ -339,8 +347,12 @@ void capture(int form_method, char **getvars, char **postvars)
 		exit(1);
 	}
 
-	ioctl(fd, CMD_PPI_SET_PIXELS_PER_LINE, WIDTH);
-	ioctl(fd, CMD_PPI_SET_LINES_PER_FRAME, HEIGHT);
+	ioctl(fd, CMD_PPI_CLK_EDGE, CFG_PPI_CLK_EDGE_FALL);
+	ioctl(fd, CMD_PPI_XFR_TYPE, CFG_PPI_XFR_TYPE_NON646);
+	ioctl(fd, CMD_PPI_PORT_CFG, CFG_PPI_PORT_CFG_XSYNC23);
+	ioctl(fd, CMD_PPI_SET_DIMS, CFG_PPI_DIMS_2D);
+	ioctl(fd, CMD_PPI_LINELEN, WIDTH  );
+	ioctl(fd, CMD_PPI_NUMLINES, HEIGHT);
 
 #ifdef USETRIGGER
 	ioctl(fd, CMD_SET_TRIGGER_GPIO,	TRIGGER_PF6);
@@ -380,7 +392,7 @@ void capture(int form_method, char **getvars, char **postvars)
 
 	cleanUp(form_method, getvars, postvars);
 
-	set_gpio(MICRON_LED, "0");
+	gpio_value(MICRON_LED, 0);
 
   return;
 }
@@ -397,30 +409,6 @@ int	WriteIMG (char * buffer, unsigned long lSize)
   free (buffer);
   fclose (pFile);
   return 0;
-}
-
-
-int	set_gpio(char *	flag, char*	value)
-{
-	int	fd0;
-
-	fd0	= open(flag, O_RDWR,0);
-	if (fd0	== -1) {
-		printf("%s open	error %d\n",flag,errno);
-		return -1;
-	}
-
-		ioctl(fd0, SET_FIO_DIR,	OUTPUT);
-		ioctl(fd0, SET_FIO_POLAR, 0);
-		ioctl(fd0, SET_FIO_EDGE, 0);
-		ioctl(fd0, SET_FIO_BOTH, 0);
-		ioctl(fd0, SET_FIO_INEN, 0);
-
-	write(fd0,value,sizeof("0"));
-
-	close(fd0);
-
-	return 0;
 }
 
 #define	OUT_DEC	1		//Converts the number based	on the decimal format

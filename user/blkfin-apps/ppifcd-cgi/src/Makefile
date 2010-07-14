@@ -1,6 +1,6 @@
 
 EXEC = fcd.cgi
-OBJS = fcd.o cgivars.o htmllib.o i2c.o
+OBJS = gpio.o fcd.o cgivars.o htmllib.o i2c.o
 
 #CFLAGS += -g
 
