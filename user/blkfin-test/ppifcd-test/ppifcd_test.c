@@ -241,6 +241,7 @@ void usage(FILE *fp, int rc)
 		"        -r REG         I2C register\n"
 		"        -a VAL         I2C value\n"
 		"        -b             STAMP board < 533 | 537 >\n"
+		"        -p             pack mode < 1 | 0 >\n"
 	);
 	exit(rc);
 }
@@ -261,13 +262,14 @@ int main(int argc, char *argv[])
 	u_short value = 0, usetrigger = 0, sendi2c = 0;
 	struct timeval o, t;
 	long delta, offset;
+	int pack_mode;
 
 	/* Check the passed arg */
 
 	cnt = 1;
 	board = 0;
 
-	while ((c = getopt(argc, argv, "vth?tr:a:c:b:")) > 0) {
+	while ((c = getopt(argc, argv, "vth?tr:a:c:b:p:")) > 0) {
 		switch (c) {
 		case 'v':
 			printf("%s: version %s\n", argv[0], VERSION);
@@ -288,6 +290,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'b':
 			board = atoi(optarg);
+			break;
+		case 'p':
+			pack_mode = atoi(optarg);
 			break;
 		case 'h':
 		case '?':
@@ -381,6 +386,7 @@ int main(int argc, char *argv[])
 	ioctl(fd, CMD_PPI_SET_DIMS, CFG_PPI_DIMS_2D);
 	ioctl(fd, CMD_PPI_LINELEN, WIDTH  );
 	ioctl(fd, CMD_PPI_NUMLINES, HEIGHT);
+	ioctl(fd, CMD_PPI_PACKING, pack_mode);
 #else
 	ioctl(fd, CMD_PPI_SET_PIXELS_PER_LINE, WIDTH);
 	ioctl(fd, CMD_PPI_SET_LINES_PER_FRAME, HEIGHT);
