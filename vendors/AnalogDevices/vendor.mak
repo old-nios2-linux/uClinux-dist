@@ -127,6 +127,13 @@ ifeq ($(CONFIG_RD_LZMA),y)
 image.rootfs.initramfs.lzma: image.rootfs.initramfs.lzma.force
 endif
 
+.PHONY: image.rootfs.initramfs.lzo image.rootfs.initramfs.lzo.force
+image.rootfs.initramfs.lzo.force: image.rootfs.initramfs.force
+	lzop -c -9 $(IMAGE_ROMFS_BASE).initramfs > $(IMAGE_ROMFS_BASE).initramfs.lzo
+ifeq ($(CONFIG_RD_LZO),y)
+image.rootfs.initramfs.lzo: image.rootfs.initramfs.lzo.force
+endif
+
 .PHONY: image.rootfs.jffs2 image.rootfs.jffs2.force
 MKFS_JFFS2_FLAGS ?= -l -p
 image.rootfs.jffs2.force:
@@ -197,6 +204,7 @@ image.rootfs.all: \
 	image.rootfs.initramfs.bz2 \
 	image.rootfs.initramfs.gz \
 	image.rootfs.initramfs.lzma \
+	image.rootfs.initramfs.lzo \
 	image.rootfs.jffs2 \
 	image.rootfs-summary.jffs2 \
 	image.rootfs.romfs \
@@ -341,6 +349,13 @@ ifeq ($(CONFIG_RD_LZMA),y)
 image.zimage.initramfs.lzma: image.zimage.initramfs.lzma.force
 endif
 
+.PHONY: image.zimage.initramfs.lzo image.zimage.initramfs.lzo.force
+image.zimage.initramfs.lzo.force:
+	$(MAKE) image.zimage.initramfs.force COMP_KERN= COMP_ROOTFS=.lzo
+ifeq ($(CONFIG_RD_LZO),y)
+image.zimage.initramfs.lzo: image.zimage.initramfs.lzo.force
+endif
+
 .PHONY: image.uimage.initramfs image.uimage.initramfs.force
 image.uimage.initramfs.force:
 	$(call MAKE_KERNEL_IMAGE,vmImage,uImage)
@@ -366,6 +381,13 @@ ifeq ($(CONFIG_KERNEL_LZMA),y)
 image.uimage.lzma.initramfs: image.uimage.lzma.initramfs.force
 endif
 
+.PHONY: image.uimage.lzo.initramfs image.uimage.lzo.initramfs.force
+image.uimage.lzo.initramfs.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN=.lzo COMP_ROOTFS=
+ifeq ($(CONFIG_KERNEL_LZO),y)
+image.uimage.lzo.initramfs: image.uimage.lzo.initramfs.force
+endif
+
 .PHONY: image.uimage.initramfs.bz2 image.uimage.initramfs.bz2.force
 image.uimage.initramfs.bz2.force:
 	$(MAKE) image.uimage.initramfs.force COMP_KERN= COMP_ROOTFS=.bz2
@@ -385,6 +407,13 @@ image.uimage.initramfs.lzma.force:
 	$(MAKE) image.uimage.initramfs.force COMP_KERN= COMP_ROOTFS=.lzma
 ifeq ($(CONFIG_RD_LZMA),y)
 image.uimage.initramfs.lzma: image.uimage.initramfs.lzma.force
+endif
+
+.PHONY: image.uimage.initramfs.lzo image.uimage.initramfs.lzo.force
+image.uimage.initramfs.lzo.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN= COMP_ROOTFS=.lzo
+ifeq ($(CONFIG_RD_LZO),y)
+image.uimage.initramfs.lzo: image.uimage.initramfs.lzo.force
 endif
 
 .PHONY: image.uimage.romfs image.uimage.romfs.force
@@ -429,12 +458,14 @@ image.uimage.all: \
 	image.uimage.initramfs \
 	image.uimage.bz2.initramfs \
 	image.uimage.gz.initramfs \
-	image.uimage.lzma.initramfs
+	image.uimage.lzma.initramfs \
+	image.uimage.lzo.initramfs
 image.zimage.all: \
 	image.zimage.initramfs \
 	image.zimage.initramfs.bz2 \
 	image.zimage.initramfs.gz \
-	image.zimage.initramfs.lzma
+	image.zimage.initramfs.lzma \
+	image.zimage.initramfs.lzo
 endif
 endif
 
