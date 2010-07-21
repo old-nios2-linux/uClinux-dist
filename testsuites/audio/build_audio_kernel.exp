@@ -108,6 +108,14 @@ while 1 {
             }
         }
 
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            if { $audio_dev == "audio_ssm2603" } {
+                send "N\r"
+            } else {
+                send "\r"
+            }
+        }
+
 #sound card
         -re "Sound card support.*SOUND.*\\\[.*]" {
             send "Y\r"
