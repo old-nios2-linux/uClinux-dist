@@ -5,6 +5,7 @@
  * Author:	Roy Huang <roy.huang@analog.com>
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <malloc.h>
 #include <unistd.h>
@@ -18,12 +19,26 @@
 #include "bfin_sport.h"
 #include "ad73311.h"
 
-#define SPORT "/dev/sport0"
+static int sport_fd, data_fd;
 
-int transmit = 1;
-int omode = O_RDWR;
-int sport = 0;
-int count = 10 * 2 * 8000; /* Only record 10 second */
+static const char *argv0;
+#define warn(fmt, args...) \
+	fprintf(stderr, "%s: " fmt "\n", argv0 , ## args)
+#define warnf(fmt, args...) warn("%s(): " fmt, __func__ , ## args)
+#define warnp(fmt, args...) warn(fmt ": %s" , ## args , strerror(errno))
+#define _err(wfunc, fmt, args...) \
+	do { \
+		wfunc(fmt, ## args); \
+		close(sport_fd); \
+		close(data_fd); \
+		exit(EXIT_FAILURE); \
+	} while (0)
+#define err(fmt, args...) _err(warn, fmt, ## args)
+#define errf(fmt, args...) _err(warnf, fmt, ## args)
+#define errp(fmt, args...) _err(warnp, fmt , ## args)
+
+#define DEFAULT_SPORT "/dev/sport0"
+#define DEFAULT_GPIO  "/dev/gpio4"
 
 /* Definitions for Microsoft WAVE format */
 #define RIFF		0x46464952
@@ -82,7 +97,7 @@ static void fill_waveheader(int fd, int cnt)
 	wh.sub_chunk  = FMT;
 	wh.sc_len     = 16;
 	wh.format     = PCM_CODE;
-	wh.modus      =  1;
+	wh.modus      = 1;
 	wh.sample_fq  = 8000;
 	wh.byte_p_spl = 2;
 	wh.byte_p_sec = 8000 * 1 * 2;
@@ -92,22 +107,39 @@ static void fill_waveheader(int fd, int cnt)
 	write(fd, &wh, sizeof(wh));
 }
 
+static void usage(int status)
+{
+	fprintf(status ? stderr : stdout,
+		"Usage: sport_test [options] <filename>\n"
+		"\n"
+		"Options:\n"
+		"  -r          Read from SPORT and write to <filename>\n"
+		"  -t          Write to sport and read from <filename> (default)\n"
+		"  -s <sport>  Use <sport> rather than default %s\n"
+		"  -g <gpio>   Use <gpio> rather than default %s\n"
+		"              (for enabling AD73311)\n",
+		DEFAULT_SPORT, DEFAULT_GPIO
+	);
+	exit(status);
+}
+
 int main(int argc, char *argv[])
 {
-	int fd;
-	char *filename, c;
-	char *button = "/dev/gpio4";
+	int transmit, c;
+	char *gpio_path, *sport_path, *data_path;
 	FILE *fp;
 	unsigned short ctrl_regs[6];
 	struct sport_config config;
-	unsigned char *buffer = NULL;
+	unsigned char *buffer;
+	int count = 10 * 2 * 8000; /* Only record 10 second */
 
-	if (argc < 3) {
-		fprintf(stderr, "Usage: sport_test -r or -t filename\n");
-		return -1;
-	}
+	argv0 = argv[0];
 
-	while ((c = getopt(argc, argv, "rt")) != EOF)
+	gpio_path = DEFAULT_GPIO;
+	sport_path = DEFAULT_SPORT;
+	transmit = 1;	/* default to writing data to sport */
+
+	while ((c = getopt(argc, argv, "hrts:g:")) != EOF)
 		switch (c) {
 		case 'r':
 			transmit = 0;
@@ -115,61 +147,52 @@ int main(int argc, char *argv[])
 		case 't':
 			transmit = 1;
 			break;
+		case 's':
+			sport_path = optarg;
+			break;
+		case 'g':
+			gpio_path = optarg;
+			break;
+		case 'h':
+			usage(0);
 		default:
-			fprintf(stderr, "Usage: sport_test -r or -t filename\n");
-			exit(-1);
+			usage(1);
 		}
 
-	filename = argv[optind];
+	if (optind + 1 != argc)
+		usage(1);
+	data_path = argv[optind];
 
-	sport = open(SPORT, omode, 0);
-	if (sport < 0) {
-		fprintf(stderr, "Failed to open " SPORT);
-		exit(-1);
-	}
+	sport_fd = open(sport_path, O_RDWR, 0);
+	if (sport_fd < 0)
+		errp("failed to open %s\n", sport_path);
 
-	if ((buffer = malloc(BUF_LEN))  == NULL) {
-		perror("Failed to allocate memory\n");
-		close(sport);
-		return -1;
-	}
+	if ((buffer = malloc(BUF_LEN)) == NULL)
+		errp("malloc() failed");
 
 	if (transmit == 1) { /* Test and read wave data file */
-		if ((fd = open(filename, O_RDONLY, 0)) < 0) {
-			perror(filename);
-			close(sport);
-			return -1;
-		}
-		if (read(fd, buffer, sizeof(struct wave_header)) < 0) {
-			perror(filename);
-			close(sport);
-			free(buffer);
-			return -1;
-		}
-		if (test_wavefile(buffer) < 0) {
-			close(sport);
-			free(buffer);
-			return -1;
-		}
+		if ((data_fd = open(data_path, O_RDONLY, 0)) < 0)
+			errp("opening data file '%s' failed", data_path);
+		if (read(data_fd, buffer, sizeof(struct wave_header)) < 0)
+			errp("reading wave_header from '%s' failed", data_path);
+		if (test_wavefile(buffer) < 0)
+			err("file '%s' doesn't seem to contain a wave file", data_path);
 	} else {
 		/* Open the file for write data */
-		if ((fd = open(filename, O_WRONLY | O_CREAT , O_TRUNC)) <0) {
-			fprintf(stderr, "Failed to open %s\n", filename);
-			close(sport);
-			return -1;
-		}
+		if ((data_fd = open(data_path, O_WRONLY | O_CREAT, O_TRUNC)) < 0)
+			errp("opening data file '%s' failed", data_path);
 		/* Write the head of the wave file */
-		fill_waveheader(fd, count);
+		fill_waveheader(data_fd, count);
 	}
 
-	fp = fopen(button, "w+");
+	fp = fopen(gpio_path, "w+");
 	if (!fp)
-		printf("unable to open specified device '%s'", button);
+		errp("unable to open GPIO '%s'", gpio_path);
 	/* set it to Output mode */
 	if (fwrite("O", 1, 1, fp) != 1)
-		printf("unable to set to output mode");
+		errp("unable to set GPIO '%s' to output", gpio_path);
 	if (fwrite("1", 1, 1, fp) != 1)
-		printf("unable to set to 1 value");
+		errp("unable to set GPIO '%s' high", gpio_path);
 	fclose(fp);
 
 	/* Set registers on AD73311L through SPORT.  */
@@ -210,52 +233,32 @@ int main(int argc, char *argv[])
 	config.dma_enabled = 1;
 
 	/* Configure sport controller by ioctl */
-	if (ioctl(sport, SPORT_IOC_CONFIG, &config) < 0) {
-		fprintf(stderr, "failed to config sport\n");
-		free(buffer);
-		close(sport);
-		close(fd);
-		return -1;
-	}
+	if (ioctl(sport_fd, SPORT_IOC_CONFIG, &config) < 0)
+		errp("ioctl('%s', SPORT_IOC_CONFIG) failed", sport_path);
+
 	/* Write control data to ad73311's control register by write operation*/
-	if (write(sport, (char*)ctrl_regs, 12) < 0) {
-		perror("Failed write ctrl regs\n");
-		free(buffer);
-		close(sport);
-		close(fd);
-		return -1;
-	}
+	if (write(sport_fd, (char *)ctrl_regs, 12) < 0)
+		errp("setting up sport ctrl regs failed");
 
 	if (transmit == 1) {
 		/* Write data into sport device through write operation */
-		while (read(fd, buffer, BUF_LEN) > 0 ) {
-			if (write(sport, buffer, BUF_LEN) != BUF_LEN) {
-				perror(SPORT);
-				free(buffer);
-				close(sport);
-				close(fd);
-				return -1;
-			}
-		}
+		while (read(data_fd, buffer, BUF_LEN) > 0)
+			if (write(sport_fd, buffer, BUF_LEN) != BUF_LEN)
+				errp("writing to sport failed");
 	} else {
 		int left = count, temp1, temp2;
 		/* Read data from sport and write it into file */
 		while (left > 0) {
-			temp1 = left > BUF_LEN? BUF_LEN: left;
-			if ((temp2 = read(sport, buffer, temp1))<0) {
-				perror(SPORT);
-				free(buffer);
-				close(sport);
-				close(fd);
-				return -1;
-			}
-			write(fd, buffer, temp1);
+			temp1 = left > BUF_LEN ? BUF_LEN : left;
+			if ((temp2 = read(sport_fd, buffer, temp1)) < 0)
+				errp("reading from sport failed");
+			write(data_fd, buffer, temp1);
 			left -= temp2;
 		}
 	}
 
-	close(sport);
-	close(fd);
+	close(sport_fd);
+	close(data_fd);
 	free(buffer);
 
 	return 0;
