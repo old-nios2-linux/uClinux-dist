@@ -1,4 +1,4 @@
-/****************************************************************************** 
+/******************************************************************************
  * Filename:	sport_test.c - test sport driver
  * Description:	This program write data to ad73311 audio card through
  * 		 interface /dev/sport.
@@ -46,24 +46,24 @@ struct wave_header {
 	u_long	sample_fq;	/* frequence of sample */
 	u_long	byte_p_sec;
 	u_short	byte_p_spl;	/* samplesize; 1 or 2 bytes */
-	u_short	bit_p_spl;	/* 8, 12 or 16 bit */ 
+	u_short	bit_p_spl;	/* 8, 12 or 16 bit */
 
 	u_long	data_chunk;	/* 'data' */
 	u_long	data_length;	/* samplecount */
 };
 
-int test_wavefile (void *buffer)
+int test_wavefile(void *buffer)
 {
 	struct wave_header *wp = buffer;
 	if (wp->main_chunk == RIFF && wp->chunk_type == WAVE &&
 			wp->sub_chunk == FMT && wp->data_chunk == DATA) {
 		if (wp->format != PCM_CODE) {
-			fprintf (stderr, "Can't play non-pcm-coded wave\n");
+			fprintf(stderr, "Can't play non-pcm-coded wave\n");
 			return -1;
 		}
 
 		if (wp->modus != WAVE_MONO) {
-			fprintf (stderr, "Can only play mono wave file\n");
+			fprintf(stderr, "Can only play mono wave file\n");
 			return -1;
 		}
 	}
@@ -77,7 +77,7 @@ static void fill_waveheader(int fd, int cnt)
 	struct wave_header wh;
 
 	wh.main_chunk = RIFF;
-	wh.length     = cnt + sizeof(wh) - 8; 
+	wh.length     = cnt + sizeof(wh) - 8;
 	wh.chunk_type = WAVE;
 	wh.sub_chunk  = FMT;
 	wh.sc_len     = 16;
@@ -89,25 +89,25 @@ static void fill_waveheader(int fd, int cnt)
 	wh.bit_p_spl  = 16;
 	wh.data_chunk = DATA;
 	wh.data_length= cnt;
-	write (fd, &wh, sizeof(wh));
+	write(fd, &wh, sizeof(wh));
 }
 
-int main (int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int fd;
 	char *filename, c;
-        char *button="/dev/gpio4";
-        FILE *fp;
+	char *button = "/dev/gpio4";
+	FILE *fp;
 	unsigned short ctrl_regs[6];
 	struct sport_config config;
 	unsigned char *buffer = NULL;
 
 	if (argc < 3) {
-		fprintf (stderr, "Usage: sport_test -r or -t filename\n");
+		fprintf(stderr, "Usage: sport_test -r or -t filename\n");
 		return -1;
 	}
 
-	while ((c = getopt (argc, argv, "rt")) != EOF)
+	while ((c = getopt(argc, argv, "rt")) != EOF)
 		switch (c) {
 		case 'r':
 			transmit = 0;
@@ -116,31 +116,31 @@ int main (int argc, char *argv[])
 			transmit = 1;
 			break;
 		default:
-			fprintf (stderr, "Usage: sport_test -r or -t filename\n");
-			exit (-1);
+			fprintf(stderr, "Usage: sport_test -r or -t filename\n");
+			exit(-1);
 		}
 
 	filename = argv[optind];
 
-	sport = open (SPORT, omode, 0);
+	sport = open(SPORT, omode, 0);
 	if (sport < 0) {
-		fprintf (stderr, "Failed to open " SPORT);
-		exit (-1);
+		fprintf(stderr, "Failed to open " SPORT);
+		exit(-1);
 	}
 
 	if ((buffer = malloc(BUF_LEN))  == NULL) {
-		perror ("Failed to allocate memory\n");
-		close (sport);
+		perror("Failed to allocate memory\n");
+		close(sport);
 		return -1;
 	}
 
 	if (transmit == 1) { /* Test and read wave data file */
-		if ( (fd = open (filename, O_RDONLY, 0)) < 0) {
-			perror (filename);
-			close (sport);
+		if ((fd = open(filename, O_RDONLY, 0)) < 0) {
+			perror(filename);
+			close(sport);
 			return -1;
 		}
-		if (read (fd, buffer, sizeof(struct wave_header)) < 0) {
+		if (read(fd, buffer, sizeof(struct wave_header)) < 0) {
 			perror(filename);
 			close(sport);
 			free(buffer);
@@ -153,33 +153,24 @@ int main (int argc, char *argv[])
 		}
 	} else {
 		/* Open the file for write data */
-		if ( (fd = open (filename, O_WRONLY | O_CREAT , O_TRUNC)) <0) {
+		if ((fd = open(filename, O_WRONLY | O_CREAT , O_TRUNC)) <0) {
 			fprintf(stderr, "Failed to open %s\n", filename);
-			close (sport);
+			close(sport);
 			return -1;
 		}
 		/* Write the head of the wave file */
 		fill_waveheader(fd, count);
 	}
-  
-        fp = fopen(button, "w+");
-        if (!fp)
-                printf("unable to open specified device '%s'", button);
-       /* set it to Output mode */
-        if (fwrite("O", 1, 1, fp) != 1)
-                printf("unable to set to output mode");
-        if (fwrite("1", 1, 1, fp) != 1)
-                printf("unable to set to 1 value");
 
-
-	/* IOCTL to enable ad73311 
-	if (ioctl (sport, ENABLE_AD73311, 1) < 0) {
-		fprintf(stderr, "failed to enable ad73311 \n");
-		close (sport);
-		return -1;
-	}
-	*/
-         fclose(fp);
+	fp = fopen(button, "w+");
+	if (!fp)
+		printf("unable to open specified device '%s'", button);
+	/* set it to Output mode */
+	if (fwrite("O", 1, 1, fp) != 1)
+		printf("unable to set to output mode");
+	if (fwrite("1", 1, 1, fp) != 1)
+		printf("unable to set to 1 value");
+	fclose(fp);
 
 	/* Set registers on AD73311L through SPORT.  */
 #if 0
@@ -213,13 +204,13 @@ int main (int argc, char *argv[])
 			ctrl_regs[3], ctrl_regs[4], ctrl_regs[5]);
 #endif
 
-	memset(&config, 0, sizeof (struct sport_config));
+	memset(&config, 0, sizeof(struct sport_config));
 	config.fsync = 1;
 	config.word_len = 16;
 	config.dma_enabled = 1;
 
 	/* Configure sport controller by ioctl */
-	if (ioctl (sport, SPORT_IOC_CONFIG, &config) < 0) {
+	if (ioctl(sport, SPORT_IOC_CONFIG, &config) < 0) {
 		fprintf(stderr, "failed to config sport\n");
 		free(buffer);
 		close(sport);
@@ -227,7 +218,7 @@ int main (int argc, char *argv[])
 		return -1;
 	}
 	/* Write control data to ad73311's control register by write operation*/
-	if (write (sport, (char*)ctrl_regs, 12) < 0) {
+	if (write(sport, (char*)ctrl_regs, 12) < 0) {
 		perror("Failed write ctrl regs\n");
 		free(buffer);
 		close(sport);
@@ -235,24 +226,24 @@ int main (int argc, char *argv[])
 		return -1;
 	}
 
-	if (transmit == 1)
+	if (transmit == 1) {
 		/* Write data into sport device through write operation */
 		while (read(fd, buffer, BUF_LEN) > 0 ) {
-			if (write (sport, buffer, BUF_LEN) != BUF_LEN) {
-				perror (SPORT);
+			if (write(sport, buffer, BUF_LEN) != BUF_LEN) {
+				perror(SPORT);
 				free(buffer);
 				close(sport);
 				close(fd);
 				return -1;
 			}
 		}
-	else {
+	} else {
 		int left = count, temp1, temp2;
 		/* Read data from sport and write it into file */
 		while (left > 0) {
 			temp1 = left > BUF_LEN? BUF_LEN: left;
-			if ((temp2 = read (sport, buffer, temp1))<0) {
-				perror (SPORT);
+			if ((temp2 = read(sport, buffer, temp1))<0) {
+				perror(SPORT);
 				free(buffer);
 				close(sport);
 				close(fd);
@@ -263,11 +254,8 @@ int main (int argc, char *argv[])
 		}
 	}
 
-	/* IOCTL to disable ad73311 */
-	ioctl (sport, ENABLE_AD73311, 0);
-
-	close (sport);
-	close (fd);
+	close(sport);
+	close(fd);
 	free(buffer);
 
 	return 0;

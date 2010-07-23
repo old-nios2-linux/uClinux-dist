@@ -1,15 +1,11 @@
-EXEC = sport_test
-OBJS = sport_test.o
+CFLAGS ?= -O2 -pipe
+CFLAGS += -Wall
 
-all: $(EXEC)
-
-$(EXEC): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS$(LDLIBS_$@))
+all: sport_test
 
 romfs:
-	$(ROMFSINST) /bin/$(EXEC)
+	$(ROMFSINST) /bin/sport_test
 	$(ROMFSINST) /sample.wav
 
 clean:
-	-rm -f $(EXEC) *.elf *.gdb *.o
- 
+	rm -f sport_test *.elf *.gdb *.o

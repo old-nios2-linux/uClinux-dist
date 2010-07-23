@@ -4,7 +4,7 @@
  * Author:       Roy Huang (roy.huang@analog.com)
  *
  * Created:      Thu Aug. 24 2006
- * Description:  
+ * Description:
  *
  * Rev:          $Id$
  *
@@ -56,7 +56,7 @@ struct sport_config {
 
 	/* I2S mode */
 	unsigned int right_first:1; /* Right stereo channel first */
-	
+
 	/* In mormal mode, the following item need to be set */
 	unsigned int  lsb_first:1; /* order of transmit or receive data */
 	unsigned int fsync:1; /* Frame sync required */
