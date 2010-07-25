@@ -38,7 +38,11 @@ ifeq ($(CONFIG_INSTALL_ELF_SHARED_LIBS),y)
 	for i in $$t/lib/*so*; do \
 		i=`readlink -f "$$i"`; \
 		soname=`$(CROSS_COMPILE_SHARED_ELF)readelf -d "$$i" | sed -n '/(SONAME)/s:.*[[]\(.*\)[]].*:\1:p'`; \
-		$(ROMFSINST) -d -p 755 $$i /lib/$$soname; \
+		case $${i##*/} in \
+			libthread_db*) opts="-S";; \
+			*) opts="";; \
+		esac; \
+		$(ROMFSINST) $$opts -d -p 755 $$i /lib/$$soname; \
 	done; \
 	if [ "$(CONFIG_INSTALL_ELF_TRIM_LIBS)" = "y" ] ; then \
 		$(ROOTDIR)/vendors/AnalogDevices/trim-libs.sh; \
