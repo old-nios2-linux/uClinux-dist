@@ -104,6 +104,8 @@ endmenu
 
 menu "Blackfin app programs"
 
+config SIGMA_FIRMWARE_UTIL
+	bool "Gen soundcard with SigmalDSP 's(eg.adau1761) firmware file"
 config USER_EDN_BENCH
 	bool "EDN's DSP benchmark"
 config USER_LMBENCH

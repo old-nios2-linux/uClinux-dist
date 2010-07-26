@@ -1,7 +1,7 @@
 dir_y =
 dir_n =
 dir_  =
-
+dir_$(CONFIG_SIGMA_FIRMWARE_UTIL)                += sigma-firmware-util
 dir_$(CONFIG_USER_BLACKFIN_PPIFCDCGI)            += ppifcd-cgi
 dir_$(CONFIG_USER_BLKFIN_APPS_DEVFBAPP_DEVTEST)  += devfbapp
 dir_$(CONFIG_USER_INETUTILS)                     += inetutils
