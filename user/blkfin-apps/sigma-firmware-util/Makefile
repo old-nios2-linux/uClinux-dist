@@ -11,5 +11,5 @@ romfs:
 clean:
 	-rm -f $(EXEC) *.elf *.gdb *.o gen_firmware
 
-gen_firmware : gen_firmware.c
-	gcc ./gen_firmware.c -o gen_firmware
+gen_firmware: gen_firmware.c
+	gcc -Wall -O2 -g -o $@ $<

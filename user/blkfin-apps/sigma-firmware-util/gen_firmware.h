@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 #define SIGMA_MAGIC "ADISIGM"
 #define ADAU_PROGRAM    0x0800
 #define ADAU_PARAMS     0x0000
@@ -5,9 +7,9 @@
 #define MAX_LEN (4096)
 #define OUTPUT_FILE "adau1761.bin"
 
-typedef unsigned short     u16;
-typedef unsigned char	   u8;
-typedef unsigned int	   u32;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
 
 struct sigma_firmware_header {
 	unsigned char magic[7];
@@ -32,4 +34,3 @@ struct sigma_action {
 	u16 addr;
 	unsigned char payload[];
 };
-

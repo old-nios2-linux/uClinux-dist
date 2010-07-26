@@ -2,11 +2,11 @@
  * This file is for generate the firmware for sigma
  * author: Bob.liu@analog.com
  */
-#include <unistd.h>  
-#include <stdio.h>  
-#include <sys/stat.h>  
-#include <fcntl.h>  
-#include <stdlib.h> 
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "gen_firmware.h"
@@ -50,9 +50,9 @@ int main(int argc, char **argv)
 	u32 param_size;
 	u32 program_size;
 
-	if(get_prog() < 0) 
+	if(get_prog() < 0)
 		return -1;
-	if(get_param() < 0) 
+	if(get_param() < 0)
 		return -1;
 
 	param_size = sizeof(struct sigma_action) + sigma_param_size + (sigma_param_size % 2);
@@ -93,7 +93,7 @@ int main(int argc, char **argv)
 		printf("create file error\n");
 		return -1;
 	}
-	
+
 	write(fd, &head, sizeof(head));
 	write(fd, sa_program, program_size);
 	write(fd, sa_param, param_size);
