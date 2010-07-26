@@ -1,6 +1,8 @@
 EXEC = adau1761.bin
 
-all: $(EXEC)
+HELPERS = read_firmware gen_firmware
+
+all: $(EXEC) $(HELPERS)
 
 $(EXEC): gen_firmware
 	./gen_firmware
@@ -9,7 +11,12 @@ romfs:
 	$(ROMFSINST) -d /lib/firmware/$(EXEC)
 
 clean:
-	-rm -f $(EXEC) *.elf *.gdb *.o gen_firmware
+	-rm -f $(EXEC) *.elf *.gdb *.o $(HELPERS)
 
-gen_firmware: gen_firmware.c
-	gcc -Wall -O2 -g -o $@ $<
+BUILD_CC ?= gcc
+BUILD_CFLAGS ?= -O2 -g
+BUILD_CFLAGS += -Wall
+BUILD_COMPILE = $(BUILD_CC) $(BUILD_CFLAGS) $(BUILD_LDFLAGS) -o $@ $<
+
+gen_firmware: gen_firmware.c ; $(BUILD_COMPILE)
+read_firmware: read_firmware.c ; $(BUILD_COMPILE)
