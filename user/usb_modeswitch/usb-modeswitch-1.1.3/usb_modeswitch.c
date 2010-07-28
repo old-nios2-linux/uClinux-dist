@@ -658,8 +658,10 @@ int deviceInquire ()
 
 out:
 	if (strlen(MessageContent) == 0)
+	{
 		usb_clear_halt(devh, MessageEndpoint);
 		usb_release_interface(devh, Interface);
+	}
 	free(command);
 	return ret;
 }
