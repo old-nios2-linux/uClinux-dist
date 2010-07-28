@@ -28,6 +28,7 @@ dir_$(CONFIG_USER_PICOCOM)                  += picocom
 dir_$(CONFIG_USER_PICTUREFLOW)              += pictureflow
 dir_$(CONFIG_USER_SERCD)                    += sercd
 dir_$(CONFIG_USER_UBOOT_TOOLS)              += u-boot-tools
+dir_$(CONFIG_USER_USB_MODESWITCH)           += usb_modeswitch
 dir_$(CONFIG_USER_USBUTILS)                 += usbutils
 dir_$(CONFIG_USER_VLC)                      += vlc
 

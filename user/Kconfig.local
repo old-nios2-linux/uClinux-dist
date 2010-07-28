@@ -320,6 +320,13 @@ config USER_LOWPANTOOLS
 	  The LoWPAN stack aims for IEEE 802.15.4-2003 (and for lesser extent
 	  IEEE 802.15.4-2006) compatibility.
 	  If you want to learn more, please go to http://linux-zigbee.sf.net/
+
+config USER_USB_MODESWITCH
+	bool "usb_modeswitch"
+	select LIB_LIBUSB
+	help
+	  Helper utility to switch the modes of random USB devices.
+	  http://www.draisberghof.de/usb_modeswitch/
 endmenu
 
 
