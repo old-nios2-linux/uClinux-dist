@@ -60,7 +60,7 @@ if { $where_are_we == "uboot" } {
 
 while 1 {
     expect {
-        -re "RAM: +(\[0-9]+) MB" {
+        -re "RAM: +(\[0-9]+) Mi?B" {
             set ram_size $expect_out(1,string)
             send_user "\nRAM size is $ram_size MB. \n"
         }
