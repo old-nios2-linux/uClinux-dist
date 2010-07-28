@@ -85,6 +85,22 @@ sleep 5
 send "\r"
 expect -re $kernel_prompt
 
+#[#6113]ping host PC so IP/MAC of target board is stored in host route table
+set timeout 20
+incr case_num
+send "ping -c 5 $serverip\r"
+while 1 {
+    expect {
+        -re "5 packets received.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
 set timeout 5
 incr case_num
 send "ethtool -s eth0 wol g\r"
