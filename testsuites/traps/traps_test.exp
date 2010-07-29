@@ -84,6 +84,18 @@ if { $smp_flag == 1 } {
                 incr passed_case_number -1
                 continue
             }
+            -re "Running test 54 for exception 0x26: Data Read CPLB miss\r\n\.\.\. FAIL" {
+                if { [string match "BF533-*" $board_type] } {
+                    incr passed_case_number -1
+                }
+                continue
+            }
+            -re "Running test 56 for exception 0x26: Stack CPLB miss\r\n\.\.\. FAIL" {
+                if { [string match "BF533-*" $board_type] } {
+                    incr passed_case_number -1
+                }
+                continue
+            }
             -re "$passed_case_number/$total_case_number tests passed.*$kernel_prompt" {
                 case_pass $case_num
                 break
@@ -106,6 +118,18 @@ if { $smp_flag == 1 } {
                 incr passed_case_number -1
                 continue
             }
+            -re "Running test 54 for exception 0x26: Data Read CPLB miss\r\n\.\.\. FAIL" {
+                if { [string match "BF533-*" $board_type] } {
+                    incr passed_case_number -1
+                }
+                continue
+            }
+            -re "Running test 56 for exception 0x26: Stack CPLB miss\r\n\.\.\. FAIL" {
+                if { [string match "BF533-*" $board_type] } {
+                    incr passed_case_number -1
+                }
+                continue
+            }
             -re "$passed_case_number/$total_case_number tests passed.*$kernel_prompt" {
                 case_pass $case_num
                 break
@@ -126,6 +150,18 @@ if { $smp_flag == 1 } {
             }
             -re "Running test 21 for exception 0x00: prefetch _l1_non\r\n\.\.\. FAIL" {
                 incr passed_case_number -1
+                continue
+            }
+            -re "Running test 54 for exception 0x26: Data Read CPLB miss\r\n\.\.\. FAIL" {
+                if { [string match "BF533-*" $board_type] } {
+                    incr passed_case_number -1
+                }
+                continue
+            }
+            -re "Running test 56 for exception 0x26: Stack CPLB miss\r\n\.\.\. FAIL" {
+                if { [string match "BF533-*" $board_type] } {
+                    incr passed_case_number -1
+                }
                 continue
             }
             -re "$passed_case_number/$total_case_number tests passed.*$kernel_prompt" {
