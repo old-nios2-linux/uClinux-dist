@@ -71,6 +71,13 @@ while 1 {
             send "Y\r"
         }
 
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            #LQ035Q1 conflicts with ssm2603
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "N\r"
+            }
+        }
+
         -re "Sound card support.*SOUND.*\\\[.*]" {
             send "Y\r"
         }

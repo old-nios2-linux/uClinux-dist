@@ -5,7 +5,7 @@
 #
 
 source ../kernel_config.exp
-source  ../board_info.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -19,7 +19,7 @@ if { $argc < 2} {
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 
@@ -119,7 +119,7 @@ while 1 {
         -re "Disable DMA.*always use PIO.*MUSB_PIO_ONLY.*\\\[.*]" {
 	    if { $musb_mode == "pio" } {
                 send "Y\r"
-	    } elseif { $musb_mode == "dma" }  {
+	    } elseif { $musb_mode == "dma" } {
                 send "N\r"
 	    } else {
                 send "\r"
@@ -181,6 +181,13 @@ while 1 {
             send "Y\r"
         }
 
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            #LQ035Q1 conflicts with ssm2603
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "N\r"
+            }
+        }
+
         -re "Sound card support.*SOUND.*\\\[.*]" {
             send "Y\r"
         }
@@ -221,6 +228,14 @@ while 1 {
             send "N\r"
         }
 
+        -re "Set a SPORT for Sound chip.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
+            if { [string match "BF527-EZKIT*" $board_type] } {
+                send "1\r"
+            } else {
+                send "0\r"
+            }
+        }
+
         -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
             send "2\r"
         }
@@ -251,16 +266,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
