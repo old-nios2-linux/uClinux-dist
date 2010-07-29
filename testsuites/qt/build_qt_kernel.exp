@@ -6,8 +6,8 @@
 #
 
 source ../kernel_config.exp
-source  ../board_info.exp
-source  config.exp
+source ../board_info.exp
+source config.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -45,7 +45,6 @@ spawn make config
 #In fact we can also directly use kernels for LCD/ADV7393 test to test QT.
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -105,7 +104,15 @@ while 1 {
         }
 
         -re "Varitronix COG-T350MCQB TFT LCD display.*FB_BFIN_T350MCQB.*\\\[.*]" {
-            if { [string match "BF527-EZKIT*" $board_type] } {
+            if { $board_type == "BF527-EZKIT" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT-V2" } {
                 send "M\r"
             } else {
                 send "N\r"
@@ -240,7 +247,7 @@ while 1 {
         }
 
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -261,16 +268,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
