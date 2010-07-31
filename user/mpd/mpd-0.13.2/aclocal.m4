@@ -7285,6 +7285,7 @@ AC_ARG_WITH(ao-includes,[  --with-ao-includes=DIR   Directory where libao header
 AC_ARG_ENABLE(aotest, [  --disable-aotest       Do not try to compile and run a test ao program],, enable_aotest=yes)
 
 
+if test "x$with_ao" = "xyes" ; then
   if test "x$ao_libraries" != "x" ; then
     AO_LIBS="-L$ao_libraries"
   elif test "x$ao_prefix" != "x"; then
@@ -7300,6 +7301,7 @@ AC_ARG_ENABLE(aotest, [  --disable-aotest       Do not try to compile and run a 
   elif test "x$prefix" != "xNONE"; then
     AO_CFLAGS="-I$prefix/include"
   fi
+fi
 
   # see where dl* and friends live
   AC_CHECK_FUNCS(dlopen, [AO_DL_LIBS=""], [

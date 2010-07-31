@@ -22260,6 +22260,7 @@ fi
 
 
 
+if test "x$with_ao" = "xyes" ; then
   if test "x$ao_libraries" != "x" ; then
     AO_LIBS="-L$ao_libraries"
   elif test "x$ao_prefix" != "x"; then
@@ -22275,6 +22276,7 @@ fi
   elif test "x$prefix" != "xNONE"; then
     AO_CFLAGS="-I$prefix/include"
   fi
+fi
 
   # see where dl* and friends live
 
