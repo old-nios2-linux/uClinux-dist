@@ -58,7 +58,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "HCI USB driver.*BT_HCIUSB.*\\\[.*]" {
+        -re "HCI USB driver.*BT_HCIBTUSB.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -67,7 +67,7 @@ while 1 {
         }
 
 #Bellow is the config for USB host driver
-        -re "CFI Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
+        -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
             #CONFIG_MTD_PHYSMAP claims the entire Async. Memory Space
             #need to entirely disable it while using various U-Connector boards
             send "N\r"
