@@ -5,23 +5,18 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
-set TEST_PASS pass
-set TEST_FAIL fail
-
-step "Start kermit."
+step "Spawn kermit"
 source ../spawn_kermit.exp
 
 step "Reboot the kernel."
 source ../reboot_kernel.exp
 
-send_log "*********************************\r"
-send_log "Start $TITLE\r"
-send_log "*********************************\r"
+step "Start testing"
 set timeout 120
 set case_num 0
 
 incr case_num
-send "dmesg\r"
+send "dmesg|grep sd\r"
 while 1 {
     expect {
         "sda: sda1" {
@@ -130,6 +125,7 @@ while 1 {
     }
 }
 
+sleep 5
 incr case_num
 send "mke2fs /dev/sda1\r"
 while 1 {
@@ -207,13 +203,13 @@ while 1 {
         }
 
         -re "$kernel_prompt" {
-                                if { $filesystems == 2 } {
-                                    send_log "The two fs -- vfat and msdos are found!\n"
-                                    case_pass $case_num
-                                } else {
-                                    send_log "Not both of the vfat and msdos are found!\n"
-                                    case_fail $case_num
-                                }
+            if { $filesystems == 2 } {
+                send_log "The two fs -- vfat and msdos are found!\n"
+                case_pass $case_num
+            } else {
+                send_log "Not both of the vfat and msdos are found!\n"
+                case_fail $case_num
+            }
             break
         }
 
@@ -359,8 +355,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
 log_file
