@@ -1,7 +1,7 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source  ../board_info.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -9,7 +9,7 @@ set env(EXT2_BLOCKS) "12288"
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 cd $uclinux_path
@@ -49,12 +49,11 @@ while 1 {
         -re "16-bit PCMCIA support.*PCMCIA.*\\\[.*]" {
             send "Y\r"
         }
+
         -re "Load CIS updates from userspace.*PCMCIA_LOAD_CIS.*\\\[.*]" {
             send "Y\r"
         }
-        -re "PCMCIA control ioctl.*PCMCIA_IOCTL.*\\\[.*]" {
-            send "Y\r"
-        }
+
         -re "Blackfin CompactFlash PCMCIA Driver.*BFIN_CFPCMCIA.*\\\[.*]" {
             send "Y\r"
         }
@@ -62,6 +61,7 @@ while 1 {
         -re "Bank 2.*\\\(BANK_2\\\).*\\\[.*]" {
             send -s "0xFFC3\r"
         }
+
         -re "Bank 3.*\\\(BANK_3\\\).*\\\[.*]" {
             send -s "0xFFC3\r"
         }
@@ -69,6 +69,7 @@ while 1 {
         -re "SCSI device support.*SCSI.*\\\[.*]" {
             send "Y\r"
         }
+
         -re "SCSI disk support.*BLK_DEV_SD.*\\\[.*]" {
             send "Y\r"
         }
@@ -121,8 +122,8 @@ while 1 {
             send "Y\r"
         }
 
-        -re "pcmcia-cs.*USER_PCMCIA_CS.*\\\[.*]" {
-             send "Y\r"
+        -re "pcmciautils.*USER_PCMCIAUTILS.*\\\[.*]" {
+            send "Y\r"
         }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
@@ -152,11 +153,11 @@ while 1 {
 
 cd $uclinux_path/testsuites
 step "Make"
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
 step "Copy linux"
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file

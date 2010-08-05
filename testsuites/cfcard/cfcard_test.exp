@@ -16,10 +16,10 @@ set case_num 0
 
 set timeout 120
 incr case_num
-send "dmesg\r"
+send "dmesg|grep pcmcia\r"
 while 1 {
     expect {
-        -re "bfin_cf_pcmcia: Blackfin CompactFlash.*pcmcia: registering new device pcmcia0.0.*sda: sda1.*$kernel_prompt" {
+        -re "bfin_cf_pcmcia: Blackfin CompactFlash.*pcmcia: registering new device pcmcia0.0.*$kernel_prompt" {
             case_pass $case_num
             break
         }
