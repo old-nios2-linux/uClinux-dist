@@ -14,7 +14,7 @@ source ../reboot_kernel.exp
 step "Start testing"
 set case_num 0
 
-set timeout 120
+set timeout 10
 incr case_num
 send "dmesg|grep pcmcia\r"
 while 1 {
@@ -29,8 +29,9 @@ while 1 {
     }
 }
 
+set timeout 10
 incr case_num
-send -s "cardctl ident\r"
+send -s "pccardctl ident\r"
 while 1 {
     expect {
         -re "product info.*$kernel_prompt" {
@@ -43,11 +44,12 @@ while 1 {
     }
 }
 
+set timeout 10
 incr case_num
-send "dump_cis\r"
+send -s "pccardctl status\r"
 while 1 {
     expect {
-        -re "Socket 0:.*dev_info.*disk_interface.*cftable_entry.*$kernel_prompt" {
+        -re "Subdevice.*bound to driver.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -57,21 +59,7 @@ while 1 {
     }
 }
 
-incr case_num
-send "cardctl status\r"
-while 1 {
-    expect {
-        -re "Socket 0:.*function 0:.*ready.*$kernel_prompt" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
-
-
+set timeout 120
 while 1 {
     incr case_num
     send "fdisk /dev/sda\r"
@@ -302,11 +290,15 @@ while 1 {
     }
 }
 
+set timeout 10
 incr case_num
-send "cardctl eject\r"
+send "pccardctl eject 0\r"
 while 1 {
     expect {
-        -re "pccard: card ejected from slot 0.*$kernel_prompt" {
+        -nocase -re "(error|fail).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re "card ejected from slot 0.*$kernel_prompt" {
             case_pass $case_num
             break
         }
