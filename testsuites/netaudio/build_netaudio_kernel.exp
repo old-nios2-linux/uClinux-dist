@@ -34,6 +34,10 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
             send "2\r"
         }
@@ -82,7 +86,7 @@ while 1 {
             send "N\r"
         }
 
-        -re "SMB file system support \\\(.*\\\) \\\(SMB_FS\\\) \\\[./././.]" {
+        -re "SMB file system support \\\(.*\\\) \\\(SMB_FS\\\) \\\[.*]" {
             send "Y\r"
         }
 
@@ -110,15 +114,15 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Build faad2.*LIB_FAAD2\\\) \\\[./.]" {
+        -re "Build faad2.*LIB_FAAD2\\\) \\\[.*]" {
             send "Y\r"
         }
 
-        -re "Build flac.*LIB_FLAC\\\) \\\[./.]" {
+        -re "Build flac.*LIB_FLAC\\\) \\\[.*]" {
             send "Y\r"
         }
 
-        -re "Build tremor.*LIB_TREMOR\\\) \\\[./.]" {
+        -re "Build tremor.*LIB_TREMOR\\\) \\\[.*]" {
             send "Y\r"
         }
 
@@ -128,20 +132,16 @@ while 1 {
 #            send "y\r"
 #        }
 
-        -re "Build libaudio.*LIB_LIBAUDIO\\\) \\\[./.]" {
+        -re "Build libaudio.*LIB_LIBAUDIO\\\) \\\[.*]" {
             send "Y\r"
         }
 
-        -re "Build libmad.*LIB_LIBMAD\\\) \\\[./.]" {
+        -re "Build libmad.*LIB_LIBMAD\\\) \\\[.*]" {
             send "Y\r"
         }
 
-        -re "Build libid3tag.*LIB_LIBID3TAG\\\) \\\[./.]" {
+        -re "Build libid3tag.*LIB_LIBID3TAG\\\) \\\[.*]" {
             send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {
