@@ -84,7 +84,7 @@ proc standby_test_case1 {} {
     send -s "arecord -t wav -c 2 -f S16_LE -r 48000 -d 5 |aplay\n"
     while 1 {
         expect {
-            -re "Stereo\r\n$kernel_prompt" {
+            -re "Stereo.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -184,7 +184,7 @@ set timeout 10
 send -s "arecord -t wav -c 2 -f S16_LE -r 48000 -d 5 |aplay\n"
 while 1 {
     expect {
-        -re "Stereo\r\n$kernel_prompt" {
+        -re "Stereo.*$kernel_prompt" {
             case_pass $case_num
             break
         }
