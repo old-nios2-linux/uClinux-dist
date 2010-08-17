@@ -59,19 +59,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Improved wireless configuration API.*CFG80211.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "nl80211 new netlink interface support.*NL80211.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Old wireless static regulatory definitions.*WIRELESS_OLD_REGULATORY.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Wireless extensions.*WIRELESS_EXT.*\\\[././.*]" {
+        -re "cfg80211 - wireless configuration API.*CFG80211.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -101,7 +89,7 @@ while 1 {
         }
 
 #libertas driver
-        -re "Wireless LAN \\\(IEEE 802.11\\\).*WLAN_80211.*\\\[.*]" {
+        -re "Wireless LAN \\\(WLAN\\\) \\\[.*]" {
             send "Y\r"
         }
 
