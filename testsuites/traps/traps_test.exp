@@ -106,6 +106,7 @@ if { $smp_flag == 1 } {
         }
     }
 
+    set passed_case_number $total_case_number
     incr case_num
     send -s "taskset 2 ./traps_test -1\r"
     while 1 {
