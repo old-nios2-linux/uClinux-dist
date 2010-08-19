@@ -1,15 +1,13 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source  ../board_info.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 
@@ -41,7 +39,7 @@ source  make_default_config.exp
 #      send "CONFIG_SCLK_DIV=8\r"
 #      send ".\r"
 #      expect ":"
-#      sleep .5    
+#      sleep .5
 
 #      send "wq\r"
 #      expect eof
@@ -55,7 +53,6 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -80,56 +77,69 @@ while 1 {
             send "8\r"
         }
 
-        -re "PCCard \\\(PCMCIA/CardBus\\\) support.*PCCARD.*\\\[./././.]" {
-            send "y\r"
+        -re "Sound card support.*SOUND.*\\\[.*]" {
+            #avoid GPIO confliction with ad1836
+            send "N\r"
         }
 
-        -re "16-bit PCMCIA support.*PCMCIA.*\\\[./././.]" {
-            send "y\r"
+#PCMCIA
+        -re "PCCard \\\(PCMCIA/CardBus\\\) support.*PCCARD.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "Load CIS updates from userspace.*PCMCIA_LOAD_CIS.*\\\[././.]" {
-            send "y\r"
+        -re "16-bit PCMCIA support.*PCMCIA.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "PCMCIA control ioctl.*PCMCIA_IOCTL.*\\\[././.]" {
-            send "y\r"
+        -re "Load CIS updates from userspace.*PCMCIA_LOAD_CIS.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "Blackfin CompactFlash PCMCIA Driver.*BFIN_CFPCMCIA.*\\\[./././.]" {
-            send "y\r"
+        -re "Blackfin CompactFlash PCMCIA Driver.*BFIN_CFPCMCIA.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "Bank 3.*\\\(BANK_3\\\).*\\\[.*]" {
             send -s "0xFFC3\r"
         }
 
-#       -re "Wireless LAN drivers.*non-hamradio.*Wireless Extensions.*NET_RADIO.*\\\[.*]" {
-#             send "Y\r"
-#      }
+#wireless stack
+        -re "Wireless \\\(WIRELESS\\\) \\\[.*]" {
+            send "Y\r"
+        }
 
-        -re "Wireless LAN.*IEEE 802.11.*WLAN_80211.*\\\[.*]" {
-            send "y\r"
+        -re "cfg80211 - wireless configuration API.*CFG80211.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Wireless extensions sysfs files.*WIRELESS_EXT_SYSFS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Generic IEEE 802.11 Networking Stack \\\(mac80211\\\).*MAC80211.*\\\[.*]" {
+            send "Y\r"
+        }
+
+#wireless driver
+        -re "Wireless LAN.*WLAN.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "Hermes chipset 802.11b support.*Orinoco.Prism2.Symbol.*HERMES.*\\\[.*]" {
-            send "m\r"
+            send "M\r"
         }
 
         -re "Hermes PCMCIA card support.*PCMCIA_HERMES.*\\\[.*]" {
-            send "m\r"
+            send "M\r"
         }
 
-#      -re "Blackfin WLAN card support.*WLAN_BLACKFIN.*\\\[.*]" {
-#             send "Y\r"
-#      }
-
+#tools
         -re "netperf.*USER_NETPERF_NETPERF.*\\\[.*]" {
-            send -s "Y\r"
+            send "Y\r"
         }
 
         -re "netserver.*USER_NETPERF_NETSERVER.*\\\[.*]" {
-            send -s "Y\r"
+            send "Y\r"
         }
 
         -re "wireless_tools support.*USER_WIRELESS_TOOLS.*\\\[.*]" {
@@ -154,11 +164,6 @@ while 1 {
 
         -re "iwspy.*USER_WIRELESS_TOOLS_IWSPY.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -re "Sound card support.*SOUND.*\\\[.*]" {
-            #avoid GPIO confliction with ad1836
-            send "n\r"
         }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
@@ -187,17 +192,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
-
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
