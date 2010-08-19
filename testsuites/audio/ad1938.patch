@@ -1,13 +1,13 @@
 Index: sound/soc/blackfin/bf5xx-ad193x.c
 ===================================================================
---- sound/soc/blackfin/bf5xx-ad193x.c	(revision 8708)
+--- sound/soc/blackfin/bf5xx-ad193x.c	(revision 9091)
 +++ sound/soc/blackfin/bf5xx-ad193x.c	(working copy)
-@@ -77,7 +77,7 @@
+@@ -66,7 +66,7 @@
  	if (ret < 0)
  		return ret;
  
 -#if 0
 +#if 1
- 	/* if input frequency is not 12288000, we need set pll */
- 	ret = snd_soc_dai_set_pll(codec_dai, 0, 0,
- 			24576000, 12288000);
+ 	ret = snd_soc_dai_set_sysclk(codec_dai, 0, 24576000,
+ 			SND_SOC_CLOCK_IN);
+ 	if (ret < 0)
