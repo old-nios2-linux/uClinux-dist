@@ -1,4 +1,4 @@
-#!/bin/msh
+#!/bin/sh
 echo Content-type: text/html
 echo
 FULLUSR=username=shiva
