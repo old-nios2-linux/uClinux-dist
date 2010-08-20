@@ -3,28 +3,27 @@
 source ../kernel_config.exp
 
 set port_config "i2c"
-
 if { $argc >= 2} {
-set port_config [lindex $argv 1]
+    set port_config [lindex $argv 1]
 }
 
 log_file [log_file_name $argv0.$port_config ]
 
-source  ../board_info.exp
+source ../board_info.exp
 send_user "Starting $argv0\n"
 
 if { $port_config == "i2c" || $port_config == "spi" } {
-send_log "\n#### Port config is $port_config.\n"
+    send_log "\n#### Port config is $port_config.\n"
 } else {
-send_log "\n#### This config $port_config is not supported. Sorry.\n"
-exit
+    send_log "\n#### This config $port_config is not supported. Sorry.\n"
+    exit
 }
 
 cd $uclinux_path/testsuites
 
 step "Make config."
 
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 
@@ -37,7 +36,6 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -112,7 +110,6 @@ while 1 {
 }
 
 spawn make config
-
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
@@ -184,16 +181,12 @@ while 1 {
 
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
