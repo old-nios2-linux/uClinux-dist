@@ -140,7 +140,7 @@ keypad_fgets (char *input, unsigned short len)
 			  pos++;
 			  break;
 			case KEY_B:
-			  sprintf (rx, "t");
+			  sprintf (rx, "b");
 			  strncat (l_input, rx, 1);
 			  pos++;
 			  break;
