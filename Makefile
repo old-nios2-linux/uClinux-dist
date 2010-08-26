@@ -500,7 +500,7 @@ help:
 	@echo "make single                non-parallelised build"
 	@echo "make single[make-target]   non-parallelised build of \"make-target\""
 	@echo "make V/P_default           full default build for V=Vendor/P=Product"
-	@echo "make remoteconfig IP=bar   grab the (kernel & userspace) config files from remote target
+	@echo "make remoteconfig IP=bar   grab the (kernel & userspace) config files from remote target"
 	@echo "make prune                 clean out uncompiled source (be careful)"
 	@echo ""
 	@echo "Typically you want to start with this sequence before experimenting."
