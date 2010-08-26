@@ -1,16 +1,14 @@
 #!/usr/bin/expect
 #Before building, make sure change sda_pin to 2 and scl_pin to 4 in stamp.c.
 
-source  ../kernel_config.exp
-source  ../board_info.exp
+source ../kernel_config.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 
@@ -22,7 +20,6 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -31,7 +28,11 @@ while 1 {
             send "y\r"
         }
 
-        -re "Blackfin PPI Camera frame capture driver.*BFIN_PPIFCD.*\\\[.*]" {
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
+        -re "Blackfin Generic PPI Driver.*BFIN_PPI.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -47,7 +48,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "GPIO-based bitbanging I2C.*I2C_GPIO.*\\\[.*]" { 
+        -re "GPIO-based bitbanging I2C.*I2C_GPIO.*\\\[.*]" {
             if { $board_type == "BF533-STAMP" } {
                 send "Y\r"
             } else {
@@ -88,7 +89,7 @@ while 1 {
         }
 
         -re "Sound card support.*SOUND.*\\\[.*]" {
-            send -s "N\r"
+            send "N\r"
         }
 
         -re "PPIFCD test program.*USER_BLACKFIN_PPIFCDTEST.*\\\[.*]" {
@@ -97,10 +98,6 @@ while 1 {
 
         -re "CGI based Test Application for the PPI Frame Capture Driver.*USER_BLACKFIN_PPIFCDCGI.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {
@@ -125,16 +122,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
