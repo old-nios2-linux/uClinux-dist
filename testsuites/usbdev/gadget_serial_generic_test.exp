@@ -176,7 +176,7 @@ while 1 {
         -nocase -re "lsmod:|error|fail" {
             case_fail $case_num
         }
-        -re "usbserial.*usbcore.*usbserial.*#" {
+        -re "\r\nusbserial.*#" {
             case_pass $case_num
             break
         }

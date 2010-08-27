@@ -215,8 +215,13 @@ proc standby_test_case {} {
 
 step "Start testing."
 set case_num 0
-set dev "/dev/sdc"
 set mnt_point "/mnt/usb"
+
+if { $board_type == "BF548-EZKIT" } {
+    set dev "/dev/sdb"
+} else {
+    set dev "/dev/sdc"
+}
 
 set timeout 5
 sleep 3

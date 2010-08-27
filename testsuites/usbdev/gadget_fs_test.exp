@@ -248,7 +248,7 @@ set timeout 5
 send "cat /proc/bus/usb/devices\r"
 while 1 {
     expect {
-        -re "Manufacturer=Analog Devices.*Product=EZKIT-BF548.*#" {
+        -re "Product=My Source/Sink Product.*#" {
             case_pass $case_num
             break
         }

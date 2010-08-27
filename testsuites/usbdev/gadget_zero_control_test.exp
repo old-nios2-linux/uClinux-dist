@@ -83,7 +83,7 @@ expect "#"
 send "lsmod |grep usbtest\r"
 while 1 {
     expect {
-        -re "usbcore.*usbtest.*#" {
+        -re "\r\nusbtest.*#" {
             case_pass $case_num
             break
         }
@@ -120,7 +120,7 @@ set timeout 10
 send "lsmod |grep usbtest\r"
 while 1 {
     expect {
-        -re "usbcore.*usbtest.*#" {
+        -re "\r\nusbtest.*#" {
             case_pass $case_num
             break
         }
