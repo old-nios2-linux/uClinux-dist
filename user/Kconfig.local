@@ -241,6 +241,16 @@ config USER_PCMCIAUTILS
 	select LIB_LIBSYSFS
 config USER_DAGRAB_DAGRAB
 	bool "dagrab"
+config USER_MPG321
+	bool "mpg321"
+	select LIB_LIBAO
+	select LIB_LIBID3TAG
+	select LIB_LIBMAD
+	select LIB_ZLIB
+	help
+	  simple and lightweight command line mp3 player
+
+	  http://mpg321.sourceforge.net/
 config USER_SDLEXAMPLES
 	bool "SDL Examples"
 	select LIB_LIBSDL
