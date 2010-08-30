@@ -35,6 +35,7 @@ romfs:
 	$(ROMFSINST) -e CONFIG_FMT_USE_FDPIC_ELF -d $(STAGEDIR)/usr/lib/libnative.so /usr/lib/libnative.so
 	$(ROMFSINST) -e CONFIG_FMT_USE_FDPIC_ELF -d $(STAGEDIR)/usr/lib/librtdm.so /usr/lib/librtdm.so
 	$(ROMFSINST) -e CONFIG_FMT_USE_FDPIC_ELF -d $(STAGEDIR)/usr/lib/libpthread_rt.so /usr/lib/libpthread_rt.so
+	$(ROMFSINST) -e CONFIG_FMT_USE_FDPIC_ELF -d $(STAGEDIR)/usr/lib/libxenomai.so.0 /usr/lib/libxenomai.so.0
 	$(ROMFSINST) -d xeno_test/xeno-test-new /usr/bin/xeno-test-new
 	$(ROMFSINST) -d xeno_test/loudly /usr/bin/loudly
 	$(ROMFSINST) -d xeno_test/workload /usr/bin/workload
