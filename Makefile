@@ -306,8 +306,11 @@ release:
 	$(MAKE) -C release release
 
 .PHONY: single
-single single%:
+single%:
 	$(MAKE) NON_SMP_BUILD=1 `expr $(@) : 'single[_]*\(.*\)'`
+# Cheat to avoid mixing implicit and normal rules
+single:
+	$(MAKE) single_
 
 %_fullrelease:
 	@echo "This target no longer works"
@@ -323,7 +326,7 @@ vendor_%:
 	$(MAKEARCH) -C vendors $@
 
 .PHONY: linux
-linux linux%_only:
+linux:
 	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
 		mkdir -p `dirname $$CONFIG_INITRAMFS_SOURCE`; \
 		touch $$CONFIG_INITRAMFS_SOURCE || exit 1; \
@@ -338,6 +341,8 @@ linux linux%_only:
 	if [ -f $(LINUXDIR)/vmlinux ]; then \
 		ln -f $(LINUXDIR)/vmlinux $(LINUXDIR)/linux ; \
 	fi
+linux%_only:
+	$(MAKE) linux
 
 .PHONY: sparse
 sparse:
