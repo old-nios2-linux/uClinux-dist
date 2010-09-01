@@ -9,6 +9,7 @@ lib*.so
 *.rej
 *.orig
 
+CVS
 .sgbuilt_lib
 .sgbuilt_user
 
@@ -35,3 +36,5 @@ lib*.so
 /tools/cksum
 /tools/sstrip
 /tools/sg-cksum/cksum
+/tools/bfin-uclinux-*
+/tools/bfin-linux-uclibc-*
