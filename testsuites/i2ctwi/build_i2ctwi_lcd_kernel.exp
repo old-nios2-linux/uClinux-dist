@@ -74,6 +74,18 @@ while 1 {
             send "Y\r"
         }
 
+        -re "Misc devices.*MISC_DEVICES.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Analog Devices Digital Potentiometers.*AD525X_DPOT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "support I2C bus connection.*AD525X_DPOT_I2C.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "TWI LCD test program.*USER_BLACKFIN_TWILCDTEST.*\\\[.*]" {
             send "Y\r"
         }
