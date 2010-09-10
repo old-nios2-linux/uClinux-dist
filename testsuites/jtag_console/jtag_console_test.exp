@@ -119,23 +119,21 @@ spawn /bin/sh
 set netcat_spawn_id $spawn_id
 
 sleep 2
-set timeout 5
+set timeout 9
 send "\r"
 expect -re $HOST_KERNEL_PROMPT
 
 incr case_num
-send -s "netcat localhost 2001\r"
-sleep 2
+send -s "./jtagconsole\r"
 while 1 {
     expect {
-#        -re "\r\n\[a-zA-Z0-9]" 
-        -re $kernel_prompt {
-            send_user "FAIL:run netcat!\n"
-            case_fail $case_num
-        }
-        timeout {
+        -re "has been remapped" {
             case_pass $case_num
             break
+        }
+        timeout {
+            send_user "FAIL:run jtagconsole!\n"
+            case_fail $case_num
         }
     }
 }
@@ -321,8 +319,9 @@ while 1 {
 
 step "netcat_spawn_id: exit netcat"
 set spawn_id $netcat_spawn_id
-sleep 1
-send "\3"
+
+set timeout 5
+send "\24"
 while 1 {
     expect {
         -re "punt" {
@@ -338,6 +337,7 @@ while 1 {
 step "gdb_spawn_id: exit gdb"
 set spawn_id $gdb_spawn_id
 sleep 1
+set timeout 10
 send "\3"
 while 1 {
     expect {
@@ -366,6 +366,20 @@ while 1 {
         }
         timeout {
             send_user "FAIL: exit bfin-gdbproxy!\n"
+            break
+        }
+    }
+}
+
+send "$uclinux_path/testsuites/reset_board 2\r"
+send "$uclinux_path/testsuites/reset_board 2\r"
+while 1 {
+    expect {
+        -re "ON.*ON" {
+            break
+        }
+        timeout {
+            send_user "Failed reset board."
             break
         }
     }
