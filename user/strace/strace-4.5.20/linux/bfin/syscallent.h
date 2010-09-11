@@ -402,4 +402,4 @@
 	{ 2,	0,	printargs,		"fanotify_init"	}, /* 371 */
 	{ 5,	0,	printargs,		"fanotify_mark"	}, /* 372 */
 	{ 4,	0,	printargs,		"prlimit64"	}, /* 373 */
-	{ 3,	0,	sys_cacheflush,		"cachectl"	}, /* 374 */
+	{ 3,	0,	sys_cacheflush,		"cacheflush"	}, /* 374 */
