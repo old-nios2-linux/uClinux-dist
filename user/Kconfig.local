@@ -415,4 +415,6 @@ config USER_BLACKFIN_DRV_TEA5764
 config USER_BLACKFIN_DRV_TIMER_LATENCY
 	bool "bfin timer latency test"
 
+config USER_BLACKFIN_DRV_PREEMPT_LATENCY
+	bool "bfin preempt latency test drvier"
 endmenu
