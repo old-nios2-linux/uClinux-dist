@@ -5,6 +5,8 @@ menu "Blackfin test programs"
 
 config USER_BLACKFIN_RTC
 	bool "RTC test program"
+config USER_BLACKFIN_PREEMPTTEST
+	bool "PREEMPT kernel latency test program"
 config USER_BLACKFIN_DPMC
 	bool "DPMC test program"
 config USER_BLACKFIN_PPIFCDTEST
