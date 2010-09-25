@@ -44,7 +44,7 @@
 #include "readsamples.h"
 #include "cgivars.h"
 #include "htmllib.h"
-#include "spiadc.h"
+#include "bfin_sport.h"
 #include "dac.h"
 
 void calc_frequency(int form_method, char **getvars, char **postvars, float frequency);
@@ -197,16 +197,14 @@ void calc_frequency(int form_method, char **getvars, char **postvars, float freq
 
 int fd0, sclk, spi_div, samples;
 float sps;
-
-fd0 = open ("/dev/spi", O_RDWR);
+fd0 = open ("/dev/sport0", O_RDWR);
   if (fd0 < 0)
     {
       error(ERR_SPI, form_method, getvars, postvars);
     }
 
-  ioctl (fd0, CMD_SPI_GET_SYSTEMCLOCK, &sclk);
+  ioctl (fd0, SPORT_IOC_GET_SYSTEMCLOCK, &sclk);
   close(fd0);
-
 	for(spi_div = 2; spi_div < 65535; spi_div++)
 	 {
 
@@ -403,7 +401,7 @@ error(int errnum, int form_method, char **getvars, char **postvars)
       printf ("<p><font face=\"Tahoma\" size=\"7\">ERROR[%d]:\n</font></p>",
 	      ERR_SPI);
       printf
-	("<p><font face=\"Tahoma\" size=\"7\">Can't open /dev/spi.\n</font></p>");
+	("<p><font face=\"Tahoma\" size=\"7\">Can't open /dev/sport0.\n</font></p>");
       printf
 	("<p><font face=\"Tahoma\" size=\"7\">- Try again later -\n</font></p>");
       break;
@@ -473,14 +471,20 @@ sample (int form_method, char **getvars, char **postvars)
   int errval,fd0;
   unsigned short i;
   unsigned short def[]={6144,6144};
+  struct sport_config config;
 
-  fd0 = open ("/dev/spi", O_RDWR);
+  fd0 = open ("/dev/sport0", O_RDWR);
 
   if (fd0 < 0)
       error (ERR_SPI, form_method, getvars, postvars);
 
-  ioctl (fd0, CMD_SPI_SET_BAUDRATE, cgiinfo.spi_hz);
-  ioctl (fd0, CMD_SPI_SET_WRITECONTINUOUS, 1);
+  ioctl (fd0, SPORT_IOC_SET_BAUDRATE, cgiinfo.spi_hz);
+  memset(&config, 0, sizeof(struct sport_config));
+  config.word_len = 16;
+  config.dma_enabled = 0;
+  config.data_format = 0;
+  config.mode = NDSO_MODE;
+  ioctl(fd0, SPORT_IOC_CONFIG, &config);
 
 	cgiinfo.samples = malloc (cgiinfo.samples_cnt * 2);
 	  if (cgiinfo.samples == NULL)
