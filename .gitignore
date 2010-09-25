@@ -3,6 +3,8 @@
 *.gdb
 lib*.a
 lib*.so
+/lib/*/build-*/
+/user/*/build-*/
 
 /*.patch
 /*.diff
