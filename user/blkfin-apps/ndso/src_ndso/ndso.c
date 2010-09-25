@@ -42,6 +42,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <asm/bfin_sport.h>
 
 #ifdef TM_IN_SYS_TIME
 #include <sys/time.h>
@@ -49,7 +50,6 @@
 #include <time.h>
 #endif
 
-#include "spiadc.h"
 #include "cgivars.h"
 #include "htmllib.h"
 #include "ndso.h"
@@ -165,15 +165,16 @@ Sample (int form_method, char **getvars, char **postvars, s_info * info)
   int errval, spi_div, sclk, mode, sense, edge, skfs, timeout,
    repeat_reading, count, level, i, actcount, triggerpos;
   unsigned short  *buffer;
+  struct sport_config config;
 
-  info->fd0 = open ("/dev/spi", O_RDWR);
+  info->fd0 = open ("/dev/sport0", O_RDWR);
 
   if (info->fd0 < 0)
     {
       NDSO_Error (SPIOPEN, form_method, getvars, postvars, info);
     }
 
-  ioctl (info->fd0, CMD_SPI_GET_SYSTEMCLOCK, &sclk);
+  ioctl (info->fd0, SPORT_IOC_GET_SYSTEMCLOCK, &sclk);
 
   /* Calculate required Baud Rate */
   spi_div = (unsigned short) (sclk / (34 * info->stime_s.sps));
@@ -183,7 +184,15 @@ Sample (int form_method, char **getvars, char **postvars, s_info * info)
 
   /* Calculate real Baud Rate */
   info->stime_s.sps = sclk / ((2 * 16 + 2) * spi_div);
-  ioctl (info->fd0, CMD_SPI_SET_BAUDRATE, (sclk / (2 * spi_div)));
+  ioctl (info->fd0, SPORT_IOC_SET_BAUDRATE, (sclk / (2 * spi_div)));
+  
+  memset(&config, 0, sizeof(struct sport_config));
+  config.word_len = 16;
+  config.dma_enabled = 0;
+  config.data_format = 0;
+  config.mode = NDSO_MODE;
+  ioctl(info->fd0, SPORT_IOC_CONFIG, &config);
+
   mode = info->strigger.mode;
   sense = info->strigger.sense;
   edge = info->strigger.edge;
@@ -412,7 +421,7 @@ NDSO_Error (int errnum, int form_method, char **getvars, char **postvars,
       printf ("<p><font face=\"Tahoma\" size=\"7\">ERROR[%d]:\n</font></p>",
 	      SPIOPEN);
       printf
-	("<p><font face=\"Tahoma\" size=\"7\">Can't open /dev/spi.\n</font></p>");
+	("<p><font face=\"Tahoma\" size=\"7\">Can't open /dev/sport0.\n</font></p>");
       printf
 	("<p><font face=\"Tahoma\" size=\"7\">- Try again later -\n</font></p>");
       free (info->samples);
