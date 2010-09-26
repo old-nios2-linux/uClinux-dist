@@ -6,10 +6,6 @@ set timeout 1200
 set bfin_make_status failure
 while 1 {
     expect {
-        -re "Timer benchmark driver.*XENO_DRIVERS_TIMERBENCH.*\\\[.*]" {
-            send "Y\r"
-        }
-
         "\\\(*) \\\[*] \\\(NEW)" {
             sleep .01
             send "\r"
