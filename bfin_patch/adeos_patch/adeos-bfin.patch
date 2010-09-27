@@ -159,7 +159,7 @@ index 1a496cd..d953572 100644
 -	unsigned long flags;
 -	int ret;
 +	void (*hook)(void);
-+        int ret;
++	int ret;
 +
 +	WARN_ON_ONCE(irqs_disabled_hw());
  
@@ -189,7 +189,7 @@ index 1a496cd..d953572 100644
  		return 0;
  
 -	ret = __ipipe_dispatch_event(IPIPE_EVENT_SYSCALL, regs);
-+        ret = __ipipe_dispatch_event(IPIPE_EVENT_SYSCALL, regs);
++	ret = __ipipe_dispatch_event(IPIPE_EVENT_SYSCALL, regs);
  
 -	local_irq_save_hw(flags);
 +	local_irq_disable_hw();
@@ -209,7 +209,7 @@ index 1a496cd..d953572 100644
 -	p = ipipe_root_cpudom_ptr();
 -	if ((p->irqpend_himask & IPIPE_IRQMASK_VIRT) != 0)
 -		__ipipe_sync_pipeline(IPIPE_IRQMASK_VIRT);
-+        if (!__ipipe_root_domain_p)
++	if (!__ipipe_root_domain_p)
 +		ret = -1;
 +	else {
 +		p = ipipe_root_cpudom_ptr();
