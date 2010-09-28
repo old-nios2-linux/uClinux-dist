@@ -1,4 +1,4 @@
-VER = busybox-1.16.2
+VER = busybox-1.17.2
 URL = http://busybox.net/downloads/$(VER).tar.bz2
 
 export KBUILD_OUTPUT = $(ROOTDIR)/user/busybox/build-$(VER)

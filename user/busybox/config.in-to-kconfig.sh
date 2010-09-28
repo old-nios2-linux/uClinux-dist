@@ -18,6 +18,12 @@ echo "Converting Config.in files in ${bdir} to Kconfig files"
 
 echo "source ../user/busybox/${bdir}/Kconfig" > Kconfig
 
+if [ -e "${bdir}"/scripts/gen_build_files.sh ] ; then
+	pushd "${bdir}" >/dev/null
+	./scripts/gen_build_files.sh "${PWD}" "${PWD}"
+	popd >/dev/null
+fi
+
 find "${bdir}" -type f -name Config.in | \
 while read input ; do
 	output="${input%Config.in}Kconfig"
@@ -30,10 +36,7 @@ BEGIN {
 }
 
 {
-if ($1 ~ /^#/) {
-	print
-	next
-}
+sub(/#.*/, "")
 
 if ($1 == "help") {
 	print
