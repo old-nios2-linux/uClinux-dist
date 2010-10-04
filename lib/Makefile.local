@@ -19,6 +19,7 @@ dir_3_$(CONFIG_LIB_LIBAIO)           += libaio
 dir_3_$(CONFIG_LIB_LIBAO)            += libao
 dir_3_$(CONFIG_LIB_LIBAUDIO)         += libaudio
 dir_3_$(CONFIG_LIB_LIBBFGDOTS)       += libbfgdots
+dir_3_$(CONFIG_LIB_LIBGCRYPT)        += libgcrypt
 dir_3_$(CONFIG_LIB_LIBGPG_ERROR)     += libgpg-error
 dir_3_$(CONFIG_LIB_LIBGSASL)         += libgsasl
 dir_3_$(CONFIG_LIB_LIBICONV)         += libiconv

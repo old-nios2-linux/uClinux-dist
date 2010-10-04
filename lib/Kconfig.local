@@ -160,6 +160,12 @@ config LIB_LIBGSASL
 	  clients, and in clients to authenticate against servers.
 	  http://www.gnu.org/software/gsasl/
 
+config LIB_LIBGCRYPT
+	bool "Build libgcrypt"
+	select CONFIG_LIB_LIBGPG_ERROR
+	help
+	  The cryptography library used by GnuPG and related software.
+
 config CONFIG_LIB_LIBGPG_ERROR
 	bool "Build Libgpg-error"
 	help
