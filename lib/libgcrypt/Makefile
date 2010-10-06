@@ -3,6 +3,9 @@
 VER = libgcrypt-1.4.5
 
 CONF_OPTS = --disable-ld-version-script
+
+export GPG_ERROR_CONFIG = $(STAGEDIR)/usr/bin/gpg-error-config
+
 include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
