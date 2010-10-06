@@ -464,19 +464,16 @@ config USER_MTDUTILS_ERASE
 	  A tool for erasing MTD partitions.
 	  This option adds approximately 40K to the image.
 
-config USER_MTDUTILS_ERASEALL
-	bool "flash_eraseall (formerly 'eraseall')"
-	depends on USER_MTDUTILS
-	help
-	  A tool for erasing entire MTD partitions.
-	  This option adds approximately 40K to the image.
-
 config USER_MTDUTILS_LOCK
-	bool "lock"
+	bool "flash_lock"
 	depends on USER_MTDUTILS
 
 config USER_MTDUTILS_UNLOCK
-	bool "unlock"
+	bool "flash_unlock"
+	depends on USER_MTDUTILS
+
+config USER_MTDUTILS_FLASHCP
+	bool "flashcp"
 	depends on USER_MTDUTILS
 
 config USER_MTDUTILS_FTL_CHECK

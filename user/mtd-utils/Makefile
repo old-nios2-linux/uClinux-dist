@@ -2,29 +2,7 @@
 # really made anymore by the mtd guys):
 GITWEB = http://git.infradead.org/?p=$(GITREPO).git
 GITREPO = mtd-utils
-VER = 606f38a2221648ca5c5fa292c9f71d2ddd59fa66
-
-TARGETS-y :=
-TARGETS-$(CONFIG_USER_MTDUTILS_ERASE)        += flash_erase
-TARGETS-$(CONFIG_USER_MTDUTILS_ERASEALL)     += flash_eraseall
-TARGETS-$(CONFIG_USER_MTDUTILS_LOCK)         += flash_lock
-TARGETS-$(CONFIG_USER_MTDUTILS_UNLOCK)       += flash_unlock
-TARGETS-$(CONFIG_USER_MTDUTILS_FTL_CHECK)    += ftl_check
-TARGETS-$(CONFIG_USER_MTDUTILS_FTL_FORMAT)   += ftl_format
-TARGETS-$(CONFIG_USER_MTDUTILS_NFTL_FORMAT)  += nftl_format
-TARGETS-$(CONFIG_USER_MTDUTILS_NFTLDUMP)     += nftldump
-TARGETS-$(CONFIG_USER_MTDUTILS_NANDDUMP)     += nanddump
-TARGETS-$(CONFIG_USER_MTDUTILS_NANDTEST)     += nandtest
-TARGETS-$(CONFIG_USER_MTDUTILS_NANDWRITE)    += nandwrite
-TARGETS-$(CONFIG_USER_MTDUTILS_DOC_LOADBIOS) += doc_loadbios
-TARGETS-$(CONFIG_USER_MTDUTILS_DOC_LOADIPL)  += doc_loadipl
-TARGETS-$(CONFIG_USER_MTDUTILS_MKFSJFFS)     += mkfs.jffs
-TARGETS-$(CONFIG_USER_MTDUTILS_MKFSJFFS2)    += mkfs.jffs2
-
-UBI_UTILS_TARGETS-m :=
-UBI_UTILS_TARGETS-y :=
-UBI_UTILS_TARGETS-$(CONFIG_USER_MTDUTILS_UBIUTILS) += ubiupdatevol ubimkvol ubirmvol ubicrc32 ubinfo ubiattach ubidetach ubinize ubiformat ubirename
-UBI_UTILS_TARGETS = $(UBI_UTILS_TARGETS-m) $(UBI_UTILS_TARGETS-y)
+VER = fec81abd9593fe11ba8577d38e4143e5708e3343
 
 # Host based builds needed for constructing host images
 BUILDTARGETS-m :=
@@ -40,24 +18,28 @@ UBI_UTILS_BUILDTARGETS-$(CONFIG_UBIFS_FS) += mkfs.ubifs
 UBI_UTILS_BUILDTARGETS = $(UBI_UTILS_BUILDTARGETS-m) $(UBI_UTILS_BUILDTARGETS-y)
 
 define MAKE_MTD
-	$(MAKE) -C $(VER)/$(2) WITHOUT_XATTR=1 SUBDIRS= BUILDDIR=$$PWD/build-$(VER)$(3)/$(2) TARGETS="$(1)"
+	$(MAKE) -C $(VER)/$(2) WITHOUT_XATTR=1 BUILDDIR=$$PWD/build-$(VER)$(4)/$(2) $(1) $(3)
+endef
+define _MAKE_HOST_MTD
+	unset CC CFLAGS CPPFLAGS CROSS LDFLAGS; $(call MAKE_MTD,SUBDIRS= TARGETS="$(1)",$(2),$(3),-host)
 endef
 define MAKE_HOST_MTD
-	unset CC CFLAGS CPPFLAGS CROSS LDFLAGS; $(call MAKE_MTD,$(1),$(2),-host)
+	$(call _MAKE_HOST_MTD,$(1),$(2),$(3))
 	for f in $(1) ; do ln -sf build-$(VER)-host/$(2)/$$f $$f ; done
 endef
 all:
+	$(call _MAKE_HOST_MTD,libmtd.a libcrc32.a,,subdirs_lib_all)
+	$(call _MAKE_HOST_MTD,libubi.a,ubi-utils)
 	$(call MAKE_HOST_MTD,$(BUILDTARGETS))
 	$(call MAKE_HOST_MTD,$(UBI_UTILS_BUILDTARGETS),mkfs.ubifs)
-	$(call MAKE_MTD,$(UBI_UTILS_TARGETS),ubi-utils)
-	$(call MAKE_MTD,$(TARGETS-y))
+	$(call MAKE_MTD)
 
 clean:
 	rm -rf build-* mkfs.jffs mkfs.jffs2 mkfs.ubifs sumtool
 
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_ERASE        build-$(VER)/flash_erase /bin/flash_erase
-	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_ERASEALL     build-$(VER)/flash_eraseall /bin/flash_eraseall
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_FLASHCP      build-$(VER)/flashcp /bin/flashcp
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_LOCK         build-$(VER)/flash_lock /bin/flash_lock
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UNLOCK       build-$(VER)/flash_unlock /bin/flash_unlock
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_FTL_CHECK    build-$(VER)/ftl_check /bin/ftl_check
