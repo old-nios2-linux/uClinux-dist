@@ -33,7 +33,7 @@
 # define EM_BLACKFIN 106
 #endif
 
-#define CMD_COREB_START 2
+#define CMD_COREB_START _IO('b', 0)
 
 static bool force = false;
 
@@ -50,7 +50,8 @@ static int open_coreb(void)
 static void start_coreb(void)
 {
 	int fd = open_coreb();
-	ioctl(fd, CMD_COREB_START, NULL);
+	if (ioctl(fd, CMD_COREB_START, NULL) != 0)
+		perror("ioctl(CMD_COREB_START) failed");
 	close(fd);
 }
 
