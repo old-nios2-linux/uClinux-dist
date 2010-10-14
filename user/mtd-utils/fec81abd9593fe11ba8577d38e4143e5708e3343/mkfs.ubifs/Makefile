@@ -4,7 +4,7 @@ CPPFLAGS += $(ZLIBCPPFLAGS) $(LZOCPPFLAGS)
 
 ALL_SOURCES=*.[ch] hashtable/*.[ch]
 
-TARGETS = mkfs.ubifs
+override TARGETS = mkfs.ubifs
 
 LDLIBS_mkfs.ubifs = -lz -llzo2 -lm -luuid -L$(BUILDDIR)/../ubi-utils/ -lubi
 LDLIBS_mkfs.ubifs += -L$(BUILDDIR)/../lib -lmtd -lcrc32
