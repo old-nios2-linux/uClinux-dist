@@ -69,7 +69,10 @@ proc standby_test_case1 {} {
     send -s "vrec -w -S -b 16 -s 48000 -t 5|vplay\n"
     while 1 {
         expect {
-            -re "Stereo \.\.\.\r\n$kernel_prompt" {
+            -re "\[fF]ail|\[eE]rror" {
+                case_fail $case_num
+            }
+            -re "Stereo.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -84,6 +87,9 @@ proc standby_test_case1 {} {
     send -s "arecord -t wav -c 2 -f S16_LE -r 48000 -d 5 |aplay\n"
     while 1 {
         expect {
+            -re "\[fF]ail|\[eE]rror" {
+                case_fail $case_num
+            }
             -re "Stereo.*$kernel_prompt" {
                 case_pass $case_num
                 break
@@ -169,7 +175,10 @@ set timeout 10
 send -s "vrec -w -S -b 16 -s 48000 -t 5|vplay\n"
 while 1 {
     expect {
-        -re "Stereo \.\.\.\r\n$kernel_prompt" {
+	-re "\[fF]ail|\[eE]rror" {
+	    case_fail $case_num
+	}
+	-re "Stereo.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -184,6 +193,9 @@ set timeout 10
 send -s "arecord -t wav -c 2 -f S16_LE -r 48000 -d 5 |aplay\n"
 while 1 {
     expect {
+        -re "\[fF]ail|\[eE]rror" {
+            case_fail $case_num
+        }
         -re "Stereo.*$kernel_prompt" {
             case_pass $case_num
             break
@@ -319,9 +331,6 @@ if { $standby_fail == 0 } {
     case_fail $case_num
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n" 
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
