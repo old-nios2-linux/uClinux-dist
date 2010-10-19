@@ -24,10 +24,10 @@ dir_$(CONFIG_USER_BFBLUET_EZEXT_UTIL)            += bfbluet-ezext-util
 dir_$(CONFIG_USER_EDN_BENCH)                     += edn
 dir_$(CONFIG_USER_DSP_BRIDGE)                    += dsp-bridge
 
-all %::
+all romfs:
 	for i in $(dir_y) ; do $(MAKE) -C $$i $@ || exit $$? ; done
 
 clean:
 	for i in $(dir_y) $(dir_n) $(dir_) ; do $(MAKE) -C $$i $@ || exit $$? ; done
 
-.PHONY: all clean
+.PHONY: all clean romfs
