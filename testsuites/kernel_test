@@ -586,6 +586,13 @@ do
   ./build_ethernet_kernel.exp $BOARD_TYPE in_buffer >/dev/null  2>&1
   elif [ ${AUTO_TESTCASE[$i]} == "spimmc_interrupt" ] ; then 
   ./build_spimmc_kernel.exp $BOARD_TYPE interrupt >/dev/null  2>&1
+  elif [ ${AUTO_TESTCASE[$i]} == "multichannel" ] ; then 
+      if [ ${AUTO_RUN_STATUS[$((n+3))]} -eq 1  ] ; then
+          audio_dev="audio_ad1836"
+      elif [ ${AUTO_RUN_STATUS[$((n+5))]} -eq 1  ] ; then
+          audio_dev="audio_ad1938"
+      fi
+  ./build_multichannel_kernel.exp $BOARD_TYPE $audio_dev >/dev/null  2>&1
   else
   ./build_${AUTO_TESTCASE[$i]}_kernel.exp $BOARD_TYPE  >/dev/null  2>&1
   fi
