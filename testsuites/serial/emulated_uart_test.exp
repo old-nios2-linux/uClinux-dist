@@ -8,20 +8,19 @@
 
 source ../kernel_config.exp
 source ../board_info.exp
-log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 set argc [llength $argv]
 
-if { $argc < 1} {
-    puts "Please input: board_type [ port type : serial_uart or sport_uart ] [line connection: normal or switch] ."
+if { $argc < 2} {
+    puts "Please input   : board_type, port_type, line_connection"
+    puts "port_type      : serial_uart or sport_uart"
+    puts "line_connection: normal or switch"
     exit
 }
 
-set port_type serial_uart
-if { $argc >= 2} {
-    set port_type [lindex $argv 1]
-}
+set port_type [lindex $argv 1]
+log_file ${port_type}_test_log
 
 set line_connection normal
 if { $argc >= 3} {
@@ -52,8 +51,9 @@ if {  $port_type== "sport_uart" } {
 }
 
 set ext_uart_port [ string index $ttyBFdev end ]
-send_log "ext_uart_port is $ext_uart_port"
-send_log "port_type $port_type ttydev_for_testcase_use $ttydev_for_testcase_use"
+send_log "ext_uart_port is $ext_uart_port\n"
+send_log "port_type is $port_type\n"
+send_log "ttydev_for_testcase_use is $ttydev_for_testcase_use\n"
 
 step "Start kermit."
 source ../spawn_kermit.exp

@@ -1985,9 +1985,9 @@ fi
   rm -rf romfs/ images/
   
   cd  $UCLINUX_DIST_TESTSUITES/serial
-  ./build_serial_uart_kernel.exp $BOARD_TYPE  >/dev/null  2>&1
+  ./build_emulated_uart_kernel.exp $BOARD_TYPE serial_uart >/dev/null  2>&1
   sleep 30
-  ./serial_uart_test.exp $BOARD_TYPE >/dev/null  2>&1
+  ./emulated_uart_test.exp $BOARD_TYPE serial_uart >/dev/null  2>&1
   
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.serial_uart
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.serial_uart
@@ -2387,11 +2387,13 @@ do
   fi
   
   if [ ${MANUAL_TESTCASE[$i]} == "i2ctwi" ] ; then
-  ./build_${MANUAL_TESTCASE[$i]}_keyboard_kernel.exp $BOARD_TYPE  >/dev/null  2>&1 
-  sleep 5
-  ./build_${MANUAL_TESTCASE[$i]}_lcd_kernel.exp $BOARD_TYPE  >/dev/null  2>&1 
+      ./build_${MANUAL_TESTCASE[$i]}_keyboard_kernel.exp $BOARD_TYPE  >/dev/null  2>&1 
+      sleep 5
+      ./build_${MANUAL_TESTCASE[$i]}_lcd_kernel.exp $BOARD_TYPE  >/dev/null  2>&1 
+  elif [ ${MANUAL_TESTCASE[$i]} == "sport_uart" ] ; then
+      ./build_emulated_uart_kernel.exp $BOARD_TYPE sport_uart >/dev/null  2>&1
   else
-  ./build_${MANUAL_TESTCASE[$i]}_kernel.exp $BOARD_TYPE  >/dev/null  2>&1  
+      ./build_${MANUAL_TESTCASE[$i]}_kernel.exp $BOARD_TYPE  >/dev/null  2>&1  
   fi
 
   if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
@@ -2406,7 +2408,7 @@ do
   if [ ${MANUAL_TESTCASE[$i]} == "ndso" ] || [ ${MANUAL_TESTCASE[$i]} == "awg" ] ; then
   cp $UCLINUX_DIST_TESTSUITES/spiadc/*_log  $THIS_LOG
   elif [ ${MANUAL_TESTCASE[$i]} == "sport_uart" ] ; then
-  cp $UCLINUX_DIST_TESTSUITES/serial/*_log  $THIS_LOG
+  cp $UCLINUX_DIST_TESTSUITES/serial/*sport_uart*log  $THIS_LOG
   elif [ ${MANUAL_TESTCASE[$i]} == "linphone_ad1836" ] ; then
   cp $UCLINUX_DIST_TESTSUITES/linphone/*_log  $THIS_LOG
   else
