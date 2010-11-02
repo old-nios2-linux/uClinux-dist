@@ -229,7 +229,7 @@ while 1 {
             }
         }
 
-        -re "Blackfin Audio SPORT port.*SND_BFIN_SPORT.*\\\[.*]" {
+        -re "Blackfin Audio SPORT port.*SND_BF5XX_SPORT_NUM.*\\\[.*]" {
             if { $audio_dev == "audio_ad73322" } {
                 send "2\r"
             } else {
