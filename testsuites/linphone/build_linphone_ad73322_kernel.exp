@@ -40,7 +40,7 @@ if [ catch {exec patch -p1 < $uclinux_path/testsuites/linphone/linphone.patch} ]
 
 step "Apply ad73322 patch."
 cd $uclinux_path/linux-2.6.x
-if [ catch {exec patch -p1 < $uclinux_path/bfin_patch/ad73322_patch/old_sound_ad73322.patch} ] {
+if [ catch {exec patch -p0 < $uclinux_path/bfin_patch/ad73322_patch/old_sound_ad73322.patch} ] {
     send_user "$errorInfo\n"
     exit
 }

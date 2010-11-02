@@ -307,7 +307,7 @@ while 1 {
                     }
                 }
             }
-            -re "Stereo\r\n$kernel_prompt" {
+            -re "Stereo.*$kernel_prompt" {
                 break
             }
             timeout {
@@ -360,7 +360,7 @@ while 1 {
                     }
                 }
             }
-            -re "Stereo\r\n$kernel_prompt" {
+            -re "Stereo.*$kernel_prompt" {
                 break
             }
             timeout {
