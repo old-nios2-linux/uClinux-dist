@@ -20,9 +20,8 @@ spawn make config
 
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "n\r"
+            send "y\r"
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
@@ -59,16 +58,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
