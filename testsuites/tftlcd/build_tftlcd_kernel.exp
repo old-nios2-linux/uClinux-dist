@@ -5,16 +5,6 @@ source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
-set landscape 0
-if { $board_type == "BF537-STAMP" } {
-    if { $argc == 2 } {
-        set landscape [lindex $argv 1]
-    } else {
-        puts "Input 1 for landscape, 0 for portrait:"
-        exit
-    }
-}
-
 cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
@@ -94,14 +84,6 @@ while 1 {
         -re "SHARP LQ035 TFT LCD.*FB_BF537_LQ035.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
                 send "M\r"
-            } else {
-                send "N\r"
-            }
-        }
-
-        -re "Use Landscape 320x240 instead of Portrait 240x320.*\\\[.*]" {
-            if { $landscape == 1 } {
-                send "Y\r"
             } else {
                 send "N\r"
             }

@@ -4,7 +4,6 @@ source  ../kernel_config.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE "[title "$argv0"]"
-append TITLE " ([lindex $argv 1])"
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -20,12 +19,25 @@ step "Start testing."
 set case_num 0
 
 set timeout 10
-sleep 5
+sleep 15
 send "\r"
 expect -re $kernel_prompt
 
+if { $board_type == "BF548-EZKIT" } {
+    set module "bf54x_lq043fb"
+} elseif {$board_type == "BF527-EZKIT" } {
+    set module "bfin_t350mcqb_fb"
+} elseif {$board_type == "BF527-EZKIT-V2" } {
+    set module "bfin_lq035q1_fb"
+} elseif {$board_type == "BF537-STAMP" } {
+    set module "bf537_lq035"
+} else {
+    send_user "Wrong board type!\n"
+    case_fail $case_num
+}
+
 incr case_num
-send "modprobe bf537-lq035\r"
+send "modprobe $module\r"
 while 1 {
     expect {
         -re "initializ.*$kernel_prompt" {
@@ -42,7 +54,7 @@ incr case_num
 send "lsmod\r"
 while 1 {
     expect {
-        -re "bf537_lq035.*$kernel_prompt" {
+        -re "$module.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -85,7 +97,7 @@ while 1 {
 
 set timeout 5
 incr case_num
-send "modprobe -r bf537-lq035\r"
+send "modprobe -r $module\r"
 while 1 {
     expect {
         -re "\[uU]nregister.*LCD driver.*$kernel_prompt" {
@@ -103,7 +115,7 @@ incr case_num
 send "lsmod\r"
 while 1 {
     expect {
-        -re "bf537_lq035.*$kernel_prompt" {
+        -re "$module.*$kernel_prompt" {
             case_fail $case_num
         }
         -re "Used by\r\n$kernel_prompt" {

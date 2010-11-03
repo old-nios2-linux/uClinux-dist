@@ -882,7 +882,7 @@ do
   #############################################################################################
   ###################################### TEST TFTLCD###########################################
 
-  if [ ${AUTO_RUN_STATUS[$((n+11))]} -eq 1  ] && [ $BOARD_TYPE != "BF537-STAMP" ]; then
+  if [ ${AUTO_RUN_STATUS[$((n+11))]} -eq 1  ]; then
 
   echo  "Testing tftlcd..."
 
@@ -903,14 +903,14 @@ do
       tail -50 ./build_tftlcd_kernel_log
   else
       sleep 30
-      ./tftlcd_lq043_test.exp $BOARD_TYPE >/dev/null  2>&1
+      ./tftlcd_test.exp $BOARD_TYPE >/dev/null  2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.tftlcd
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.tftlcd
-  cp $UCLINUX_DIST_TESTSUITES/tftlcd/build_tftlcd_kernel_log $THIS_LOG
-  cp $UCLINUX_DIST_TESTSUITES/tftlcd/tftlcd_lq043_test_log $THIS_LOG
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.tftlcd
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.tftlcd
+  cp $UCLINUX_DIST_TESTSUITES/tftlcd/*_log $THIS_LOG
 
   sleep 30
 
@@ -922,82 +922,6 @@ do
 
   fi
 
-
-  if [ ${AUTO_RUN_STATUS[$((n+11))]} -eq 1  ] && [ $BOARD_TYPE == "BF537-STAMP" ] ; then
-
-  echo  "Testing tftlcd landscape..."
-
-  rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
-  cd $UCLINUX_DIST_PATH/
-  cp -a  $UCLINUX_DIST_PATH_BAK/linux-2.6.x  .
-  cp $UCLINUX_DIST_PATH_BAK/config/.config config
-  cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
-  rm -rf romfs/ images/
-
-  cd $UCLINUX_DIST_TESTSUITES/tftlcd
-  ./build_tftlcd_kernel.exp $BOARD_TYPE 1 >/dev/null  2>&1
-
-
-  if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
-  then
-      echo "$0:   Error, failed."
-      tail -50 ./build_tftlcd_kernel_log
-  else
-      sleep 30
-      ./tftlcd_lq035_test.exp $BOARD_TYPE LANDSCAPE >/dev/null  2>&1
-  fi
-
-
-  cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.tftlcd.landscape
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.tftlcd.landscape
-  mv $UCLINUX_DIST_TESTSUITES/tftlcd/build_tftlcd_kernel_log $THIS_LOG/build_tftlcd_landscape_kernel_log 
-  cp $UCLINUX_DIST_TESTSUITES/tftlcd/tftlcd_lq035_test_log $THIS_LOG/tftlcd_lq035_landscape_test_log
-
-  sleep 30
-
-  if [ $RESET_BOARD -eq 1  ] ; then
-   cd $UCLINUX_DIST_TESTSUITES
-   ./reset_board.exp  >/dev/null  2>&1
-   sleep 10
-  fi
-
-  echo  "Testing tftlcd portrait..."
-
-  rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
-  cd $UCLINUX_DIST_PATH/
-  cp -a  $UCLINUX_DIST_PATH_BAK/linux-2.6.x  .
-  cp $UCLINUX_DIST_PATH_BAK/config/.config config
-  cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
-  rm -rf romfs/ images/
-
-  cd $UCLINUX_DIST_TESTSUITES/tftlcd
-  ./build_tftlcd_kernel.exp $BOARD_TYPE 0 >/dev/null  2>&1
-
-
-  if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
-  then
-      echo "$0:   Error, failed."
-      tail -50 ./build_tftlcd_kernel_log
-  else
-      sleep 30
-      ./tftlcd_lq035_test.exp $BOARD_TYPE PORTRAIT >/dev/null  2>&1
-  fi
-
-
-  cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.tftlcd.portrait
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.tftlcd.portrait
-  mv $UCLINUX_DIST_TESTSUITES/tftlcd/build_tftlcd_kernel_log $THIS_LOG/build_tftlcd_portrait_kernel_log 
-  cp $UCLINUX_DIST_TESTSUITES/tftlcd/tftlcd_lq035_test_log $THIS_LOG/tftlcd_lq035_portrait_test_log
-
-  sleep 30
-
-  if [ $RESET_BOARD -eq 1  ] ; then
-   cd $UCLINUX_DIST_TESTSUITES
-   ./reset_board.exp  >/dev/null  2>&1
-   sleep 10
-  fi
-
-  fi
 
   #############################################################################################
   ########################## TEST AUDIO #########################################################
