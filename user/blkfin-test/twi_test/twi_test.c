@@ -17,7 +17,7 @@
 
 int
 local_cam_setget_register(int filehandle, int iDataWidth, int oDataWidth,
-                          int reg_addr, int *val, int newval)
+                          int slave_addr, int reg_addr, int *val, int newval)
 {
 	unsigned char buf[10], out[10];
 	struct i2c_rdwr_ioctl_data i2c_data;
@@ -25,18 +25,20 @@ local_cam_setget_register(int filehandle, int iDataWidth, int oDataWidth,
 
 	out[0] = out[1] = 0;
 
+	buf[0] = (unsigned char)reg_addr;
+
 	if (iDataWidth == 1) {
-		buf[0] = newval & 0xFF;
-	} else {
-		buf[0] = (newval >> 8) & 0xFF;
 		buf[1] = newval & 0xFF;
+	} else {
+		buf[1] = (newval >> 8) & 0xFF;
+		buf[2] = newval & 0xFF;
 	}
 
-	msgs[0].addr = reg_addr;
+	msgs[0].addr = slave_addr;
 	msgs[0].flags = 0;
-	msgs[0].len = iDataWidth;
+	msgs[0].len = iDataWidth + 1;
 	msgs[0].buf = buf;
-	msgs[1].addr = reg_addr;
+	msgs[1].addr = slave_addr;
 	msgs[1].flags = I2C_M_RD;
 	msgs[1].len = oDataWidth;
 	msgs[1].buf = out;
@@ -143,7 +145,7 @@ int main(int argc, char *argv[])
 	if (argc < 3) {
 		printf(
 			"Usage: twi_test 0x<correct slave addr> 0x<wrong slave addr>\n"
-			"Example: 0x58 for ad5280 i2c chip on bf537-lq035 board.\n"
+			"Example: 0x5e for ad5280 i2c chip on bf537-lq035 board.\n"
 		);
 		return 0;
 	}
@@ -263,12 +265,12 @@ int main(int argc, char *argv[])
 		err("Fail to get data from register %d\n", regaddr);
 
 	printf("reg %d = 0x%x\n", regaddr, regval);
-	lastregval = regval;
 
 	sleep(1);
-	regaddr = 0x2c;
+	regaddr = 2;
 	regval = 0;
-	rc = local_cam_setget_register(i2c_fd, 1, 1, regaddr, &regval, 2);
+	lastregval = 2;
+	rc = local_cam_setget_register(i2c_fd, 1, 1, slave_addr, regaddr, &regval, lastregval);
 	if (rc)
 		err("Fail to setget data from register %d\n", regaddr);
 
