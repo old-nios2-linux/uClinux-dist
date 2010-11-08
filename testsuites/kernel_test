@@ -1580,6 +1580,7 @@ do
   fi
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.qt.flat
+  cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.qt.flat
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.qt.flat
   mv $UCLINUX_DIST_TESTSUITES/qt/build_qt_kernel_log $THIS_LOG/build_qt_flat_kernel_log
   cp $UCLINUX_DIST_TESTSUITES/qt/qt_sample $THIS_LOG/qt_sample.flat
@@ -1606,6 +1607,7 @@ do
   fi
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.qt.fdpic
+  cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.qt.fdpic
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.qt.fdpic
   mv $UCLINUX_DIST_TESTSUITES/qt/build_qt_kernel_log $THIS_LOG/build_qt_fdpic_kernel_log
   cp $UCLINUX_DIST_TESTSUITES/qt/qt_sample $THIS_LOG/qt_sample.fdpic

@@ -39,6 +39,7 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 step "Start testing."
+set hd_dev sda2
 set case_num 0
 set timeout 10
 
@@ -47,6 +48,20 @@ sleep 15
 send "ifconfig eth0 $targetip\r"
 expect -re $kernel_prompt
 
+send "mkdir /mnt/rootfs\r"
+expect -re $kernel_prompt
+send "mount /dev/$hd_dev /mnt/rootfs\r"
+expect -re $kernel_prompt
+sleep 5
+
+incr case_num
+send_user "rcp runcp.sh root@$targetip:/."
+if [ catch {exec rcp runcp.sh root@$targetip:/.} ] {
+    send_user "$errorInfo\n"
+    case_fail $case_num
+}
+
+incr case_num
 send_user "cp $uclinux_path/staging/usr/qt/examples/widgets/calendarwidget/calendarwidget ./qt_sample\n"
 if [ catch {exec cp $uclinux_path/staging/usr/qt/examples/widgets/calendarwidget/calendarwidget ./qt_sample} ] {
     send_user "FAIL: no qt sample\n"
@@ -54,6 +69,7 @@ if [ catch {exec cp $uclinux_path/staging/usr/qt/examples/widgets/calendarwidget
     case_fail $case_num
 }
 
+incr case_num
 send_user "rcp ./qt_sample root@$targetip:/bin\n"
 if [ catch {exec rcp ./qt_sample root@$targetip:/bin} ] {
     send_user "FAIL: rcp qt sample to target board\n"
@@ -63,26 +79,147 @@ if [ catch {exec rcp ./qt_sample root@$targetip:/bin} ] {
     send_user "PASS: rcp qt sample to target board\n"
 }
 
-#incr case_num
-#set timeout 30
-#send "dmesg|grep -i mouse\r"
-#while 1 {
-#    expect {
-#        -re "\[0-9a-zA-Z]\r\n$kernel_prompt" {
-#            send_user "USB Mouse is found\n"
-#            case_pass $case_num
-#            break
-#        }
-#        -re "$kernel_prompt" {
-#            send_user "USB Mouse is not found\n"
-#            case_fail $case_num
-#        }
-#        timeout {
-#            send_user "Look for USB Mouse timeout\n"
-#            case_fail $case_num
-#        }
-#    }
-#}
+incr case_num
+send_user "rcp -r $user/download/media root@$targetip:/\n"
+if [ catch {exec rcp -r $user/download/media root@$targetip:/} ] {
+    send_user "FAIL: copy sample pictures to target board\n"
+    send_user "$errorInfo\n"
+    case_fail $case_num
+} else {
+    send_user "PASS: copy sample pictures to target board\n"
+}
+
+sleep 1
+set timeout 60
+incr case_num
+send "./runcp.sh\r"
+while 1 {
+    expect {
+        -re "copy rootfs done.*$kernel_prompt" {
+            send_user "finish to copy rootfs to harddisk\n"
+            case_pass $case_num
+            break
+        }
+        eof {
+            break
+        }
+        timeout {
+            send_user "copy rootfs to harddisk timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 20
+send "umount /mnt/rootfs\r"
+while 1 {
+    expect {
+        -re "cannot umount.*$kernel_prompt" {
+            send_user "umount /mnt/rootfs fail, test fail\n"
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            send_user "umount /mnt/rootfs done, test pass\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "umount /mnt/rootfs timeout, test fail\n"
+            case_fail $case_num
+        }
+    }
+}
+
+sleep 5
+incr case_num
+send "reboot\r"
+set timeout 60
+while 1 {
+    expect {
+        "Hit any key " {
+            send "\r"
+            break
+        }
+
+        timeout {
+            send_user "failed reset attemp\n"
+            case_fail $case_num
+        }
+    }
+}
+
+sleep 5
+
+set timeout 20
+send -s "setenv hdargs setenv bootargs root=/dev/$hd_dev rw console=ttyBF$def_uart_port,$baud_rate\r"
+expect ">"
+send -s "setenv hdboot \'tftpboot 0x1000000 $compressed_kernel_only_image; run hdargs; run addip; bootm\'\r"
+expect ">"
+send -s "save\r"
+while 1 {
+    expect {
+        -re "sectors.*>" {
+            send_user "save!!!\n"
+            break
+        }
+        timeout {
+            send_user "save timeout!!!\n"
+            case_fail $case_num
+        }
+    }
+}
+
+sleep 5
+
+set timeout 180
+send -s "run hdboot\r"
+while 1 {
+    expect {
+        -re "Kernel panic" {
+            send_user "kernel panic detected..."
+            case_fail $case_num
+        }
+
+        -re $kernel_prompt {
+            send_user "successful boot attempt"
+            case_pass $case_num
+            break
+        }
+
+        timeout {
+            send_user "failed boot attempt"
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 5
+send "dmesg|grep VFS\r"
+while 1 {
+    expect {
+        -re "VFS\\\: Mounted root \\\(ext2 filesystem\\\).*$kernel_prompt" {
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+send "ls /\r"
+while 1 {
+    expect {
+        -re "runcp\\\.sh.*$kernel_prompt" {
+            send_user "successfully mount harddisk as the root filesystem\r"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
 
 set timeout 10
 incr case_num
@@ -143,15 +280,6 @@ while 1 {
             case_fail $case_num
         }
     }
-}
-
-send_user "rcp -r $user/download/media root@$targetip:/\n"
-if [ catch {exec rcp -r $user/download/media root@$targetip:/} ] {
-    send_user "FAIL: copy sample pictures to target board\n"
-    send_user "$errorInfo\n"
-    case_fail $case_num
-} else {
-    send_user "PASS: copy sample pictures to target board\n"
 }
 
 send "cd media\r"

@@ -12,6 +12,7 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 set env(EXT2_BLOCKS) "30720"
+set HAVE_KERNEL_ONLY_IMAGE 1
 
 if { $argc == 2 } {
     set build_opt [lindex $argv 1]
@@ -228,7 +229,66 @@ while 1 {
             send "Y\r"
         }
 
-#Libs needed for konqueror: libZ, libpng and libjpeg. Default to be selected already.
+#support atapi hard disk
+        -re "Serial ATA \\\(prod\\\) and Parallel ATA \\\(experimental\\\) drivers.*ATA.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Blackfin 54x ATAPI support.*PATA_BF54X.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SCSI target support.*SCSI_TGT.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "SCSI disk support.*BLK_DEV_SD.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SCSI CDROM support.*BLK_DEV_SR.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Second extended fs support.*EXT2_FS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "MSDOS fs support.*MSDOS_FS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "VFAT \\\(Windows-95\\\) fs support.*VFAT_FS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Codepage 437 \\\(United States, Canada\\\).*NLS_CODEPAGE_437.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "fdisk.*USER_FDISK_FDISK.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "fdisk.*USER_BUSYBOX_FDISK.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "e2fsck.*USER_E2FSPROGS_E2FSCK_E2FSCK.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "mke2fs.*USER_E2FSPROGS_MISC_MKE2FS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "mkdosfs.*USER_DOSFSTOOLS_MKDOSFS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "dosfsck.*USER_DOSFSTOOLS_DOSFSCK.*\\\[.*]" {
+            send "Y\r"
+        }
 
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
             send "$type\r"
