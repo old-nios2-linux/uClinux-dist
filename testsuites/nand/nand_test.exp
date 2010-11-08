@@ -23,7 +23,7 @@ set timeout 20
 send -s "dmesg\r"
 while 1 {
     expect {
-        -nocase -re "\".*NAND.*\".*(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*)\"\r\n(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*)\"\r\n" {
+        -nocase -re "\".*NAND.*\".*(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*kernel.*)\"\r\n(0x\[0-9a-fA-F]+-0x\[0-9a-fA-F]+)\[\x20\t]+:\[\x20\t]+\"(.*file.*)\"\r\n" {
             set kernel_partition_address $expect_out(1,string)
             set kernel_partition_name $expect_out(2,string)
             set rootfs_partition_address $expect_out(3,string)
