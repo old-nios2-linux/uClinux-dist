@@ -43,6 +43,7 @@ proc standby_test_case {} {
         }
     }
 
+    sleep 5
     set timeout 5
     incr case_num
     send " "
