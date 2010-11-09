@@ -117,11 +117,6 @@ incr case_num
 send "mplayer video.avi\r"
 while 1 {
     expect {
-        -re "Can\'t open audio device" {
-            expect -re $kernel_prompt
-            send_user "\nfail to open audio device\n"
-            case_fail $case_num
-        }
         -re "Exiting.*End of file.*$kernel_prompt" {
             case_pass $case_num
             break
