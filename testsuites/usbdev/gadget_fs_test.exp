@@ -301,7 +301,7 @@ set timeout 5
 send "\3"
 while 1 {
     expect {
-        -re "disconnect.*done.*$kernel_prompt" {
+        -re "done.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -311,9 +311,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
