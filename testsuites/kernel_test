@@ -1550,81 +1550,63 @@ do
   ################################## QT #########################################################
   
  if [ ${AUTO_RUN_STATUS[$((n+13))]} -eq 1  ] ; then
-  echo  "Testing qt..."
 
-  rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
-  cd $UCLINUX_DIST_PATH/
-  cp -a  $UCLINUX_DIST_PATH_BAK/linux-2.6.x  .
-  cp $UCLINUX_DIST_PATH_BAK/config/.config config
-  cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
+    APP_FORMAT="flat fdpic"
 
-  #Build QT kernel of Static FLAT format
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
-  cd user/pictureflow/pictureflow-0.1.0/pictureflow-qt
-  rm *.o pictureflow Makefile moc_pictureflow.cpp
+    for format in $APP_FORMAT
+    do
 
-  cd $UCLINUX_DIST_PATH/lib/qt-embedded/
-  rm -fr `svn stat|awk '{print $2}'`
+        FORMAT=`echo $format|tr 'a-z' 'A-Z'`
+        echo  "Test qt in $format..."
 
-  cd $UCLINUX_DIST_TESTSUITES/qt
-  ./build_qt_kernel.exp $BOARD_TYPE 1 >/dev/null  2>&1
+        rm -rf $UCLINUX_DIST_PATH/linux-2.6.x
+        cd $UCLINUX_DIST_PATH/
+        cp -a  $UCLINUX_DIST_PATH_BAK/linux-2.6.x  .
+        cp $UCLINUX_DIST_PATH_BAK/config/.config config
+        cp $UCLINUX_DIST_PATH_BAK/vendors/AnalogDevices/$BOARD_TYPE/Makefile vendors/AnalogDevices/$BOARD_TYPE
 
-  if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
-  then
-      echo "$0:   Error, failed."
-      tail -50 ./build_qt_kernel_log
-  else
-      sleep 30
-      ./qt_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-  fi
+        cd $UCLINUX_DIST_PATH/
+        make clean  > /dev/null 2>&1
+        cd user/pictureflow/pictureflow-0.1.0/pictureflow-qt
+        rm *.o pictureflow Makefile moc_pictureflow.cpp
 
-  cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.qt.flat
-  cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.qt.flat
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.qt.flat
-  mv $UCLINUX_DIST_TESTSUITES/qt/build_qt_kernel_log $THIS_LOG/build_qt_flat_kernel_log
-  cp $UCLINUX_DIST_TESTSUITES/qt/qt_sample $THIS_LOG/qt_sample.flat
+        cd $UCLINUX_DIST_PATH/lib/qt-embedded/
+        rm -fr `svn stat|awk '{print $2}'`
 
-  #Build QT kernel of FDPIC format
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
-  cd user/pictureflow/pictureflow-0.1.0/pictureflow-qt
-  rm *.o pictureflow Makefile moc_pictureflow.cpp
+        cd $UCLINUX_DIST_TESTSUITES/qt
+        ./build_qt_kernel.exp $BOARD_TYPE $format >/dev/null  2>&1
 
-  cd $UCLINUX_DIST_PATH/lib/qt-embedded/
-  rm -fr `svn stat|awk '{print $2}'`
+        if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
+        then
+            echo "$0:   Error, failed."
+            tail -50 ./build_qt_kernel_log
+        else
+            sleep 30
+            ./qt_test.exp $BOARD_TYPE $FORMAT >/dev/null  2>&1
+        fi
 
-  cd $UCLINUX_DIST_TESTSUITES/qt
-  ./build_qt_kernel.exp $BOARD_TYPE 2 >/dev/null  2>&1
+        cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.qt.$format
+        cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.qt.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.qt.$format
+        cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.qt.$format
+        cp $UCLINUX_DIST_TESTSUITES/qt/qt_sample $THIS_LOG/qt_sample.$format
+        mv $UCLINUX_DIST_TESTSUITES/qt/build_qt_kernel_log $THIS_LOG/build_qt_${format}_kernel_log
+        mv $UCLINUX_DIST_TESTSUITES/qt/qt_test_log $THIS_LOG/qt_${format}_test_log
 
-  if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
-  then
-      echo "$0:   Error, failed."
-      tail -50 ./build_qt_kernel_log
-  else
-      sleep 30
-      ./qt_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-  fi
+        cd $UCLINUX_DIST_PATH/
+        make clean  > /dev/null 2>&1
+        cd user/pictureflow/pictureflow-0.1.0/pictureflow-qt
+        rm *.o pictureflow Makefile moc_pictureflow.cpp
 
-  cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.qt.fdpic
-  cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.qt.fdpic
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.qt.fdpic
-  mv $UCLINUX_DIST_TESTSUITES/qt/build_qt_kernel_log $THIS_LOG/build_qt_fdpic_kernel_log
-  cp $UCLINUX_DIST_TESTSUITES/qt/qt_sample $THIS_LOG/qt_sample.fdpic
+        sleep 30
 
-  cp $UCLINUX_DIST_TESTSUITES/qt/qt_test_log $THIS_LOG
-  cd $UCLINUX_DIST_PATH/
-  make clean  > /dev/null 2>&1
-  cd user/pictureflow/pictureflow-0.1.0/pictureflow-qt
-  rm *.o pictureflow Makefile moc_pictureflow.cpp
+        if [ $RESET_BOARD -eq 1  ] ; then
+            cd $UCLINUX_DIST_TESTSUITES
+            ./reset_board.exp  >/dev/null  2>&1 
+            sleep 10
+        fi
 
-  sleep 30
-
-  if [ $RESET_BOARD -eq 1  ] ; then
-   cd $UCLINUX_DIST_TESTSUITES
-   ./reset_board.exp  >/dev/null  2>&1 
-   sleep 10
-  fi
+    done
 
  fi
 

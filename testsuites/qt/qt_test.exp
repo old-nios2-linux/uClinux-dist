@@ -9,24 +9,14 @@ send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
 if { $argc == 2 } {
-    set build_opt [lindex $argv 1]
-    send_user "\n#### Blackfin build Option is $build_opt\n"
+    set format [lindex $argv 1]
+    send_user "\n#### binary format is $format\n"
 } else {
-    puts "Please input board type and build option:"
-    puts "1: Static FLAT; 2: FDPIC"
+    puts "Please input board_type and binary_format(FLAT or FDPIC)"
     exit
 }
 
-if { $build_opt == 1 } {
-    set build_type FLAT
-} elseif { $build_opt == 2 } {
-    set build_type FDPIC
-} else {
-    send_user "Build Option setting error\n"
-    exit
-}
-
-append TITLE " ($build_type)"
+append TITLE " ($format)"
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -193,6 +183,8 @@ while 1 {
         }
     }
 }
+
+sleep 20
 
 incr case_num
 set timeout 5

@@ -15,20 +15,12 @@ set env(EXT2_BLOCKS) "30720"
 set HAVE_KERNEL_ONLY_IMAGE 1
 
 if { $argc == 2 } {
-    set build_opt [lindex $argv 1]
-    send_user "\n#### Blackfin build Option is $build_opt\n"
+    set format [lindex $argv 1]
+    send_user "\n#### binary format is $format\n"
 } else {
-    puts "Please input board_type and build option:"
-    puts "1: Static FLAT; 2: FDPIC"
+    puts "Please input board_type and binary_format(flat or fdpic)"
     exit
 }
-
-if { $build_opt == 1 } {
-    set type 1
-} elseif { $build_opt == 2 } {
-    set type 4
-}
-
 
 step "Make config."
 cd $uclinux_path/testsuites
@@ -291,7 +283,13 @@ while 1 {
         }
 
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
-            send "$type\r"
+            if { $format == "fdpic" } {
+                send  "4\r"
+            } elseif { $format == "flat" } {
+                send  "1\r"
+            } else {
+                send "\r"
+            }
         }
 
         -re "VIDEO test program.*USER_BLACKFIN_VIDEOTEST.*\\\[.*]" {
