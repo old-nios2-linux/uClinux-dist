@@ -2295,9 +2295,15 @@ do
   fi
   
   if [ ${MANUAL_TESTCASE[$i]} == "i2ctwi" ] ; then
-      ./build_${MANUAL_TESTCASE[$i]}_keyboard_kernel.exp $BOARD_TYPE  >/dev/null  2>&1 
+      ./build_${MANUAL_TESTCASE[$i]}_keyboard_kernel.exp $BOARD_TYPE  >/dev/null  2>&1
+      cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.i2ctwi_keyboard
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.i2ctwi_keyboard
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.i2ctwi_keyboard
       sleep 5
-      ./build_${MANUAL_TESTCASE[$i]}_lcd_kernel.exp $BOARD_TYPE  >/dev/null  2>&1 
+      ./build_${MANUAL_TESTCASE[$i]}_lcd_kernel.exp $BOARD_TYPE  >/dev/null  2>&1
+      cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.i2ctwi_lcd
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.i2ctwi_lcd
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.i2ctwi_lcd
   elif [ ${MANUAL_TESTCASE[$i]} == "sport_uart" ] ; then
       ./build_emulated_uart_kernel.exp $BOARD_TYPE sport_uart >/dev/null  2>&1
   else
@@ -2310,8 +2316,11 @@ do
 	tail -50 ./build_${MANUAL_TESTCASE[$i]}_kernel_log
   fi
   
+  if [ ${MANUAL_TESTCASE[$i]} != "i2ctwi" ] ; then
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.${MANUAL_TESTCASE[$i]}
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.${MANUAL_TESTCASE[$i]}
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.${MANUAL_TESTCASE[$i]}
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.${MANUAL_TESTCASE[$i]}
+  fi
   
   if [ ${MANUAL_TESTCASE[$i]} == "ndso" ] || [ ${MANUAL_TESTCASE[$i]} == "awg" ] ; then
   cp $UCLINUX_DIST_TESTSUITES/spiadc/*_log  $THIS_LOG
