@@ -80,6 +80,26 @@ if [ catch {exec rcp -r $user/download/media root@$targetip:/} ] {
 }
 
 sleep 1
+
+set timeout 120
+incr case_num
+send "rm -fr /mnt/rootfs/*\r"
+while 1 {
+    expect {
+        -re "(\[fF]ail|\[eE]rror|No such).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "copy rootfs to harddisk timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
 set timeout 60
 incr case_num
 send "./runcp.sh\r"
