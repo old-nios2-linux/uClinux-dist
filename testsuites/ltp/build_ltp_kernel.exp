@@ -155,7 +155,7 @@ while 1 {
             send "N\r"
         }
 
-        -re "Native language support.*NLS.*\\\[.*]" {
+        -nocase -re "Native language support.*NLS.*\\\[.*n.*]" {
             send "N\r"
         }
 #END - Need to reduce size for some platform, such as BF533-EZKIT
