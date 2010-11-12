@@ -512,6 +512,11 @@ if [ $BUILD_POLICY -eq 1  ] ; then
    sleep 10
   fi
   
+  if [ $XENOMAI == "on" ] ; then
+  echo "unset xenomai in user config after policy is built"
+  sed -i "s/CONFIG_USER_XENOMAI=y/# CONFIG_USER_XENOMAI is not set/" $UCLINUX_DIST_PATH/config/.config
+  fi
+
   echo  "cp uclinux-dist source to UCLINUX_DIST_PATH_BAK."
   cp -a $UCLINUX_DIST_PATH $UCLINUX_DIST_PATH_BAK 
   
@@ -711,9 +716,14 @@ do
   fi
 
   if [ ${AUTO_TESTCASE[$i]} == "xenomai" ] ; then
-  rm -rf $UCLINUX_DIST_PATH/user/xenomai
-  cd $UCLINUX_DIST_PATH/user
-  cp -a  $UCLINUX_DIST_PATH_BAK/user/xenomai .
+      if [ $XENOMAI == "on" ] ; then
+          echo "unset xenomai in user config after xenomai test is finished"
+          sed -i "s/CONFIG_USER_XENOMAI=y/# CONFIG_USER_XENOMAI is not set/" $UCLINUX_DIST_PATH/config/.config
+      else
+          rm -rf $UCLINUX_DIST_PATH/user/xenomai
+          cd $UCLINUX_DIST_PATH/user
+          cp -a  $UCLINUX_DIST_PATH_BAK/user/xenomai .
+      fi
   fi
 
   echo  "End testing ${AUTO_TESTCASE[$i]}..."
