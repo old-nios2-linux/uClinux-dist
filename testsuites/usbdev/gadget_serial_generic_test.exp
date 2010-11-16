@@ -186,49 +186,33 @@ while 1 {
     }
 }
 
-step "Test output on host"
 
-incr case_num
-set timeout 5
-send "stty -F /dev/ttyUSB0 -icrnl\r"
-while 1 {
-    expect {
-        -nocase -re "(stty:|fail|error|no such).* #" {
-            case_fail $case_num
-        }
-        -re " #" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
-
-incr case_num
-set timeout 5
-send "cat /dev/ttyUSB0 > host_file\r"
-while 1 {
-    expect {
-        -re "\r\n\[a-zA-Z0-9]" {
-            case_fail $case_num
-        }
-        timeout {
-            case_pass $case_num
-            break
-        }
-    }
-}
-
-incr case_num
-send "\n"
 set spawn_id $kermit_spawn_id
-set timeout 5
-send "ls /dev/tty*\r"
+sleep 3
+incr case_num
+set timeout 8
+send "getty 9600 /dev/ttyGS0\r"
 while 1 {
     expect {
-        -re "ttyGS0.*$kernel_prompt" {
+        -re $kernel_prompt {
+            case_fail $case_num
+        }
+        timeout {
+            case_pass $case_num
+            break
+        }
+    }
+}
+
+
+spawn /bin/bash
+set gserial_spawn_id $spawn_id 
+incr case_num
+set timeout 5
+send "kermit configs/zmodem.ttyUSB0\r"
+while 1 {
+    expect {
+        -re "ttyUSB0 >" {
             case_pass $case_num
             break
         }
@@ -239,8 +223,44 @@ while 1 {
 }
 
 incr case_num
-set timeout 10
-send "cat /proc/kallsyms > test_file\r"
+set timeout 5
+send "connect\r"
+while 1 {
+    expect {
+        -re "login:" {
+            send "root\r"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+set spawn_id $kermit_spawn_id
+expect "Password:"
+incr case_num
+set timeout 5
+send "uClinux\r"
+while 1 {
+    expect {
+        -re $kernel_prompt {
+            case_fail $case_num
+        }
+        timeout {
+            case_pass $case_num
+            break
+        }
+    }
+}
+
+
+step "Send file to host PC through gadget serial"
+set spawn_id $gserial_spawn_id
+
+incr case_num
+set timeout 8
 while 1 {
     expect {
         -re $kernel_prompt {
@@ -254,8 +274,38 @@ while 1 {
 }
 
 incr case_num
-set timeout 10
-send "cat test_file > /dev/ttyGS0\r"
+set timeout 5
+send "cp /proc/kallsyms /file_in_target\r"
+while 1 {
+    expect {
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 5
+send "lsz /file_in_target\r"
+while 1 {
+    expect {
+        -re "Transfer complete" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 5
+send "\r"
 while 1 {
     expect {
         -re $kernel_prompt {
@@ -272,10 +322,14 @@ set spawn_id $host_spawn_id
 
 incr case_num
 set timeout 5
-send -s "\3"
+send "rcp root@$targetip:/file_in_target file_in_target.rcp\r"
 while 1 {
     expect {
-         -re " #" {
+        -re "\[eE]rror|\[fF]ail|No such" {
+            case_pass $case_num
+            break
+        }
+        -re "#" {
             case_pass $case_num
             break
         }
@@ -287,48 +341,10 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "rcp root@$targetip:/test_file .\r"
-while 1 {
-    expect {
-        -nocase -re "(rcp:|fail|error|no such).* #" {
-            case_fail $case_num
-        }
-         -re " #" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
-
-incr case_num
-set timeout 5
-send "dos2unix host_file\r"
-while 1 {
-    expect {
-        -nocase -re "(fail|error|no such).* #" {
-            case_fail $case_num
-        }
-         -re "convert.* #" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
-
-incr case_num
-set timeout 20
-send "diff -q test_file host_file\r"
+send "diff -q file_in_target.rcp file_in_target\r"
 while 1 {
     expect {
         -nocase -re "(diff:|fail|error|no such|differ).* #" {
-            send "diff test_file host_file\r"
-            expect " #"
             case_fail $case_num
         }
          -re " #" {
@@ -341,18 +357,47 @@ while 1 {
     }
 }
 
-step "Test output on target"
 
-set spawn_id $kermit_spawn_id
+step "Send file to target board through gadget serial"
+set spawn_id $gserial_spawn_id
+
+sleep 2
+incr case_num
+set timeout 5
+send "\0c"
+while 1 {
+    expect {
+        -re "ttyUSB0 >" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
 
 incr case_num
 set timeout 5
-send "stty -F /dev/ttyGS0 -icrnl\r"
+send "send file_in_target.rcp\r"
 while 1 {
     expect {
-        -nocase -re "(stty:|fail|error|no such).*$kernel_prompt" {
+        -re "Transfer complete.*>" {
+            case_pass $case_num
+            break
+        }
+        timeout {
             case_fail $case_num
         }
+    }
+}
+
+incr case_num
+set timeout 5
+send "connect\r"
+send "\r"
+while 1 {
+    expect {
         -re $kernel_prompt {
             case_pass $case_num
             break
@@ -365,45 +410,12 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "cat /dev/ttyGS0 > target_file\r"
+send "diff -q /file_in_target file_in_target.rcp\r"
 while 1 {
     expect {
-        -re "\r\n\[a-zA-Z0-9]" {
+        -nocase -re "(diff:|fail|error|no such|differ).*$kernel_prompt" {
             case_fail $case_num
         }
-        timeout {
-            case_pass $case_num
-            break
-        }
-    }
-}
-
-set spawn_id $host_spawn_id
-send "\n"
-expect " #"
-
-incr case_num
-set timeout 30
-send "cat test_file > /dev/ttyUSB0\r"
-while 1 {
-    expect {
-        -re " #" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
-
-set spawn_id $kermit_spawn_id
-
-incr case_num
-set timeout 5
-send -s "\3"
-while 1 {
-    expect {
          -re $kernel_prompt {
             case_pass $case_num
             break
@@ -414,17 +426,17 @@ while 1 {
     }
 }
 
-set spawn_id $host_spawn_id
+incr case_num
+set timeout 8
+send "modprobe -r g_serial\r"
+expect -re $kernel_prompt
 
 incr case_num
-set timeout 5
-send "rcp root@$targetip:/target_file .\r"
+set timeout 10
+send "\0q\r"
 while 1 {
     expect {
-        -nocase -re "(rcp:|fail|error|no such).* #" {
-            case_fail $case_num
-        }
-         -re " #" {
+        -re "Closing.*OK" {
             case_pass $case_num
             break
         }
@@ -434,47 +446,13 @@ while 1 {
     }
 }
 
-incr case_num
-set timeout 5
-send "dos2unix target_file\r"
-while 1 {
-    expect {
-        -nocase -re "(fail|error|no such).* #" {
-            case_fail $case_num
-        }
-         -re "convert.* #" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
 
-incr case_num
-set timeout 20
-send "diff -q test_file target_file\r"
-while 1 {
-    expect {
-        -nocase -re "(diff:|fail|error|no such|differ).* #" {
-            send "diff test_file target_file\r"
-            expect " #"
-            case_fail $case_num
-        }
-         -re " #" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
+set spawn_id $host_spawn_id 
+sleep 2
 
 incr case_num
 set timeout 5
-send "rm test_file host_file target_file\r"
+send "rm file_in_target*\r"
 while 1 {
     expect {
         -nocase -re "(rm:|fail|error|no such).* #" {
@@ -546,7 +524,7 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "lsmod\r"
+send "lsmod|grep usb\r"
 while 1 {
     expect {
         -re "usbserial.*#" {
@@ -562,30 +540,6 @@ while 1 {
     }
 }
 
-set spawn_id $kermit_spawn_id
-
-incr case_num
-set timeout 5
-send "modprobe -r g_serial\r"
-while 1 {
-    expect {
-        -re "modprobe:*$kernel_prompt" {
-            case_fail $case_num
-            break
-        }
-        -re $kernel_prompt {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
-
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file

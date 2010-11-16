@@ -2090,6 +2090,10 @@ fi
   mv $UCLINUX_DIST_TESTSUITES/usbdev/build_usbdev_kernel_log $THIS_LOG/build_usbdev_${config}_kernel_log
   mv $UCLINUX_DIST_TESTSUITES/usbdev/*_log $THIS_LOG
 
+  rm -rf $UCLINUX_DIST_PATH/user/busybox
+  cd $UCLINUX_DIST_PATH/user
+  cp -a  $UCLINUX_DIST_PATH_BAK/user/busybox  .
+
   sleep 30
 
   if [ $RESET_BOARD -eq 1  ] ; then

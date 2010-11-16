@@ -28,13 +28,16 @@ set timeout 300
 spawn make config
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "Virtual terminal.*VT.*\\\[.*]" {
@@ -69,8 +72,20 @@ while 1 {
             send "M\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
+        -re "Tinylogin.*USER_TINYLOGIN_TINYLOGIN.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "login.*USER_TINYLOGIN_LOGIN.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "zmodem utils.*USER_LRZSZ_LRZSZ.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "getty.*USER_BUSYBOX_GETTY.*\\\[.*]" {
+            send "Y\r"
         }
 
         "\\\(*) \\\[*]" {
@@ -99,13 +114,16 @@ set timeout 300
 spawn make config
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "n\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
@@ -240,10 +258,6 @@ while 1 {
 
         -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
             send "2\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {
