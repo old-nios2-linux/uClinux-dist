@@ -2,3 +2,4 @@ busybox-1.17.3-dnsd.patch
 busybox-1.17.3-iproute.patch
 busybox-1.17.3-ls.patch
 busybox-1.17.3-sort.patch
+busybox-1.17.3-unicode.patch
