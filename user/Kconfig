@@ -3033,6 +3033,14 @@ config USER_DEBUG_DEBUG
 	help
 	  Nios2 debug application stub
 
+config USER_GNUPLOT
+	bool "gnuplot"
+	select LIB_LIBPNG
+	help
+	  Command-line driven interactive plotting program
+
+	  http://www.gnuplot.info/
+
 config USER_GREP_GREP
 	bool "grep"
 	help

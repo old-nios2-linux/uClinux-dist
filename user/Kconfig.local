@@ -350,6 +350,7 @@ menu "Blackfin canned demos"
 config USER_NDSO
 	bool "Networked Software Defined Storage Oscilloscope"
 	select LIB_LIBPNG
+	select USER_GNUPLOT
 
 config USER_AWG 
 	bool "Networked Arbitrary Waveform Genertor"

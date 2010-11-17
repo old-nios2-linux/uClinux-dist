@@ -165,6 +165,7 @@ dir_$(CONFIG_USER_GDB_GDBSERVER)            += gdb
 dir_$(CONFIG_USER_GDB_TARGET)		    += gdb
 dir_$(CONFIG_USER_GETTYD_GETTYD)            += gettyd
 dir_$(CONFIG_USER_GNUGK_GNUGK)              += gnugk
+dir_$(CONFIG_USER_GNUPLOT)                  += gnuplot
 dir_$(CONFIG_USER_GREP_GREP)                += grep
 dir_$(CONFIG_USER_HASERL_HASERL)            += haserl
 dir_$(CONFIG_USER_HD_HD)                    += hd

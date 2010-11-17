@@ -3,7 +3,6 @@ dir_n =
 dir_  =
 
 dir_y += thttpd
-dir_y += gnuplot
 dir_$(CONFIG_USER_NDSO) += src_ndso
 dir_$(CONFIG_USER_AWG)  += src_awg
 dir_$(CONFIG_USER_PPIFPGACGI)  += src_ppi_fpga_prj
