@@ -39,6 +39,10 @@ while 1 {
             continue
         }
 
+        -re "Hardware error interrupt debugging \\\(DEBUG_HWERR\\\).*\\\[.*]" {
+            send "N\r"
+        }
+
         -re "Virtual terminal.*VT.*\\\[.*]" {
             send "N\r"
         }
