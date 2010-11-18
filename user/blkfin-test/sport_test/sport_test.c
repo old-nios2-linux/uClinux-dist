@@ -22,6 +22,101 @@
 static int sport_fd, data_fd;
 
 static const char *argv0;
+
+#define GPIO_DIR_IN     0
+#define GPIO_DIR_OUT    1
+
+static int gpio_export(unsigned gpio)
+{
+        int fd, len;
+        char buf[11];
+
+        fd = open("/sys/class/gpio/export", O_WRONLY);
+        if (fd < 0) {
+                perror("gpio/export");
+                return fd;
+        }
+
+        len = snprintf(buf, sizeof(buf), "%d", gpio);
+        write(fd, buf, len);
+        close(fd);
+
+        return 0;
+}
+
+static int gpio_unexport(unsigned gpio)
+{
+        int fd, len;
+        char buf[11];
+
+        fd = open("/sys/class/gpio/unexport", O_WRONLY);
+        if (fd < 0) {
+                perror("gpio/export");
+                return fd;
+        }
+
+        len = snprintf(buf, sizeof(buf), "%d", gpio);
+        write(fd, buf, len);
+        close(fd);
+        return 0;
+}
+
+static int gpio_dir(unsigned gpio, unsigned dir)
+{
+        int fd, len;
+        char buf[60];
+
+        len = snprintf(buf, sizeof(buf), "/sys/class/gpio/gpio%d/direction", gpio);
+
+        fd = open(buf, O_WRONLY);
+        if (fd < 0) {
+                perror("gpio/direction");
+                return fd;
+        }
+
+        if (dir == GPIO_DIR_OUT)
+                write(fd, "out", 4);
+        else
+                write(fd, "in", 3);
+
+        close(fd);
+        return 0;
+}
+
+static int gpio_dir_out(unsigned gpio)
+{
+        return gpio_dir(gpio, GPIO_DIR_OUT);
+}
+
+static int gpio_value(unsigned gpio, unsigned value)
+{
+        int fd, len;
+        char buf[60];
+
+        len = snprintf(buf, sizeof(buf), "/sys/class/gpio/gpio%d/value", gpio);
+
+        fd = open(buf, O_WRONLY);
+        if (fd < 0) {
+                perror("gpio/value");
+                return fd;
+        }
+
+        if (value)
+                write(fd, "1", 2);
+        else
+                write(fd, "0", 2);
+
+        close(fd);
+        return 0;
+}
+
+static void ad73311_enable(void)
+{
+	gpio_export(4);
+	gpio_dir_out(4);
+	gpio_value(4,1);
+} 
+
 #define warn(fmt, args...) \
 	fprintf(stderr, "%s: " fmt "\n", argv0 , ## args)
 #define warnf(fmt, args...) warn("%s(): " fmt, __func__ , ## args)
@@ -38,7 +133,6 @@ static const char *argv0;
 #define errp(fmt, args...) _err(warnp, fmt , ## args)
 
 #define DEFAULT_SPORT "/dev/sport0"
-#define DEFAULT_GPIO  "/dev/gpio4"
 
 /* Definitions for Microsoft WAVE format */
 #define RIFF		0x46464952
@@ -116,9 +210,8 @@ static void usage(int status)
 		"  -r          Read from SPORT and write to <filename>\n"
 		"  -t          Write to sport and read from <filename> (default)\n"
 		"  -s <sport>  Use <sport> rather than default %s\n"
-		"  -g <gpio>   Use <gpio> rather than default %s\n"
 		"              (for enabling AD73311)\n",
-		DEFAULT_SPORT, DEFAULT_GPIO
+		DEFAULT_SPORT 
 	);
 	exit(status);
 }
@@ -127,7 +220,6 @@ int main(int argc, char *argv[])
 {
 	int transmit, c;
 	char *gpio_path, *sport_path, *data_path;
-	FILE *fp;
 	unsigned short ctrl_regs[6];
 	struct sport_config config;
 	unsigned char *buffer;
@@ -135,7 +227,6 @@ int main(int argc, char *argv[])
 
 	argv0 = argv[0];
 
-	gpio_path = DEFAULT_GPIO;
 	sport_path = DEFAULT_SPORT;
 	transmit = 1;	/* default to writing data to sport */
 
@@ -184,16 +275,8 @@ int main(int argc, char *argv[])
 		/* Write the head of the wave file */
 		fill_waveheader(data_fd, count);
 	}
-
-	fp = fopen(gpio_path, "w+");
-	if (!fp)
-		errp("unable to open GPIO '%s'", gpio_path);
-	/* set it to Output mode */
-	if (fwrite("O", 1, 1, fp) != 1)
-		errp("unable to set GPIO '%s' to output", gpio_path);
-	if (fwrite("1", 1, 1, fp) != 1)
-		errp("unable to set GPIO '%s' high", gpio_path);
-	fclose(fp);
+	
+	ad73311_enable();
 
 	/* Set registers on AD73311L through SPORT.  */
 #if 0
@@ -260,6 +343,8 @@ int main(int argc, char *argv[])
 	close(sport_fd);
 	close(data_fd);
 	free(buffer);
+	
+	gpio_unexport(4);	
 
 	return 0;
 }
