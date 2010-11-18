@@ -29,6 +29,8 @@ if { $board_type == "BF533-STAMP" || $board_type == "BF518F-EZBRD" || $board_typ
 
 step "Start testing."
 
+sleep 20
+
 set timeout 5
 
 set case_num 0
