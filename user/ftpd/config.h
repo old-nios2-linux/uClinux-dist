@@ -646,11 +646,7 @@
 #endif
 
 /* Define to one if you have 'daemon' function */
-#ifdef __uClinux__
-#undef HAVE_DAEMON
-#else
 #define HAVE_DAEMON 1
-#endif
 
 /* Define to one if you have Kerberos */
 /* #undef KERBEROS */
