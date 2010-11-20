@@ -94,7 +94,7 @@ extern off_t restart_point;
 
 /* Exported from server_mode.c.  */
 extern int server_mode __P ((const char *pidfile,
-			     struct sockaddr_in *phis_addr));
+			     struct sockaddr_in *phis_addr, char *argv[]));
 
 /* Credential for the request.  */
 struct credentials

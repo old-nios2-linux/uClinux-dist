@@ -422,8 +422,7 @@ main(int argc, char *argv[], char **envp)
     }
 
   /* Bail out, wrong usage */
-  argc -= optind;
-  if (argc != 0)
+  if (argc - optind != 0)
     usage (1);
 
   /* LOG_NDELAY sets up the logging connection immediately,
@@ -435,7 +434,19 @@ main(int argc, char *argv[], char **envp)
      fd = accept(). tcpd is check if compile with the support  */
   if (daemon_mode)
     {
-      if (server_mode (pid_file, &his_addr) < 0)
+#ifndef HAVE_WORKING_FORK
+      /* Shift out the daemon option in subforks  */
+      int i;
+      for (i = 0; i < argc; ++i)
+   if (strcmp (argv[i], "-D") == 0)
+     {
+       int j;
+       for (j = i; j < argc; ++j)
+         argv[j] = argv[j + 1];
+       argv[--argc] = NULL;
+     }
+#endif
+      if (server_mode (pid_file, &his_addr, argv) < 0)
 	exit (1);
     }
   else

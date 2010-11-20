@@ -76,7 +76,7 @@ reapchild (int signo)
 }
 
 int
-server_mode (const char *pidfile, struct sockaddr_in *phis_addr)
+server_mode (const char *pidfile, struct sockaddr_in *phis_addr, char *argv[])
 {
   int ctl_sock, fd;
   struct servent *sv;
@@ -166,5 +166,10 @@ server_mode (const char *pidfile, struct sockaddr_in *phis_addr)
   if (!check_host ((struct sockaddr *)phis_addr))
     return -1;
 #endif
+
+#ifndef HAVE_WORKING_FORK
+  _exit(execvp(argv[0], argv));
+#endif
+
   return fd;
 }
