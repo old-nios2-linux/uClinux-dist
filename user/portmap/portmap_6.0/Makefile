@@ -27,11 +27,6 @@ MAN_SED += -e 's/USE_DNS/yes/'
 endif
 endif
 
-# For no-mmu systems, we have to disable the daemon() function.
-ifneq ($(NO_DAEMON),)
-CPPFLAGS += -DNO_DAEMON
-endif
-
 # For no-mmu systems, we have to disable the fork() functions.
 ifneq ($(NO_MMU),)
 CPPFLAGS += -DNO_MMU

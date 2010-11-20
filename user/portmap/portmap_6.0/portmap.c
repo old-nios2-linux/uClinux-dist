@@ -129,15 +129,6 @@ int store_fd = -1;
 static void dump_table(void);
 static void load_table(void);
 
-#ifdef NO_DAEMON
-static inline int do_daemon(int nochdir, int noclose)
-{
-	return errno = ENOSYS;
-}
-#else
-# define do_daemon(nochdir, noclose) daemon(nochdir, noclose)
-#endif
-
 #include "pmap_check.h"
 
  /*
@@ -258,7 +249,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (!foreground && do_daemon(0, 0)) {
+	if (!foreground && daemon(0, 0)) {
 		(void) fprintf(stderr, "portmap: fork: %s\n", strerror(errno));
 		exit(1);
 	}
