@@ -106,6 +106,14 @@ while 1 {
             }
         }
 
+        -re "Enable UART over SPORT0.*SERIAL_BFIN_SPORT0_UART.*\\\[.*]" {
+            if { $port_type == "sport_uart" } {
+                send "Y\r"
+            } else {
+                send "\r"
+            }
+        }
+
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
         }
