@@ -106,7 +106,7 @@ while 1 {
             }
         }
 
-        -re "Enable UART over SPORT0.*SERIAL_BFIN_SPORT0_UART.*\\\[.*]" {
+        -re "Enable UART over SPORT0 \\\(SERIAL_BFIN_SPORT0_UART\\\) \\\[.*]" {
             if { $port_type == "sport_uart" } {
                 send "Y\r"
             } else {
