@@ -47,10 +47,9 @@ if {  $port_type== "sport_uart" } {
     } else {
         set ttyBFdev /dev/ttyBF1
     }
-
 }
 
-set ext_uart_port [ string index $ttyBFdev end ]
+set ext_uart_port [ string range $ttyBFdev 5 end ]
 send_log "ext_uart_port is $ext_uart_port\n"
 send_log "port_type is $port_type\n"
 send_log "ttydev_for_testcase_use is $ttydev_for_testcase_use\n"
@@ -61,7 +60,7 @@ source ../spawn_kermit.exp
 step "Reboot the kernel."
 source ../reboot_kernel.exp
 
-send_log "\nStarting test for UART ...\n"
+step "Start testing emulated uart"
 set TITLE [title "$argv0"]
 append TITLE " ($port_type)"
 
@@ -73,10 +72,6 @@ set save_file ccc
 set command "/proc/kallsyms"
 #set command "/proc/cmdline"
 
-send_log "*********************************\r"
-send_log "Start $TITLE\r"
-send_log "*********************************\r"
-
 set case_num 0
 set target_default_id $spawn_id
 ###
@@ -85,296 +80,368 @@ set target_default_id $spawn_id
 ### so use igncr to set target tty device not to add "\n" sign.
 ###
 
-set timeout 3
-sleep 3
-spawn  /bin/sh
+spawn /bin/sh
 set target_id $spawn_id
-expect  -re  $sh_prompt
+sleep 3
 
-### This case is sending file from  host to target.
-
+set timeout 8
+incr case_num
 send -s "telnet $targetip\r"
 while 1 {
-        expect {
-                -re  "$kernel_prompt" { break  }
-                timeout {
-                      send_user "Failed inital telnet\n"
-                      exit }
+    expect {
+        -re "Connected to.*$kernel_prompt" {
+            case_pass $case_num
+            break
         }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+set timeout 8
+incr case_num
+send -s "cat $command > $save_file\r"
+while 1 {
+    expect {
+        -nocase -re "(fail|error|no such).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
 incr case_num
-set timeout 5
-
-send "\r"
-expect -re  $kernel_prompt
-
-send -s "cat $command > $save_file \r"
-while 1 {
-        expect {
-                -re  "$kernel_prompt" { break  }
-                timeout {
-                     send_user "Failed to save file.\n"
-                     exit }
-        }
-}
-
 send -s "stty -F $ttyBFdev cs$bits_number ispeed $baud_rate ospeed $baud_rate $ttyflags\r"
 while 1 {
-        expect {
-                -re  "$kernel_prompt" { break  }
-                timeout {
-                     send_user "Failed to set uart speed.\n"
-                     exit }
+    expect {
+        -nocase -re "(fail|error|no such).*$kernel_prompt" {
+            case_fail $case_num
         }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
+incr case_num
 send -s "stty -F $ttyBFdev -a\r"
 while 1 {
-        expect {
-                -re  "$kernel_prompt" { break  }
-                timeout {
-                     send_user "Failed to set uart speed.\n"
-                     exit }
+    expect {
+        -nocase -re "(fail|error|no such).*$kernel_prompt" {
+            case_fail $case_num
         }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
-send -s "cat $ttyBFdev > $target_file \r"
+set timeout 5
+incr case_num
+send -s "cat $ttyBFdev > $target_file\r"
 while 1 {
-        expect {
-                -re  "$kernel_prompt" {
-                      case_fail $case_num
-                      }
-                timeout {
-                      break }
+    expect {
+        -re $kernel_prompt {
+            case_fail $case_num
         }
+        timeout {
+            case_pass $case_num
+            break
+        }
+    }
 }
 
 
 spawn /bin/sh
+sleep 2
 set host_sh_id $spawn_id
-expect  -re  $sh_prompt
+send "\r"
+expect -re $sh_prompt
 
-send -s "rcp root@$targetip:/$save_file . \r"
+set timeout 8
+incr case_num
+send -s "rcp root@$targetip:/$save_file .\r"
 while 1 {
-        expect {
-                -re  "$sh_prompt" { break  }
-                timeout {
-                     send_user "Failed to rcp $target_file to host.\n"
-                     exit }
+    expect {
+        -nocase -re "(fail|error|no such).*$sh_prompt" {
+            case_fail $case_num
         }
+        -re $sh_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
-while 1 {
+incr case_num
 send -s "stty -F $ttydev_for_testcase_use cs$bits_number ispeed $baud_rate ospeed $baud_rate $ttyflags\r"
-expect {
-        -re  "$sh_prompt" {
-          break }
-         timeout {
-          send_log " set $ttydev_for_testcase_use failed...\n"
-          break
-         }
+while 1 {
+    expect {
+        -nocase -re "(fail|error|no such).*$sh_prompt" {
+            case_fail $case_num
+        }
+        -re $sh_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
-}
+
 set timeout 100
+incr case_num
+send -s "cat $save_file > $ttydev_for_testcase_use\r"
 while 1 {
-send -s " cat $save_file > $ttydev_for_testcase_use  \r"
-expect {
-         -re  "$sh_prompt" {
-          break }
-         timeout {
-         send_log " send data failed...\n"
-          break
-         }
-}
+    expect {
+        -nocase -re "(fail|error|no such).*$sh_prompt" {
+            case_fail $case_num
+        }
+        -re $sh_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
-while 1 {
+set timeout 100
+incr case_num
 send -s "stty -F $ttydev_for_testcase_use -a\r"
-expect {
-        -re  "speed.*$sh_prompt" {
-          break }
-         timeout {
-          send_log " set $ttydev_for_testcase_use failed...\n"
-          break
-         }
-}
-}
-set spawn_id $target_id
-set timeout 5
-sleep 3
 while 1 {
-expect {
-        -re  "$kernel_prompt" {
-          send_log "Fail to wait.\n"
-          case_fail $case_num
-          break }
-         timeout {
-          send_log "\nStill wait.\n"
-          break
-         }
-}
+    expect {
+        -re "speed.*$sh_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
+set spawn_id $target_id
+set timeout 10
+send "\r"
+while 1 {
+    expect {
+        -re $kernel_prompt {
+            send_log "Fail to wait.\n"
+            case_fail $case_num
+        }
+        timeout {
+            send_log "\nStill wait.\n"
+            break
+        }
+    }
+}
+
+set timeout 8
+incr case_num
 send "\3"
 send "\r"
 while 1 {
-expect {
-        -re "$kernel_prompt" {
-          send_log "Catted file is got on target.\n"
-          break }
-          timeout {
-          case_fail $case_num
-         }
-}
+    expect {
+        -re $kernel_prompt {
+            send_user "Catted file is got on target.\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
-set timeout 10
-send -s "diff -u $save_file $target_file \r"
+set timeout 20
+incr case_num
+send -s "diff -u $save_file $target_file\r"
 while 1 {
-expect {
-         -re "\\\+\\\+\\\+" {
-                         expect -re  "$kernel_prompt"
-                         send_log "\nTwo files diffs.\n "
-                         case_fail $case_num
-                         break
-                          }
-          "differ"
-                      {
-                         send_log "Two files diffs!\n"
-                         case_fail $case_num
-                         break
-                        }
-
-          timeout
-                      {
-                         expect -re  "$kernel_prompt"
-                         send_log "Success case.\n"
-                         case_pass $case_num
-                         break
-                        }
-         }
+    expect {
+        -re "\\\+\\\+\\\+.*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re "differ.*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
+
 ######################################################################
 ###
 ### Case 2 is sending file from target to host.
 ### Here use igncr to host tty device not to add "\n" sign.
 ###
+######################################################################
+set spawn_id $target_id
+sleep 2
+send "\r"
+expect -re $kernel_prompt
+
 set timeout 5
 incr case_num
-
-set spawn_id $target_id
 send -s "stty -F $ttyBFdev cs$bits_number ispeed $baud_rate ospeed $baud_rate $ttyflags\r"
 while 1 {
-        expect {
-                -re  "$kernel_prompt" { break  }
-                timeout {
-                     send_user "Failed to set uart speed.\n"
-                     exit }
+    expect {
+        -nocase -re "(fail|error|no such).*$kernel_prompt" {
+            case_fail $case_num
         }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
-set spawn_id $host_sh_id
-sleep 3
-send "ls\r"
-expect -re  "$sh_prompt"
 
+set spawn_id $host_sh_id
+sleep 2
+send "\r"
+expect -re $sh_prompt
+
+set timeout 5
+incr case_num
 send -s "stty -F $ttydev_for_testcase_use cs$bits_number ispeed $baud_rate ospeed $baud_rate $ttyflags\r"
 while 1 {
-        expect {
-                -re  "$sh_prompt" { break  }
-                timeout {
-                     send_user "Failed to set uart speed.\n"
-                     exit }
+    expect {
+        -nocase -re "(fail|error|no such).*$sh_prompt" {
+            case_fail $case_num
         }
+        -re $sh_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
+set timeout 10
+incr case_num
+send -s "cat $ttydev_for_testcase_use > $host_file\r"
 while 1 {
-send -s "cat $ttydev_for_testcase_use > $host_file \r"
-expect {
-        -re  "$sh_prompt" {
-          send_log "Fail to cat on host.\n"
-          case_fail $case_num
-          break }
-         timeout {
-          send_log "wait for receiving data...\n"
-          break
-         }
-}
+    expect {
+        -re $sh_prompt {
+            send_log "Fail to cat on host.\n"
+            case_fail $case_num
+        }
+        timeout {
+            send_log "wait for receiving data...\n"
+            case_pass $case_num
+            break
+        }
+    }
 }
 
 set spawn_id $target_id
-set timeout 100
-while 1 {
-send -s "cat $save_file > $ttyBFdev \r"
-        expect {
-              -re  "$kernel_prompt" {
-                      break }
-                timeout { send_user "Failed to cat file\n"
-                        exit }
-        }
+sleep 2
+send "\r"
+expect -re $kernel_prompt
 
-}
-set spawn_id $host_sh_id
-set timeout 5
-sleep 5
+set timeout 100
+incr case_num
+send -s "cat $save_file > $ttyBFdev\r"
 while 1 {
-expect {
-        -re  "$sh_prompt" {
-          send_log "Fail to wait.\n"
-          case_fail $case_num
-          break }
-         timeout {
-          send_log "\nStill wait.\n"
-          break
-         }
+    expect {
+        -nocase -re "(fail|error|no such).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "Failed to cat file\n"
+            case_fail $case_num
+        }
+    }
 }
+
+set spawn_id $host_sh_id
+set timeout 10
+send "\r"
+while 1 {
+    expect {
+        -re $sh_prompt {
+            send_log "Fail to wait.\n"
+            case_fail $case_num
+        }
+        timeout {
+            send_log "\nStill wait.\n"
+            case_pass $case_num
+            break
+        }
+    }
 }
+
+incr case_num
+set timeout 5
 send -s "\3"
 while 1 {
-expect {
-        -re  "$sh_prompt" {
-          break }
-         timeout {
-          send_log "Failed to come out.\n"
-          break
-         }
+    expect {
+        -re $sh_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_log "Failed to come out.\n"
+            case_fail $case_num
+        }
+    }
 }
-}
-#send -s "cat $host_file \r"
-#while 1 {
-#expect {
-#       -re  "$sh_prompt" {
-#         break}
-#        timeout {
-#         puts "Failed to cat file.\n"}
-#}
-#}
-set timeout 10
-send -s "diff -u $save_file $host_file \r"
-while 1 {
-expect {
-         -re "\\\+\\\+\\\+" {
-                         expect -re  "$sh_prompt"
-                         send_log "\nTwo files diffs.\n "
-                         case_fail $case_num
-                         break
-                          }
-          "differ"
-                      {
-                         send_log "Two files diffs!\n"
-                         case_fail $case_num
-                         break
-                        }
 
-          timeout
-                      {
-                         expect -re  "$sh_prompt"
-                         send_log "Success case.\n"
-                         case_pass $case_num
-                         break
-                        }
-         }
+incr case_num
+set timeout 10
+send -s "diff -u $save_file $host_file\r"
+while 1 {
+    expect {
+        -re "\\\+\\\+\\\+.*$sh_prompt" {
+            case_fail $case_num
+        }
+        -re "differ.*$sh_prompt" {
+            case_fail $case_num
+        }
+        -re $sh_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
+
 ###
 ### Case 3 is to check if it can use the extend ttyBF port as default console to boot up kernel.
 ###
@@ -382,61 +449,55 @@ expect {
 step "Convert the console to the extend UART."
 
 set spawn_id $target_default_id
-append bootargs_param6 " console=ttyBF$ext_uart_port,57600n$bits_number"
+append bootargs_param6 " console=$ext_uart_port,57600n$bits_number"
 set bootargs             $bootargs_param6
 source ../reboot_kernel.exp
 
-set timeout 3
 incr case_num
-
-    send -s "\x81"
-    send -s "c"
-    while 1 {
-        expect {
-            "ermit>" {
-                send -s "q\r"
-                expect -re ">"
-                set back_flag SUCCESS
-                break
-            }
-
-            timeout {
-                send_user "ERROR: back to kermit error\n"
-                break
-            }
+set timeout 10
+send -s "\x81"
+send -s "c"
+while 1 {
+    expect {
+        "ermit>" {
+            send -s "q\r"
+            expect -re ">"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "ERROR: back to kermit error\n"
+            case_fail $case_num
         }
     }
+}
 
 step "Start kermit."
+
 if { $line_connection == "normal" } {
-
-set kermit_ttydev $ttyUSBdev
-
+    set kermit_ttydev $ttyUSBdev
 } elseif { $line_connection == "switch" } {
-
-set kermit_ttydev $ttydev
+    set kermit_ttydev $ttydev
 }
+
 source ../spawn_kermit.exp
-set timeout 20
 
-    expect -re "$kernel_prompt"
-    send -s "ls\r"
-    while 1 {
-        expect {
-            -re "$kernel_prompt" {
-                case_pass $case_num
-                break
-            }
-
-            timeout {
-                case_fail $case_num
-                send_user "The console is not active.\n"
-                exit
-            }
+set timeout 8
+incr case_num
+send -s "ls\r"
+while 1 {
+    expect {
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
         }
+        timeout {
+            send_user "The console is not active.\n"
+            case_fail $case_num
+        }
+    }
 }
 
 all_pass
 send_user "Ending $argv0\n"
 log_file
-
