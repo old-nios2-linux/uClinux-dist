@@ -104,7 +104,7 @@ while 1 {
             send "M\r"
         }
 
-        -re "SoC AD73311 Audio support for Blackfin.*SND_BF5XX_SOC_AD73311.*\\\[.*]" {
+        -re "AD73311.*Audio support for Blackfin.*SND_BF5XX_SOC_AD73311.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" || $board_type == "BF533-STAMP" } {
                 send "M\r"
             } else {
