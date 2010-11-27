@@ -399,10 +399,7 @@ bpf_filter.o: $(builddir)/bpf_filter.c
 #
 pcap-config: pcap-config.in Makefile
 	@rm -f $@ $@.tmp
-	sed -e 's|@includedir[@]|$(includedir)|g' \
-	    -e 's|@libdir[@]|$(libdir)|g' \
-	    -e 's|@DEPLIBS[@]|$(DEPLIBS)|g' \
-	    $(srcdir)/pcap-config.in >$@.tmp
+	./config.status --file=$@.tmp:$<
 	mv $@.tmp $@
 	chmod a+x $@
 
