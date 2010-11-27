@@ -8,6 +8,7 @@ CONF_OPTS = \
 
 export ac_cv_linux_vers=2
 export ac_cv_lbl_unaligned_fail=yes
+export ac_cv_path_PCAP_CONFIG=$(STAGEDIR)/usr/bin/pcap-config
 
 include $(ROOTDIR)/tools/autotools.mk
 
