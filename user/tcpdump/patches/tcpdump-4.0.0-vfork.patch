@@ -1,8 +1,6 @@
-Index: tcpdump-4.0.0/configure.in
-===================================================================
---- tcpdump-4.0.0/configure.in	(revision 9856)
-+++ tcpdump-4.0.0/configure.in	(working copy)
-@@ -517,7 +517,7 @@ AC_STRUCT_RES_STATE(ac_cv_res_state)
+--- tcpdump-4.0.0/configure.in
++++ tcpdump-4.0.0/configure.in
+@@ -517,7 +517,7 @@
  
  
  AC_REPLACE_FUNCS(vfprintf strcasecmp strlcat strlcpy strdup strsep)
@@ -11,10 +9,8 @@ Index: tcpdump-4.0.0/configure.in
  AC_CHECK_FUNCS(setlinebuf alarm)
  
  needsnprintf=no
-Index: tcpdump-4.0.0/config.h.in
-===================================================================
---- tcpdump-4.0.0/config.h.in	(revision 9856)
-+++ tcpdump-4.0.0/config.h.in	(working copy)
+--- tcpdump-4.0.0/config.h.in
++++ tcpdump-4.0.0/config.h.in
 @@ -151,6 +151,9 @@
  /* Define to 1 if you have the <fcntl.h> header file. */
  #undef HAVE_FCNTL_H
@@ -35,10 +31,8 @@ Index: tcpdump-4.0.0/config.h.in
  /* Define to 1 if you have the `vfprintf' function. */
  #undef HAVE_VFPRINTF
  
-Index: tcpdump-4.0.0/configure
-===================================================================
---- tcpdump-4.0.0/configure	(revision 9856)
-+++ tcpdump-4.0.0/configure	(working copy)
+--- tcpdump-4.0.0/configure
++++ tcpdump-4.0.0/configure
 @@ -7976,7 +7976,7 @@ done
  
  
@@ -48,17 +42,15 @@ Index: tcpdump-4.0.0/configure
  do
  as_ac_var=`echo "ac_cv_func_$ac_func" | $as_tr_sh`
  { echo "$as_me:$LINENO: checking for $ac_func" >&5
-Index: tcpdump-4.0.0/tcpdump.c
-===================================================================
---- tcpdump-4.0.0/tcpdump.c	(revision 9856)
-+++ tcpdump-4.0.0/tcpdump.c	(working copy)
+--- tcpdump-4.0.0/tcpdump.c
++++ tcpdump-4.0.0/tcpdump.c
 @@ -1085,8 +1085,10 @@ main(int argc, char **argv)
  	(void)setsignal(SIGPIPE, cleanup);
  	(void)setsignal(SIGTERM, cleanup);
  	(void)setsignal(SIGINT, cleanup);
 -	(void)setsignal(SIGCHLD, child_cleanup);
  #endif /* WIN32 */
-+#if !defined(HAVE_FORK) && !defined(HAVE_VFORK)
++#if defined(HAVE_FORK) || defined(HAVE_VFORK)
 +	(void)setsignal(SIGCHLD, child_cleanup);
 +#endif
  	/* Cooperate with nohup(1) */
@@ -69,7 +61,7 @@ Index: tcpdump-4.0.0/tcpdump.c
    waiting a child processes to die
   */
 -#ifndef WIN32
-+#if !defined(HAVE_FORK) && !defined(HAVE_VFORK)
++#if defined(HAVE_FORK) || defined(HAVE_VFORK)
  static RETSIGTYPE
  child_cleanup(int signo _U_)
  {
@@ -85,7 +77,7 @@ Index: tcpdump-4.0.0/tcpdump.c
  }
  
 -#ifndef WIN32
-+#if !defined(HAVE_FORK) && !defined(HAVE_VFORK)
++#if defined(HAVE_FORK) || defined(HAVE_VFORK)
  static void
  compress_savefile(const char *filename)
  {

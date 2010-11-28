@@ -1086,7 +1086,7 @@ main(int argc, char **argv)
 	(void)setsignal(SIGTERM, cleanup);
 	(void)setsignal(SIGINT, cleanup);
 #endif /* WIN32 */
-#if !defined(HAVE_FORK) && !defined(HAVE_VFORK)
+#if defined(HAVE_FORK) || defined(HAVE_VFORK)
 	(void)setsignal(SIGCHLD, child_cleanup);
 #endif
 	/* Cooperate with nohup(1) */
@@ -1276,7 +1276,7 @@ cleanup(int signo _U_)
   On windows, we do not use a fork, so we do not care less about
   waiting a child processes to die
  */
-#if !defined(HAVE_FORK) && !defined(HAVE_VFORK)
+#if defined(HAVE_FORK) || defined(HAVE_VFORK)
 static RETSIGTYPE
 child_cleanup(int signo _U_)
 {
@@ -1312,7 +1312,7 @@ info(register int verbose)
 	infoprint = 0;
 }
 
-#if !defined(HAVE_FORK) && !defined(HAVE_VFORK)
+#if defined(HAVE_FORK) || defined(HAVE_VFORK)
 static void
 compress_savefile(const char *filename)
 {
