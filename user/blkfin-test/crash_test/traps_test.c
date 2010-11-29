@@ -1058,6 +1058,8 @@ int main(int argc, char *argv[])
 	/* try and get output asap */
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
+	
+	sleep(1);	
 
 	for (test = start_test; test <= end_test ; ++test) {
 		unsigned int ex_actual = 0, sig_actual=0, count, pass_count = 0;
