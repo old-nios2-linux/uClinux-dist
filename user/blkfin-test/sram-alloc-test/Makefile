@@ -1,14 +1,18 @@
+ifeq ($(origin CC),default)
+CC := bfin-uclinux-gcc
+endif
+
+CFLAGS ?= -O2 -g
+CFLAGS += -Wall
+
 EXEC = sram_alloc
-OBJS = sram_alloc.o
 
 all: $(EXEC)
-
-$(EXEC): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS$(LDLIBS_$@))
 
 romfs:
 	$(ROMFSINST) /bin/$(EXEC)
 
 clean:
-	-rm -f $(EXEC) *.elf *.gdb *.o
+	rm -f $(EXEC) *.elf *.gdb *.o
  
+.PHONY: all clean romfs
