@@ -19,14 +19,15 @@
 #define _GNU_SOURCE
 #endif
 #include <errno.h>
+#include <sched.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
-#include <sched.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -35,6 +36,9 @@
 #include <sys/wait.h>
 #include <asm/ptrace.h>
 #include <sys/klog.h>
+#ifdef __x86_64__
+#include <sys/reg.h>
+#endif
 
 #define NULL_PTR		0x00000000
 /*
