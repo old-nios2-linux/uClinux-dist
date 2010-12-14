@@ -1,5 +1,5 @@
-EXEC = twilcd_test
-OBJS = twilcd_test.o
+EXEC = twilcd_userspace_test
+OBJS = twilcd_userspace_test.o
 
 all: $(EXEC)
 
