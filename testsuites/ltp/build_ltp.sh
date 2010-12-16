@@ -7,7 +7,7 @@ if [ $# -ne 1 ]; then
 fi       
 cvs_server_addr=$1
 
-LTP_SUB_DIR=ltp-full-20081130
+LTP_SUB_DIR=ltp-full-20101031
 if [ -d $LTP_SUB_DIR ]
 then
 	rm -rf $LTP_SUB_DIR
@@ -53,6 +53,15 @@ fi
 echo "$0:	Go to working directory"
 cd $LTP_SUB_DIR
 
+# configure ltp
+echo "$0:	Configure ..."
+./configure --prefix=$CWD/$LTP_SUB_DIR --host=bfin-uclinux --build=i686-pc-linux-gnu > /dev/null 2>&1
+if [ $? -ne 0 ]
+then
+	echo "$0:	Error, configure failed" 
+	exit 1
+fi
+
 ## We don't need patch for Makefile now ##
 # Patch for Makefiles
 #echo "$0:	Patching Makefiles"
@@ -65,7 +74,7 @@ cd $LTP_SUB_DIR
 
 # Build ltp testsuites
 echo "$0:	Make ..."
-make -s uclinux > /dev/null 2>&1
+make UCLINUX=1 > /dev/null 2>&1
 if [ $? -ne 0 ]
 then
 	echo "$0:	Error, make failed" 
@@ -73,7 +82,7 @@ then
 fi
 
 echo "$0:	make install ..."
-make -s uclinux_install > /dev/null 2>&1
+make UCLINUX=1 install > /dev/null 2>&1
 if [ $? -ne 0 ]
 then
 	echo "$0:	Error, make install failed" 

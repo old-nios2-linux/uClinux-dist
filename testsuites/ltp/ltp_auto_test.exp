@@ -921,7 +921,7 @@ proc run_LTP_test { filename command torun mode} {
        }
    }
 
-   if { $filename == "execve02" || $filename == "execve05" } {
+   if { $filename == "execve02" || $filename == "execve04" } {
        if [ catch {exec rcp $LTP_TESTCASES_DIR/test3 root@$ipaddr:/bin} ] {
            send_user "rcp test file fail\n"
            send_user "$errorInfo\n"
@@ -1209,7 +1209,7 @@ proc run_LTP_test { filename command torun mode} {
       send "rm -f /bin/chmod01\r"
       send "rm -f /bin/symlink01\r"
    }
-   if { $filename == "execve02" || $filename == "execve05" } {
+   if { $filename == "execve02" || $filename == "execve04" } {
       send "rm -f /bin/test3\r"
    }
    if { $filename == "lchown02" } {
@@ -1312,11 +1312,11 @@ set TEST_PASS               "pass"
 set TEST_FAIL               "fail"
 
 set LTP_NOT_RUN             "LTP test never ran"
-set LTP_PASS                "PASS"
-set LTP_INFO                "INFO"
-set LTP_WARN                "WARN"
-set LTP_BROKEN              "BROK"
-set LTP_FAIL                "FAIL"
+set LTP_PASS                "TPASS"
+set LTP_INFO                "TINFO"
+set LTP_WARN                "TWARN"
+set LTP_BROKEN              "TBROK"
+set LTP_FAIL                "TFAIL"
 set LTP_CRASH               "LTP crashed!"
 set LTP_NA                  "NA on uClinux"
 
@@ -1431,8 +1431,8 @@ set result_matrix {
        { execve01     	     {execve01}                     	 notrun		UCLINUX }
        { execve02     	     {execve02 -F /bin/test3}            notrun		UCLINUX }
        { execve03     	     {execve03}                     	 notrun		NA }
-       { execve05     	     {execve05 -F /bin/test3}            notrun		UCLINUX }
-       { execve06     	     {execve06 20 /bin/execve06 /bin/execve06 4}        notrun		UCLINUX }
+       { execve04     	     {execve04 -F /bin/test3}            notrun		UCLINUX }
+       { execve05     	     {execve05 20 /bin/execve05 /bin/execve05 4}        notrun		UCLINUX }
        { execvp01     	     {execvp01}                     	 notrun		UCLINUX }
        { exit01     	     {exit01}                     	 notrun		UCLINUX }
        { exit02     	     {exit02}                     	 notrun		UCLINUX }
@@ -2174,7 +2174,7 @@ if [ catch {exec ./build_ltp.sh $cvs_server_addr > build_ltp_log} ] {
 #set LTP_SOURCE_DIR		"$cwd/ltp/$LTP_SUB_DIR"
 #set LTP_TESTCASES_DIR           "$cwd/ltp/$LTP_SUB_DIR/testcases/bin"
 #set LTP_SUB_DIR			[exec cat ltp/current]
-set LTP_SOURCE_NAME             "ltp-full-20081130"
+set LTP_SOURCE_NAME             "ltp-full-20101031"
 set LTP_SOURCE_DIR		"$cwd/$LTP_SOURCE_NAME"
 set LTP_TESTCASES_DIR           "$cwd/$LTP_SOURCE_NAME/testcases/bin"
 
