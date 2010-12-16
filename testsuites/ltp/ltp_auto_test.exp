@@ -1104,12 +1104,6 @@ proc run_LTP_test { filename command torun mode} {
             break
          }
 
-         # seperate test case fcntl14 from the test cases that have been done
-         -re "BusyBox.*Built-in shell.*Enter \'help\'.*$kernel_prompt " {
-            report "---continue"
-            continue
-         }
-
          # Some testcases leave the current directory in root
           -re $kernel_prompt {
             report "---done"
@@ -1177,10 +1171,6 @@ proc run_LTP_test { filename command torun mode} {
          }
 
          timeout {
-             if {$filename == "fcntl14"} {
-                 send "\r"
-                 continue
-             } else {
                  step "timeout!"
                  report "---timeout"
                  set result_flag $LTP_CRASH
