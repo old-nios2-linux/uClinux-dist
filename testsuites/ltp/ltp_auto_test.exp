@@ -1175,7 +1175,6 @@ proc run_LTP_test { filename command torun mode} {
                  report "---timeout"
                  set result_flag $LTP_CRASH
                  break
-             }
          }
       }
    }
