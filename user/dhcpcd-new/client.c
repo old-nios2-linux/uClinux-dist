@@ -42,6 +42,7 @@
 #include <setjmp.h>
 #include <resolv.h>
 #include <time.h>
+#include <signal.h>
 #include "client.h"
 #include "buildmsg.h"
 #include "udpipgen.h"

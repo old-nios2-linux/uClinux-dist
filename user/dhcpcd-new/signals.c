@@ -27,6 +27,7 @@
 #include <syslog.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <stdlib.h>
 #include "dhcpcd.h"
 #include "client.h"
 #include "pathnames.h"
