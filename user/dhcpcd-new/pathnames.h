@@ -24,7 +24,6 @@
 #define PATHNAMES_H
 
 #include <paths.h>
-#include <config/autoconf.h>
 #include "dhcpcd.h"
 
 #ifndef CONFIG_USER_FLATFSD_FLATFSD
