@@ -110,12 +110,12 @@ static int gpio_value(unsigned gpio, unsigned value)
         return 0;
 }
 
-static void ad73311_enable(void)
+static void ad73311_enable(unsigned gpio)
 {
-	gpio_export(4);
-	gpio_dir_out(4);
-	gpio_value(4,1);
-} 
+	gpio_export(gpio);
+	gpio_dir_out(gpio);
+	gpio_value(gpio,1);
+}
 
 #define warn(fmt, args...) \
 	fprintf(stderr, "%s: " fmt "\n", argv0 , ## args)
@@ -207,11 +207,14 @@ static void usage(int status)
 		"Usage: sport_test [options] <filename>\n"
 		"\n"
 		"Options:\n"
+		"  -d          Use TDM mode\n"
+		"  -n <ch_nu>  Use <ch_nu> channels for TDM mode, default is 8\n"
 		"  -r          Read from SPORT and write to <filename>\n"
 		"  -t          Write to sport and read from <filename> (default)\n"
 		"  -s <sport>  Use <sport> rather than default %s\n"
+		"  -g <gpio>   Use gpio<gpio> rather than gpio4 \n"
 		"              (for enabling AD73311)\n",
-		DEFAULT_SPORT 
+		DEFAULT_SPORT
 	);
 	exit(status);
 }
@@ -219,7 +222,10 @@ static void usage(int status)
 int main(int argc, char *argv[])
 {
 	int transmit, c;
-	char *gpio_path, *sport_path, *data_path;
+	int tdm = 0;
+	int gpio_en = 4;
+	int ch_nu = 8;
+	char *sport_path, *data_path;
 	unsigned short ctrl_regs[6];
 	struct sport_config config;
 	unsigned char *buffer;
@@ -230,8 +236,14 @@ int main(int argc, char *argv[])
 	sport_path = DEFAULT_SPORT;
 	transmit = 1;	/* default to writing data to sport */
 
-	while ((c = getopt(argc, argv, "hrts:g:")) != EOF)
+	while ((c = getopt(argc, argv, "dn:hrts:g:")) != EOF)
 		switch (c) {
+		case 'd':
+			tdm = 1;
+			break;
+		case 'n':
+			ch_nu = atoi(optarg);
+			break;
 		case 'r':
 			transmit = 0;
 			break;
@@ -242,7 +254,7 @@ int main(int argc, char *argv[])
 			sport_path = optarg;
 			break;
 		case 'g':
-			gpio_path = optarg;
+			gpio_en = atoi(optarg);
 			break;
 		case 'h':
 			usage(0);
@@ -275,8 +287,9 @@ int main(int argc, char *argv[])
 		/* Write the head of the wave file */
 		fill_waveheader(data_fd, count);
 	}
-	
-	ad73311_enable();
+	if(!tdm){	
+		ad73311_enable(gpio_en);
+	}
 
 	/* Set registers on AD73311L through SPORT.  */
 #if 0
@@ -314,14 +327,21 @@ int main(int argc, char *argv[])
 	config.fsync = 1;
 	config.word_len = 16;
 	config.dma_enabled = 1;
-
+	if(tdm){
+		config.mode = TDM_MODE;
+		config.channels = ch_nu;
+		config.int_clk = 1;
+		config.serial_clk = 5000000;
+	}
 	/* Configure sport controller by ioctl */
 	if (ioctl(sport_fd, SPORT_IOC_CONFIG, &config) < 0)
 		errp("ioctl('%s', SPORT_IOC_CONFIG) failed", sport_path);
 
 	/* Write control data to ad73311's control register by write operation*/
-	if (write(sport_fd, (char *)ctrl_regs, 12) < 0)
-		errp("setting up sport ctrl regs failed");
+	if(!tdm){
+		if (write(sport_fd, (char *)ctrl_regs, 12) < 0)
+			errp("setting up sport ctrl regs failed");
+	}
 
 	if (transmit == 1) {
 		/* Write data into sport device through write operation */
@@ -344,7 +364,7 @@ int main(int argc, char *argv[])
 	close(data_fd);
 	free(buffer);
 	
-	gpio_unexport(4);	
+	gpio_unexport(gpio_en);	
 
 	return 0;
 }
