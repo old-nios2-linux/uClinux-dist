@@ -15,6 +15,6 @@ clean:
 	rm -rf build*
 
 romfs:
-	$(ROMFSINST) build-$(VER)/src/wget /usr/bin/wget
+	$(ROMFSINST) -d build-$(VER)/src/wget /usr/bin/wget
 
 .PHONY: all clean romfs
