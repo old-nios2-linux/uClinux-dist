@@ -1,4 +1,4 @@
-VER = iproute2-2.6.29-1
+VER = iproute2-2.6.35
 
 ARGS =
 ifeq ($(CONFIGURE_SHARED_WITH),--without-shared)
