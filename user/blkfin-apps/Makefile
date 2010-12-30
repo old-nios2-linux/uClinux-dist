@@ -7,6 +7,7 @@ dir_$(CONFIG_USER_BLKFIN_APPS_DEVFBAPP_DEVTEST)  += devfbapp
 dir_$(CONFIG_USER_INETUTILS)                     += inetutils
 dir_$(CONFIG_USER_LMBENCH)                       += lmbench3
 dir_$(CONFIG_USER_BF561_COREBLD)                 += corebld
+dir_$(CONFIG_USER_BF561_ICC)     		 += icc_utils
 dir_$(CONFIG_USER_POUND)                         += pound
 dir_$(CONFIG_USER_IRDA_TOOLS)                    += irda-tools
 dir_$(CONFIG_USER_IRCP)                          += ircp

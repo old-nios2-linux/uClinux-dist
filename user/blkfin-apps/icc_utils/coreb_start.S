@@ -1,0 +1,239 @@
+/*
+ * BF561 coreB bootstrap file
+ *
+ * Copyright 2007-2009 Analog Devices Inc.
+ *               Philippe Gerum <rpm@xenomai.org>
+ *
+ * Licensed under the GPL-2 or later.
+ */
+
+#define __ASSEMBLY__
+#include <linux/linkage.h>
+#include <asm/blackfin.h>
+#if 0
+#include <linux/init.h>
+#include <asm/asm-offsets.h>
+#include <asm/trace.h>
+#endif
+
+.section .l1.text
+
+/* Lay the initial stack into the L1 scratch area of Core B */
+#define INITIAL_STACK	(COREB_L1_SCRATCH_START + L1_SCRATCH_LENGTH - 12)
+
+
+ENTRY(_coreb_trampoline_start)
+	/* Set the SYSCFG register */
+	R0 = 0x36;
+	SYSCFG = R0; /*Enable Cycle Counter and Nesting Of Interrupts(3rd Bit)*/
+	R0 = 0;
+
+	/*Clear Out All the data and pointer  Registers*/
+	R1 = R0;
+	R2 = R0;
+	R3 = R0;
+	R4 = R0;
+	R5 = R0;
+	R6 = R0;
+	R7 = R0;
+
+	P0 = R0;
+	P1 = R0;
+	P2 = R0;
+	P3 = R0;
+	P4 = R0;
+	P5 = R0;
+
+	LC0 = r0;
+	LC1 = r0;
+	L0 = r0;
+	L1 = r0;
+	L2 = r0;
+	L3 = r0;
+
+	/* Clear Out All the DAG Registers*/
+	B0 = r0;
+	B1 = r0;
+	B2 = r0;
+	B3 = r0;
+
+	I0 = r0;
+	I1 = r0;
+	I2 = r0;
+	I3 = r0;
+
+	M0 = r0;
+	M1 = r0;
+	M2 = r0;
+	M3 = r0;
+
+	/* Turn off the icache */
+	p0.l = LO(IMEM_CONTROL);
+	p0.h = HI(IMEM_CONTROL);
+	R1 = [p0];
+	R0 = ~ENICPLB;
+	R0 = R0 & R1;
+
+	/* Disabling of CPLBs should be proceeded by a CSYNC */
+	CSYNC;
+	[p0] = R0;
+	SSYNC;
+
+	/* Turn off the dcache */
+	p0.l = LO(DMEM_CONTROL);
+	p0.h = HI(DMEM_CONTROL);
+	R1 = [p0];
+	R0 = ~ENDCPLB;
+	R0 = R0 & R1;
+
+	/* Disabling of CPLBs should be proceeded by a CSYNC */
+	CSYNC;
+	[p0] = R0;
+	SSYNC;
+	/* Initialize stack pointer */
+	sp.l = lo(INITIAL_STACK);
+	sp.h = hi(INITIAL_STACK);
+	fp = sp;
+	usp = sp;
+
+	/* This section keeps the processor in supervisor mode
+	 * during core B startup.  Branches to the idle task.
+	 */
+
+	/* EVT15 = _real_start */
+
+	p0.l = lo(EVT15);
+	p0.h = hi(EVT15);
+	p1.l = _coreb_start;
+	p1.h = _coreb_start;
+	[p0] = p1;
+	csync;
+
+	p0.l = lo(IMASK);
+	p0.h = hi(IMASK);
+	p1.l = IMASK_IVG15;
+	p1.h = 0x0;
+	[p0] = p1;
+	csync;
+
+	P0.H = HI(0xFEB1FFFC);
+	P0.L = LO(0xFEB1FFFC);
+	R0 = 2;
+	[P0] = R0;
+
+	raise 15;
+	p0.l = .LWAIT_HERE;
+	p0.h = .LWAIT_HERE;
+	reti = p0;
+	nop; nop; nop;
+	rti;
+
+.LWAIT_HERE:
+	jump .LWAIT_HERE;
+ENDPROC(_coreb_trampoline_start)
+ENTRY(_coreb_trampoline_end)
+
+.section ".text"
+ENTRY(_coreb_start)
+
+	P0.H = HI(0xFEB1FFFC);
+	P0.L = LO(0xFEB1FFFC);
+	R0 = 3;
+	[P0] = R0;
+
+	[--sp] = reti;
+
+	p0.l = lo(WDOGB_CTL);
+	p0.h = hi(WDOGB_CTL);
+	r0 = 0xAD6(z);
+	w[p0] = r0;	/* Clear the watchdog. */
+	ssync;
+
+	/*
+	 * switch to IDLE stack.
+	 */
+#if 0	 
+	p0.l = LO(0xfeb1f000);       /* 0x1000 bytes stack size at the end of L2 */
+	p0.h = HI(0xfeb1f000);
+	sp = p0;
+	usp = sp;
+	fp = sp;
+#endif
+	call _secondary_start_kernel;
+.L_exit:
+	jump.s	.L_exit;
+ENDPROC(_coreb_start)
+
+ENTRY(_evt_evt7)
+	[--sp] = SYSCFG;                                                    
+	[--sp] = P0;        /*orig_p0*/                                     
+	[--sp] = R0;        /*orig_r0*/                                     
+	[--sp] = (R7:0,P5:0);                                               
+	call _ipi_handler_int0;
+	(R7:0,P5:0) = [SP++];
+	sp += 8;        /* Skip orig_r0/orig_p0 */
+	csync;
+	SYSCFG = [sp++];
+	csync;
+	rti;
+ENDPROC(_evt_evt7)
+
+ENTRY(_evt_evt2)
+	[--sp] = SYSCFG;                                                    
+	[--sp] = P0;        /*orig_p0*/                                     
+	[--sp] = R0;        /*orig_r0*/                                     
+	[--sp] = (R7:0,P5:0);                                               
+
+	P0.H = HI(0xFEB1FFFC);
+	P0.L = LO(0xFEB1FFFC);
+	R0 = 22;
+	[P0] = R0;
+
+	(R7:0,P5:0) = [SP++];
+	sp += 8;        /* Skip orig_r0/orig_p0 */
+	csync;
+	SYSCFG = [sp++];
+	csync;
+	rti;
+ENDPROC(_evt_evt2)
+
+ENTRY(_evt_evt3)
+	[--sp] = SYSCFG;                                                    
+	[--sp] = P0;        /*orig_p0*/                                     
+	[--sp] = R0;        /*orig_r0*/                                     
+	[--sp] = (R7:0,P5:0);                                               
+
+	P0.H = HI(0xFEB1FFFC);
+	P0.L = LO(0xFEB1FFFC);
+
+	r0 = SEQSTAT;
+	r0 <<= 26;
+	r0 >>= 26;
+	[P0] = r0;
+
+	(R7:0,P5:0) = [SP++];
+	sp += 8;        /* Skip orig_r0/orig_p0 */
+	csync;
+	SYSCFG = [sp++];
+	csync;
+	rtx;
+ENDPROC(_evt_evt3)
+
+ENTRY(_evt_evt5)
+	[--sp] = SYSCFG;                                                    
+	[--sp] = P0;        /*orig_p0*/                                     
+	[--sp] = R0;        /*orig_r0*/                                     
+	[--sp] = (R7:0,P5:0);                                               
+
+	P0.H = HI(0xFEB1FFFC);
+	P0.L = LO(0xFEB1FFFC);
+	R0 = 25;
+	[P0] = R0;
+
+	(R7:0,P5:0) = [SP++];
+	sp += 8;        /* Skip orig_r0/orig_p0 */
+	csync;
+	SYSCFG = [sp++];
+	csync;
+	rti;
+ENDPROC(_evt_evt5)
