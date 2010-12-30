@@ -136,6 +136,8 @@ config USER_INETUTILS_FTPD
 	depends on USER_INETUTILS
 config USER_BF561_COREBLD
 	bool "BF561 Core B support tools"
+config USER_BF561_ICC
+	bool "BF561 ICC utils"
 config USER_DSP_BRIDGE
 	bool "dsp_bridge for bf561"
 	help
