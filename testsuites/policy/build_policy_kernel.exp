@@ -116,7 +116,7 @@ while 1 {
 #        }
 
 #        -re "Trace user apps.*turn off hwtrace in kernel.*DEBUG_BFIN_NO_KERN_HWTRACE.*\\\[.*]" {
-#            send  "y\r"
+#            send  "Y\r"
 #        }
 
         -re "Enable ICACHE.*BFIN_ICACHE.*\\\[.*]" {
@@ -182,9 +182,9 @@ while 1 {
 
         -re "Symmetric multi-processing support.*SMP.*\\\[.*]" {
             if { $smp == "on" } {
-                send "y\r"
+                send "Y\r"
             } elseif { $smp == "off" } {
-                send "n\r"
+                send "N\r"
             } else {
                 send "\r"
             }
@@ -192,9 +192,9 @@ while 1 {
 
         -re "Enable the memory protection unit.*MPU.*\\\[.*]" {
             if { $mpu == "on" } {
-                send "y\r"
+                send "Y\r"
             } elseif { $mpu == "off" } {
-                send "n\r"
+                send "N\r"
             } else {
                 send "\r"
             }
@@ -202,9 +202,9 @@ while 1 {
 
         -re "Xenomai.*USER_XENOMAI.*\\\[.*]" {
             if { $xenomai == "on" } {
-                send "y\r"
+                send "Y\r"
             } elseif { $xenomai == "off" } {
-                send "n\r"
+                send "N\r"
             } else {
                 send "\r"
             }
