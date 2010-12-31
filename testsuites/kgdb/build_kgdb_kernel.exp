@@ -52,9 +52,9 @@ if { $debug_port == "ethernet" } {
 
             -re "Symmetric multi-processing support.*SMP.*\\\[.*]" {
                 if { $core_config == "SMP" } {
-                    send "y\r"
+                    send "Y\r"
                 } elseif { $core_config == "" } {
-                    send "n\r"
+                    send "N\r"
                 } else {
                     send "\r"
                 }
@@ -64,7 +64,7 @@ if { $debug_port == "ethernet" } {
                 send "Y\r"
             }
 
-            -re "KGDB: kernel debugging with remote gdb.*KGDB.*\\\[.*]" {
+            -re "KGDB: kernel debugger.*KGDB.*\\\[.*]" {
                 send "Y\r"
             }
 
@@ -139,7 +139,7 @@ if { $debug_port == "ethernet" } {
                 send "Y\r"
             }
 
-            -re "KGDB: kernel debugging with remote gdb.*KGDB.*\\\[.*]" {
+            -re "KGDB: kernel debugger.*KGDB.*\\\[.*]" {
                 send "Y\r"
             }
 
@@ -179,7 +179,7 @@ if { $debug_port == "ethernet" } {
 
             -re "Enable UART0.*SERIAL_BFIN_UART0.*\\\[.*]" {
                 if { [string match "BF527-EZKIT*" $board_type] || $board_type == "BF537-STAMP" } {
-                    send "y\r"
+                    send "Y\r"
                 } else {
                     send "\r"
                 }
@@ -187,7 +187,7 @@ if { $debug_port == "ethernet" } {
 
             -re "Enable UART1.*SERIAL_BFIN_UART1.*\\\[.*]" {
                 if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
-                    send "y\r"
+                    send "Y\r"
                 } else {
                     send "\r"
                 }
@@ -195,7 +195,7 @@ if { $debug_port == "ethernet" } {
 
             -re "Enable UART3.*SERIAL_BFIN_UART3.*\\\[.*]" {
                 if { $board_type == "BF548-EZKIT" } {
-                    send "y\r"
+                    send "Y\r"
                 } else {
                     send "\r"
                 }
