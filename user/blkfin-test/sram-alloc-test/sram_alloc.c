@@ -189,7 +189,7 @@ int main(int argc, char *argv[])
 			printf("vfork() FAIL\n");
 			break;
 		case 0:
-			_exit(execl(argv[0], argv[0], "--child", NULL));
+			_exit(execlp(argv[0], argv[0], "--child", NULL));
 		default:
 			printf("\tpid %i on cpu %i\n", pid, cpu);
 		}
