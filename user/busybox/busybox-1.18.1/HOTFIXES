@@ -1,3 +1,4 @@
 busybox-1.18.1-bzip2.patch
 busybox-1.18.1-cpio.patch
 busybox-1.18.1-hush.patch
+busybox-1.18.1-mkswap.patch
