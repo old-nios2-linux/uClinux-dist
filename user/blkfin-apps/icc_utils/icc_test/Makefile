@@ -3,7 +3,7 @@ CC = bfin-uclinux-gcc
 # we have to clobber a bunch of flags as they are normally geared towards
 # running under linux, not a bare metal environment like core b
 CFLAGS  ?=
-CFLAGS  += -I$(KERNELDIR)/include -I$(KERNELDIR)/arch/blackfin/mach-bf561/include -I$(KERNELDIR)/drivers/staging/icc/include
+CFLAGS  += -I$(KERNELDIR)/drivers/staging/icc/include
 LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
