@@ -71,6 +71,7 @@ typedef enum irqreturn irqreturn_t;
 
 
 extern unsigned long mcc_arg;
+extern int iccq_should_stop;
 
 
 #define BFIN_IPI_RESCHEDULE   0
@@ -201,16 +202,19 @@ void platform_secondary_init()
  * there is chance to reschedule */
 irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 {
-	platform_clear_ipi(1, IRQ_SUPPLE_0);
+	unsigned int cpu = blackfin_core_id();
 
+	platform_clear_ipi(cpu, IRQ_SUPPLE_0);
 	return IRQ_HANDLED;
 }
 
 irqreturn_t ipi_handler_int1(int irq, void *dev_instance)
 {
-	unsigned int cpu = blackfin_core_id();
+	sm_uint32_t cpu = blackfin_core_id();
 
+	sm_handle_control_message(cpu);
 	platform_clear_ipi(cpu, IRQ_SUPPLE_1);
+
 	return IRQ_HANDLED;
 }
 
@@ -303,6 +307,10 @@ void coreb_icc_dispatcher()
 	int pending;
 	int cpu = 1;
 	int bfin_irq_flags;
+
+	while (iccq_should_stop) {
+		idle_with_irq_disabled();
+	}
 
 	pending = iccqueue_getpending(cpu);
 	if (!pending) {
