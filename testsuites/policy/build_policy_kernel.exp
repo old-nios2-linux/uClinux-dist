@@ -40,6 +40,10 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "CPU.* (\[0-9]+). $cpu .*choice.*\\\[.*]" {
             send "$expect_out(1,string)\r"
         }
@@ -216,10 +220,6 @@ while 1 {
 
         -re "Second extended fs support \\\(EXT2_FS\\\) \\\[.*]" {
             send "N\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {
