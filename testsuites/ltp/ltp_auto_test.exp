@@ -2002,8 +2002,8 @@ set result_matrix {
        { sendfile02_64       {sendfile02_64}                  	 notrun		UCLINUX }
        { sendfile03          {sendfile03}                     	 notrun		UCLINUX }
        { sendfile03_64       {sendfile03_64}                  	 notrun		UCLINUX }
-       { sendfile04          {sendfile04}                     	 notrun		UCLINUX }
-       { sendfile04_64       {sendfile04_64}                  	 notrun		UCLINUX }
+       { sendfile04          {sendfile04}                     	 notrun		NA }
+       { sendfile04_64       {sendfile04_64}                  	 notrun		NA }
        { sendfile05          {sendfile05}                     	 notrun		UCLINUX }
        { sendfile05_64       {sendfile05_64}                  	 notrun		UCLINUX }
        { sendfile06          {sendfile06}                     	 notrun		UCLINUX }
