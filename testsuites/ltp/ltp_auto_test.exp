@@ -2158,7 +2158,7 @@ set result_matrix {
        { socketpair02        {socketpair02}                    	 notrun		UCLINUX }
        { sockioctl01         {sockioctl01}                     	 notrun		UCLINUX }
        { splice01     	     {splice01}                     	 notrun		UCLINUX }
-       { splice02     	     {splice02}                     	 notrun		UCLINUX }
+       { splice02     	     {splice02 seq 1 10000000|splice02 splice02-temp}	notrun		UCLINUX }
        { ssetmask01    	     {ssetmask01}                     	 notrun		UCLINUX }
        { stat01     	     {stat01}                     	 notrun		UCLINUX }
        { stat01_64     	     {stat01_64}                     	 notrun		UCLINUX }
