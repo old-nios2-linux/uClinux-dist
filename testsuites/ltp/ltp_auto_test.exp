@@ -1647,7 +1647,7 @@ set result_matrix {
        { getresuid03         {getresuid03}                     	 notrun		UCLINUX }
        { getrlimit01         {getrlimit01}                     	 notrun		UCLINUX }
        { getrlimit02         {getrlimit02}                     	 notrun		UCLINUX }
-       { get_robust_list01   {get_robust_list01}               	 notrun		UCLINUX }
+       { get_robust_list01   {get_robust_list01}               	 notrun		NA }
        { getrusage01         {getrusage01}                     	 notrun		UCLINUX }
        { getrusage02         {getrusage02}                     	 notrun		UCLINUX }
        { getsid01     	     {getsid01}                     	 notrun		UCLINUX }
@@ -2099,7 +2099,7 @@ set result_matrix {
        { setrlimit01         {setrlimit01}                     	 notrun		UCLINUX }
        { setrlimit02         {setrlimit02}                     	 notrun		UCLINUX }
        { setrlimit03         {setrlimit03}                     	 notrun		UCLINUX }
-       { set_robust_list01   {set_robust_list01}               	 notrun		UCLINUX }
+       { set_robust_list01   {set_robust_list01}               	 notrun		NA }
        { setsid01     	     {setsid01}                     	 notrun		UCLINUX }
        { setsockopt01        {setsockopt01}                      notrun		UCLINUX }
        { set_thread_area01   {set_thread_area01}                 notrun		UCLINUX }
