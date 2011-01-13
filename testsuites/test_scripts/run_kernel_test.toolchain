@@ -141,10 +141,10 @@ echo  " "
 
 cd $UCLINUX_DIST_SCRIPTS
 $UCLINUX_DIST_SCRIPTS/get_test_summary $THIS_LOG
-$UCLINUX_DIST_SCRIPTS/get_benchmark_result $THIS_LOG
+$UCLINUX_DIST_SCRIPTS/get_benchmark_result $THIS_LOG > $THIS_LOG/get_benchmark_result_log 2>&1
 if [ $? -ne 0 ]; then
     echo "Mail the results of benchmarks!"
-    cat $THIS_LOG/benchmark_result_log | mail -s "Benchmark Test Results ($TIMESTAMP)" -a dhrystone.png -a edn.png -a lmbench.png -a nbench.png -a whetstone.png -r $SENDER $RECEIVER
+    cat $THIS_LOG/benchmark_result_log | mail -s "Benchmark Test Results ($TIMESTAMP)" -a plt/dhrystone/dhrystone.png -a edn.png -a lmbench.png -a nbench.png -a plt/whetstone/whetstone.png -r $SENDER $RECEIVER
 #    ./send_mail.exp $MTA $SENDER $RECEIVER $THIS_LOG/benchmark_result_log
 else
     echo "No results for benchmarks!"
