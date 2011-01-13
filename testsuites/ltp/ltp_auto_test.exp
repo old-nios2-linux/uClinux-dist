@@ -2201,12 +2201,12 @@ set result_matrix {
        { sysctl03     	     {sysctl03}                     	 notrun		NA }
        { sysctl04     	     {sysctl04}                     	 notrun		NA }
        { sysctl05     	     {sysctl05}                     	 notrun		NA }
-       { sysfs01     	     {sysfs01}                     	 notrun		UCLINUX }
-       { sysfs02     	     {sysfs02}                     	 notrun		UCLINUX }
-       { sysfs03     	     {sysfs03}                     	 notrun		UCLINUX }
-       { sysfs04     	     {sysfs04}                     	 notrun		UCLINUX }
-       { sysfs05     	     {sysfs05}                     	 notrun		UCLINUX }
-       { sysfs06     	     {sysfs06}                     	 notrun		UCLINUX }
+       { sysfs01     	     {sysfs01}                     	 notrun		NA }
+       { sysfs02     	     {sysfs02}                     	 notrun		NA }
+       { sysfs03     	     {sysfs03}                     	 notrun		NA }
+       { sysfs04     	     {sysfs04}                     	 notrun		NA }
+       { sysfs05     	     {sysfs05}                     	 notrun		NA }
+       { sysfs06     	     {sysfs06}                     	 notrun		NA }
        { sysinfo01     	     {sysinfo01}                     	 notrun		UCLINUX }
        { sysinfo02     	     {sysinfo02}                     	 notrun		UCLINUX }
        { syslog01     	     {syslog01}                     	 notrun		NA }
