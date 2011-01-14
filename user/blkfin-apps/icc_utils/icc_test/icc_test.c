@@ -42,53 +42,53 @@ static int open_icc(void)
 
 static void send_test(int fd)
 {
-	struct sm_user_param param;
+	struct sm_packet pkt;
 	char buf[64] = "1234567890abcdef";
-	memset(&param, 0, sizeof(struct sm_user_param));
+	memset(&pkt, 0, sizeof(struct sm_packet));
 
-	param.local_ep = 9;
-	param.remote_ep = 5;
-	param.type = SP_PACKET;
-	param.dst_cpu = 1;
-	param.buf_len = 16;
-	param.buf = buf;
+	pkt.local_ep = 9;
+	pkt.remote_ep = 5;
+	pkt.type = SP_PACKET;
+	pkt.dst_cpu = 1;
+	pkt.buf_len = 16;
+	pkt.buf = buf;
 
 	printf("begin create ep\n");
-	ioctl(fd, CMD_SM_CREATE, &param);
-	printf("finish create ep session index = %d\n", param.session_idx);
+	ioctl(fd, CMD_SM_CREATE, &pkt);
+	printf("finish create ep session index = %d\n", pkt.session_idx);
 
 
-	ioctl(fd, CMD_SM_SEND, &param);
+	ioctl(fd, CMD_SM_SEND, &pkt);
 
-	ioctl(fd, CMD_SM_SHUTDOWN, &param);
+	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 
 }
 
 static void recv_test(int fd)
 {
-	struct sm_user_param param;
+	struct sm_packet pkt;
 	char buf[64] = "1234567890abcdef";
-	memset(&param, 0, sizeof(struct sm_user_param));
+	memset(&pkt, 0, sizeof(struct sm_packet));
 
-	param.local_ep = 9;
-	param.remote_ep = 5;
-	param.type = SP_PACKET;
-	param.dst_cpu = 1;
-	param.buf_len = 16;
-	param.buf = buf;
+	pkt.local_ep = 9;
+	pkt.remote_ep = 5;
+	pkt.type = SP_PACKET;
+	pkt.dst_cpu = 1;
+	pkt.buf_len = 16;
+	pkt.buf = buf;
 
 	printf("begin create ep\n");
-	ioctl(fd, CMD_SM_CREATE, &param);
-	printf("finish create ep session index = %d\n", param.session_idx);
+	ioctl(fd, CMD_SM_CREATE, &pkt);
+	printf("finish create ep session index = %d\n", pkt.session_idx);
 
 
-	ioctl(fd, CMD_SM_SEND, &param);
+	ioctl(fd, CMD_SM_SEND, &pkt);
 
 
-	ioctl(fd, CMD_SM_RECV, &param);
+	ioctl(fd, CMD_SM_RECV, &pkt);
 
 
-	ioctl(fd, CMD_SM_SHUTDOWN, &param);
+	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 }
 #define GETOPT_FLAGS "fshV"
 #define a_argument required_argument

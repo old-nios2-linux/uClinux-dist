@@ -20,6 +20,9 @@ icc: $(ICC_OBJS) bf561.lds coreb.lds
 icc_testcase:
 	$(MAKE) -C icc_test
 
+icc_task:
+	$(CC) $(LDFLAGS) -c test_task.c
+
 romfs: icc
 	$(ROMFSINST) /bin/icc
 	$(MAKE) -C icc_test romfs

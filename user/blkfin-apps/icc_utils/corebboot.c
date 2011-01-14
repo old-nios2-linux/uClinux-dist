@@ -82,6 +82,7 @@ extern int iccq_should_stop;
 #endif
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 
+
 void udelay(sm_uint32_t count)
 {
 	while(count--);
@@ -106,36 +107,36 @@ void *memcpy(void *dest, const void *src, size_t count)
 
 void *memset(void *s, int c, size_t count)
 {
-        char *xs = s;
+	char *xs = s;
 
-        while (count--)
-                *xs++ = c;
-        return s;
+	while (count--)
+		*xs++ = c;
+	return s;
 }
 
 char *strcpy(char *dest, const char *src)
 {
-        char *tmp = dest;
+	char *tmp = dest;
 
-        while ((*dest++ = *src++) != '\0')
-                /* nothing */;
-        return tmp;
+	while ((*dest++ = *src++) != '\0')
+		/* nothing */;
+	return tmp;
 }
 
 void platform_send_ipi_cpu(unsigned int cpu, int irq)
 {
-        int offset = (irq == IRQ_SUPPLE_0) ? 6 : 8;
-        SSYNC();
-        bfin_write_SICB_SYSCR(bfin_read_SICB_SYSCR() | (1 << (offset + cpu)));
-        SSYNC();
+	int offset = (irq == IRQ_SUPPLE_0) ? 6 : 8;
+	SSYNC();
+	bfin_write_SICB_SYSCR(bfin_read_SICB_SYSCR() | (1 << (offset + cpu)));
+	SSYNC();
 }
 
 void platform_clear_ipi(unsigned int cpu, int irq)
 {
-        int offset = (irq == IRQ_SUPPLE_0) ? 10 : 12;
-        SSYNC();
-        bfin_write_SICB_SYSCR(bfin_read_SICB_SYSCR() | (1 << (offset + cpu)));
-        SSYNC();
+	int offset = (irq == IRQ_SUPPLE_0) ? 10 : 12;
+	SSYNC();
+	bfin_write_SICB_SYSCR(bfin_read_SICB_SYSCR() | (1 << (offset + cpu)));
+	SSYNC();
 }
 
 void coreb_msg(char *fmt, ...)
@@ -176,7 +177,7 @@ void init_exception_vectors(void)
 
 }
 
-void platform_secondary_init()
+void platform_secondary_init(void)
 {
         bfin_write_SICB_IMASK0(bfin_read_SIC_IMASK0());
         bfin_write_SICB_IMASK1(bfin_read_SIC_IMASK1());
@@ -204,6 +205,7 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 {
 	unsigned int cpu = blackfin_core_id();
 
+	sm_handle_control_message(cpu);
 	platform_clear_ipi(cpu, IRQ_SUPPLE_0);
 	return IRQ_HANDLED;
 }
@@ -212,7 +214,6 @@ irqreturn_t ipi_handler_int1(int irq, void *dev_instance)
 {
 	sm_uint32_t cpu = blackfin_core_id();
 
-	sm_handle_control_message(cpu);
 	platform_clear_ipi(cpu, IRQ_SUPPLE_1);
 
 	return IRQ_HANDLED;
@@ -277,7 +278,7 @@ void bfin_setup_caches(unsigned int cpu)
 	bfin_write32(DCPLB_ADDR0 + i * 4, COREB_L1_DATA_A_START);
 	bfin_write32(DCPLB_DATA0 + i * 4, (L1_DMEMORY | PAGE_SIZE_4MB));
 	i++;
-#endif	
+#endif
 
 	bfin_write32(ICPLB_ADDR0 + i * 4, L2_START);
 	bfin_write32(ICPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_1MB));
@@ -301,7 +302,7 @@ void bfin_setup_caches(unsigned int cpu)
 
 }
 
-void coreb_icc_dispatcher()
+void coreb_icc_dispatcher(void)
 {
 
 	int pending;
@@ -309,6 +310,7 @@ void coreb_icc_dispatcher()
 	int bfin_irq_flags;
 
 	while (iccq_should_stop) {
+		/*to do drop no control messages*/
 		idle_with_irq_disabled();
 	}
 
@@ -320,8 +322,7 @@ void coreb_icc_dispatcher()
 	msg_handle();
 }
 
-
-void icc_init()
+void icc_init(void)
 {
 	unsigned long addr1, addr2 = 0;
 	struct gen_pool *pool;
@@ -335,6 +336,7 @@ void icc_init()
 	init_sm_session_table();
 
 	register_sm_proto();
+
 }
 
 void secondary_start_kernel(void)
@@ -351,7 +353,6 @@ void secondary_start_kernel(void)
 
 	icc_init();
 
-	testcase_session_handler();
 	while(1) {
 		coreb_icc_dispatcher();
 	}
