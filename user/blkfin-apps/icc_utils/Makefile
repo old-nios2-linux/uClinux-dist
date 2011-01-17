@@ -1,4 +1,5 @@
 CC = bfin-elf-gcc -g
+LD = bfin-elf-ld
 
 # we have to clobber a bunch of flags as they are normally geared towards
 # running under linux, not a bare metal environment like core b
@@ -9,6 +10,7 @@ LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
 KERNELDIR := ${PWD}/../../../linux-2.6.x
+TASK_LOAD_ADDR := 0xFEB01000
 
 all: icc icc_testcase
 
@@ -21,7 +23,8 @@ icc_testcase:
 	$(MAKE) -C icc_test
 
 icc_task:
-	$(CC) $(LDFLAGS) -c test_task.c
+	$(CC) $(CFLAGS) -c test_task.c
+	$(LD) -o task1 -T coreb.lds --just-symbol icc test_task.o -Ttext $(TASK_LOAD_ADDR)
 
 romfs: icc
 	$(ROMFSINST) /bin/icc

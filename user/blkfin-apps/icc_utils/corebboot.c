@@ -73,6 +73,7 @@ typedef enum irqreturn irqreturn_t;
 extern unsigned long mcc_arg;
 extern int iccq_should_stop;
 
+sm_uint16_t intcnt;
 
 #define BFIN_IPI_RESCHEDULE   0
 #define BFIN_IPI_CALL_FUNC    1
@@ -159,7 +160,7 @@ void coreb_msg(char *fmt, ...)
 	sent++;
 	sm_atomic_write(&queue->sent, sent);
 	platform_send_ipi_cpu(0, IRQ_SUPPLE_0);
-	delay(1);
+	delay(2);
 }
 
 void init_exception_vectors(void)
@@ -204,9 +205,10 @@ void platform_secondary_init(void)
 irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 {
 	unsigned int cpu = blackfin_core_id();
+	++intcnt;
 
-	sm_handle_control_message(cpu);
 	platform_clear_ipi(cpu, IRQ_SUPPLE_0);
+	sm_handle_control_message(cpu);
 	return IRQ_HANDLED;
 }
 
@@ -251,14 +253,16 @@ inline int readipend(void)
 	return _tmp;
 }
 
-#define idle_with_irq_disabled() \
-        __asm__ __volatile__( \
-                ".align 8;" \
-                "sti %0;" \
-                "idle;" \
-                : \
-                : "d" (bfin_irq_flags) \
-        )
+#define coreb_idle() \
+	__asm__ __volatile__( \
+			".align 8;" \
+			"nop;"	\
+			"nop;"	\
+			"idle;" \
+			: \
+			:  \
+			)
+
 
 void bfin_setup_caches(unsigned int cpu)
 {
@@ -308,18 +312,26 @@ void coreb_icc_dispatcher(void)
 	int pending;
 	int cpu = 1;
 	int bfin_irq_flags;
-
 	while (iccq_should_stop) {
 		/*to do drop no control messages*/
-		idle_with_irq_disabled();
+		coreb_idle();
 	}
-
 	pending = iccqueue_getpending(cpu);
 	if (!pending) {
-		idle_with_irq_disabled();
+		coreb_idle();
+
+		coreb_msg("@@@ wake up\n");
 		return;
 	}
+	{
+		struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[1];
+		sm_atomic_t sent = sm_atomic_read(&inqueue->sent);
+		sm_atomic_t received = sm_atomic_read(&inqueue->received);
+		sm_atomic_t pending;
+		coreb_msg("@@@sm msgq sent=%d received=%d\n", sent, received);
+	}
 	msg_handle();
+
 }
 
 void icc_init(void)
