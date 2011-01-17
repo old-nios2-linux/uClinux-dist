@@ -112,7 +112,7 @@ while 1 {
             }
         }
 
-        -re "Blackfin ADV7393 Video encoder on uClinux.*FB_BFIN_7393.*\\\[.*]" {
+        -re "Blackfin ADV7393 Video encoder.*FB_BFIN_7393.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
                 send "M\r"
             } else {
