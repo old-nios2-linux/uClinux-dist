@@ -45,7 +45,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "eraseall.*USER_MTDUTILS_ERASEALL.*\\\[.*]" {
+        -re "erase.*USER_MTDUTILS_ERASE.*\\\[.*]" {
             send "Y\r"
         }
 
