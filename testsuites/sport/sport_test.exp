@@ -41,7 +41,7 @@ incr case_num
 send -s "sport_test -r another.wav\r"
 while 1 {
     expect {
-        -re "(No|\[Uu]nable|\[Ff]ailed|not|error|ABRK).*$kernel_prompt" {
+        -re "(No|\[Uu]nable|\[Ff]ailed|error|ABRK).*$kernel_prompt" {
             case_fail $case_num
         }
         -re $kernel_prompt {
