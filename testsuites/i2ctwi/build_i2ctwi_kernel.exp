@@ -6,9 +6,7 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
 source  make_default_config.exp
 
 # Following make specific configuration for this case.
@@ -30,11 +28,15 @@ while 1 {
             send "y\r"
         }
 
-        -re "I2C support.*I2C. \\\[.*]" {             
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
+        -re "I2C support.*I2C. \\\[.*]" {
             send "Y\r"
         }
 
-        -re "I2C device interface.*I2C_CHARDEV.*\\\[.*]" {            
+        -re "I2C device interface.*I2C_CHARDEV.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -62,16 +64,20 @@ while 1 {
             }
         }
 
+        -re "SHARP LQ035 TFT LCD.*FB_BF537_LQ035.*\\\[.*]" {
+            if { $board_type == "BF537-STAMP" } {
+                send "M\r"
+            } else {
+                send "\r"
+            }
+        }
+
         -re "TWI test program.*USER_BLACKFIN_TWI.*\\\[.*]" {
             send "Y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
-            sleep .01
+            sleep .05
             send "\r"
         }
 
@@ -92,15 +98,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"
