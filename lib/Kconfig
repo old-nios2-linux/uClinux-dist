@@ -398,6 +398,14 @@ config LIB_LIBXML2
 	  Library to access XML files.
 	  See  http://xmlsoft.org/
 
+
+config LIB_LIBXML2_MINIMUM
+	bool 'Build minimally sized libxml2'
+	depends on LIB_LIBXML2
+	help
+	  Build a minimally sized libxml2 library (passes --with-minimum
+	  flag to configure script)
+
 comment "Library Configuration"
 
 config LIB_UC_LIBC_TIMEZONE
