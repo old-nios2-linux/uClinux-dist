@@ -2,9 +2,9 @@ VER = libxml2-2.7.4
 
 CONF_OPTS = \
 	--without-python \
-	$(call USE_ENABLE,LIB_ZLIB,zlib) \
-	$(call USE_ENABLE,LIB_READLINE,readline) \
-	$(call USE_ENABLE,LIB_READLINE,history)
+	$(call USE_WITH,LIB_ZLIB,zlib) \
+	$(call USE_WITH,LIB_READLINE,readline) \
+	$(call USE_WITH,LIB_READLINE,history)
 
 include $(ROOTDIR)/tools/autotools.mk
 
