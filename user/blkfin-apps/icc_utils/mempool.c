@@ -11,8 +11,10 @@
  * memory not managed by the regular kmalloc/kfree interface.
  */
 
-struct gen_pool gmempool;
-struct gen_pool_chunk gchunk[32];
+#define MAX_POOL 4
+#define MAX_CHUNK 32
+struct gen_pool gmempool[MAX_POOL];
+struct gen_pool_chunk gchunk[MAX_POOL * MAX_CHUNK];
 
 
 void coreb_msg(char *fmt, ...);
@@ -143,9 +145,19 @@ again:
 struct gen_pool *gen_pool_create(int min_alloc_order)
 {
 	struct gen_pool *pool;
+	int i;
 
-	pool = &gmempool;
-	pool->chunks = gchunk;
+	for (i = 0; i < MAX_POOL; i++) {
+		if (gmempool[i].min_alloc_order == 0)
+			break;
+	}
+
+	if (i == MAX_POOL)
+		return NULL;
+	else
+		pool = &gmempool[i];
+
+	pool->chunks = &gchunk[i * MAX_CHUNK];
 	pool->min_alloc_order = min_alloc_order;
 	return pool;
 }
@@ -162,7 +174,7 @@ int gen_pool_add(struct gen_pool *pool, unsigned long addr, size_t size)
 	if (nbits > 64)
 		return -1;
 
-	chunk = &gchunk[chunkid];
+	chunk = &pool->chunks[chunkid];
 	if (unlikely(chunk == NULL))
 		return -1;
 
@@ -268,4 +280,29 @@ void gen_pool_free(struct gen_pool *pool, unsigned long addr, size_t size)
 			break;
 		}
 	}
+}
+
+int gen_pool_check(struct gen_pool *pool, unsigned long addr, size_t size)
+{
+	int _chunk;
+	struct gen_pool_chunk *chunk;
+	unsigned long flags;
+	int order = pool->min_alloc_order;
+	int bit, nbits;
+
+	nbits = (size + (1UL << order) - 1) >> order;
+
+	for_each_set_bit(_chunk, &pool->chunk_bits, 32) {
+		chunk = &gchunk[_chunk];
+
+		if (addr >= chunk->start_addr && addr < chunk->end_addr) {
+			bit = (addr - chunk->start_addr) >> order;
+			while (nbits--) {
+				if (!test_bit(bit++, chunk->bits))
+					return 0;
+			}
+			break;
+		}
+	}
+	return 1;
 }

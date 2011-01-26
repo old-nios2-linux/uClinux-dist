@@ -147,15 +147,19 @@ void coreb_msg(char *fmt, ...)
 	char buf[64] = "COREB: ";
 	struct sm_message_queue *queue = (struct sm_message_queue *)MSGQ_START_ADDR;
 	struct sm_message *msg = &queue->messages[0];
-	sm_atomic_t sent = sm_atomic_read(&queue->sent);
+	sm_atomic_t sent;
 	void *p = (void *)MSG_BUF_ADDR;
 	va_start(args, fmt);
 	i = vsprintf(buf + 7, fmt, args);
 	va_end(args);
 	memset(p, 0, 64);
 	strcpy(p, buf);
+	sent = sm_atomic_read(&queue->sent);
+	memset(&msg[sent%SM_MSGQ_LEN], 0, sizeof(struct sm_message));
 	msg[(sent%SM_MSGQ_LEN)].type = SM_BAD_MSG;
 	msg[(sent%SM_MSGQ_LEN)].dst_ep = 1;
+	msg[(sent%SM_MSGQ_LEN)].dst = 0;
+	msg[(sent%SM_MSGQ_LEN)].src = 1;
 	msg[(sent%SM_MSGQ_LEN)].payload = p;
 	sent++;
 	sm_atomic_write(&queue->sent, sent);
@@ -341,7 +345,13 @@ void icc_init(void)
 	pool = gen_pool_create(12);
 
 	coreb_info.pool = pool;
-	if (gen_pool_add(pool, 0x3c00000, 4 * 1024 * 64))
+	if (gen_pool_add(pool, 0x3c01000, 4 * 1024 * 64))
+		coreb_msg("@@@add chunk fail\n");
+
+	pool = gen_pool_create(4);
+	if (!pool)
+		coreb_msg("@@@ create pool failed\n");
+	if (gen_pool_add(pool, 0x3c00000, 4 * 64))
 		coreb_msg("@@@add chunk fail\n");
 
 	coreb_info.icc_info.icc_queue = (struct sm_message_queue *)MSGQ_START_ADDR;

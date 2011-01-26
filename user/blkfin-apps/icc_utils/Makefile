@@ -10,9 +10,9 @@ LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
 KERNELDIR := ${PWD}/../../../linux-2.6.x
-TASK_LOAD_ADDR := 0xFEB01000
+TASK_LOAD_ADDR := 0xFEB0C000
 
-all: icc icc_testcase
+all: icc icc_testcase icc_task
 
 ICC_OBJS = coreb_start.o test.o corebboot.o vsprintf.o mempool.o protocol.o
 icc: $(ICC_OBJS) bf561.lds coreb.lds

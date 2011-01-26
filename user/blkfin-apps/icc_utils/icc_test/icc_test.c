@@ -53,6 +53,8 @@ static void send_test(int fd)
 	pkt.buf_len = 16;
 	pkt.buf = buf;
 
+	printf("sp packet %d\n", pkt.type);
+
 	printf("begin create ep\n");
 	ioctl(fd, CMD_SM_CREATE, &pkt);
 	printf("finish create ep session index = %d\n", pkt.session_idx);
@@ -60,6 +62,12 @@ static void send_test(int fd)
 
 	ioctl(fd, CMD_SM_SEND, &pkt);
 
+	memset(buf, 0, 64);
+	ioctl(fd, CMD_SM_RECV, &pkt);
+
+	printf("%s \n", pkt.buf);
+
+	sleep(3);
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 
 }
@@ -90,14 +98,53 @@ static void recv_test(int fd)
 
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 }
-#define GETOPT_FLAGS "fshV"
+
+static void exec_task(int fd)
+{
+	struct sm_packet pkt;
+	struct sm_task *task1 = NULL;
+	int taskargs = 2;
+	char taskargv0[] = "task1";
+	char taskargv1[] = "icc";
+	int packetsize = sizeof(struct sm_task) + MAX_TASK_NAME * (taskargs - 1);
+
+	task1 = malloc(packetsize);
+	if (!task1) {
+		printf("malloc failed\n");
+	}
+	memset(task1, 0, packetsize);
+	task1->task_init = 0xFEB0C000;
+	task1->task_exit = 0;
+	task1->task_argc = 2;
+	strcpy(task1->task_argv[0], taskargv0);
+	strcpy(task1->task_argv[1], taskargv1);
+
+	memset(&pkt, 0, sizeof(struct sm_packet));
+	pkt.local_ep = 0;
+	pkt.remote_ep = 5;
+	pkt.type = SP_TASK_MANAGER;
+	pkt.dst_cpu = 1;
+	pkt.buf_len = packetsize;
+	pkt.buf = task1;
+
+	ioctl(fd, CMD_SM_CREATE, &pkt);
+
+	ioctl(fd, CMD_SM_SEND, &pkt);
+
+//	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
+
+//	free(task1);
+}
+#define GETOPT_FLAGS "rsekhV"
 #define a_argument required_argument
 static struct option const long_opts[] = {
-	{"force",      no_argument, NULL, 'f'},
-	{"skip-start", no_argument, NULL, 's'},
-	{"help",       no_argument, NULL, 'h'},
-	{"version",    no_argument, NULL, 'V'},
-	{NULL,         no_argument, NULL, 0x0}
+	{"receive",	no_argument, NULL, 'r'},
+	{"send",	no_argument, NULL, 's'},
+	{"exec",	no_argument, NULL, 'e'},
+	{"kill",	no_argument, NULL, 'k'},
+	{"help",	no_argument, NULL, 'h'},
+	{"version",	no_argument, NULL, 'V'},
+	{NULL,		no_argument, NULL, 0x0}
 };
 
 __attribute__ ((noreturn))
@@ -126,8 +173,17 @@ int main(int argc, char *argv[])
 
 	while ((i=getopt_long(argc, argv, GETOPT_FLAGS, long_opts, NULL)) != -1) {
 		switch (i) {
-		case 'f': force = true; break;
-		case 's': force = true; break;
+		case 'r':
+			recv_test(fd);
+			break;
+		case 's':
+			send_test(fd);
+			break;
+		case 'e':
+			exec_task(fd);
+			break;
+		case 'k':
+			break;
 		case 'h': show_usage(EXIT_SUCCESS);
 		case 'V': show_version();
 		case ':':
@@ -141,8 +197,6 @@ int main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 	}
-
-	send_test(fd);
 
 	close(fd);
 
