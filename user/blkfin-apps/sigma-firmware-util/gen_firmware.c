@@ -41,6 +41,12 @@ int get_prog() {
 	return 0;
 }
 
+/* Got the parameter.bin and program.bin by "Save as Raw Data"->
+ * "Adress+Data" in SigmaStudio. ToDo: caculating CRC32 value,
+ * commenting out crc check routine in .../drivers/firmware/sigma.c
+ * of linux kernel currently.  
+ */
+
 int main(int argc, char **argv)
 {
 	int fd;
@@ -67,8 +73,10 @@ int main(int argc, char **argv)
 	sa_param->len =  sigma_param_size & 0xffff;
 	sa_param->len_hi = (sigma_param_size >> 16) & 0xf;
   	sa_param->instr = SIGMA_ACTION_WRITEXBYTES;
-	sa_param->addr = ADAU_PARAMS;
-	memcpy(sa_param->payload, sigma_param, sigma_param_size);
+	/* I2C transfer starts from MSB */
+	*(u8*)&sa_param->addr = sigma_param[0];
+	*((u8*)&sa_param->addr + 1) = sigma_param[1];
+	memcpy(sa_param->payload, &sigma_param[2], sigma_param_size - 2);
 
 	//
 	sa_program = (struct sigma_action *)malloc(program_size);
@@ -80,8 +88,10 @@ int main(int argc, char **argv)
 	sa_program->len = sigma_program_size & 0xffff;
 	sa_program->len_hi = (sigma_program_size >> 16) & 0x0f;
   	sa_program->instr = SIGMA_ACTION_WRITEXBYTES;
-	sa_program->addr = ADAU_PROGRAM;
-	memcpy(sa_program->payload, sigma_prog, sigma_program_size);
+	/* I2C transfer starts from MSB */
+	*(u8*)&sa_program->addr = sigma_prog[0];
+	*((u8*)&sa_program->addr + 1) = sigma_prog[1];
+	memcpy(sa_program->payload, &sigma_prog[2], sigma_program_size - 2);
 
 	/* init head */
 	memcpy(head.magic, SIGMA_MAGIC, sizeof(SIGMA_MAGIC));

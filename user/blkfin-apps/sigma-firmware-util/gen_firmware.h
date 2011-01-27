@@ -1,11 +1,9 @@
 #include <stdint.h>
 
 #define SIGMA_MAGIC "ADISIGM"
-#define ADAU_PROGRAM    0x0800
-#define ADAU_PARAMS     0x0000
-
-#define MAX_LEN (4096)
-#define OUTPUT_FILE "adau1761.bin"
+/* 8192 may not be enough in the future */
+#define MAX_LEN (8192)
+#define OUTPUT_FILE "SigmaDSP_fw.bin"
 
 typedef uint8_t u8;
 typedef uint16_t u16;
