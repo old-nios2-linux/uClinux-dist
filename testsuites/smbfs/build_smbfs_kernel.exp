@@ -6,13 +6,10 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
 source  make_default_config.exp
 
 # Following make specific configuration for this case.
-
 cd $uclinux_path
 set timeout 300
 set baud_rate_done_flag 0
@@ -21,7 +18,6 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -30,24 +26,24 @@ while 1 {
             send "y\r"
         }
 
-        -re "SMB file system support.*SMB_FS.*\\\[.*]" {
-            send -s "Y\r"
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
+        -re "CIFS support.*\\\(CIFS\\\).*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "samba .*USER_SAMBA.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "smbmount .*USER_SAMBA_SMBMOUNT.*\\\[.*]" {
+        -re "mount\.cifs.*USER_SAMBA_MOUNT_CIFS.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "smbumount .*USER_SAMBA_SMBUMOUNT.*\\\[.*]" {
+        -re "umount\.cifs.*USER_SAMBA_UMOUNT_CIFS.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {
@@ -72,16 +68,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
