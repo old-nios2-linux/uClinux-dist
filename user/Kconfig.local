@@ -420,4 +420,7 @@ config USER_BLACKFIN_DRV_TIMER_LATENCY
 
 config USER_BLACKFIN_DRV_PREEMPT_LATENCY
 	bool "bfin preempt latency test drvier"
+
+config USER_BLACKFIN_DRV_SPI_ADC
+	bool "bfin spi adc test drvier"
 endmenu
