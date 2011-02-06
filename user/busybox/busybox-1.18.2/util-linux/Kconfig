@@ -369,7 +369,6 @@ config USER_BUSYBOX_FEATURE_HWCLOCK_ADJTIME_FHS
 config USER_BUSYBOX_IPCRM
 	bool "ipcrm"
 	default y
-	select USER_BUSYBOX_FEATURE_SUID
 	help
 	  The ipcrm utility allows the removal of System V interprocess
 	  communication (IPC) objects and the associated data structures
@@ -379,7 +378,6 @@ config USER_BUSYBOX_IPCS
 	bool "ipcs"
 	default y
 	depends on USER_BUSYBOX_PLATFORM_LINUX
-	select USER_BUSYBOX_FEATURE_SUID
 	help
 	  The ipcs utility is used to provide information on the currently
 	  allocated System V interprocess (IPC) objects in the system.
