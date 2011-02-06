@@ -4123,26 +4123,15 @@ static struct pipe *parse_stream(char **pstring,
 				 && dest.length == 0 && !dest.has_quoted_part
 				) {
 					/* This newline can be ignored. But...
-					 * Without check #1, interactive shell
-					 * ignores even bare <newline>,
-					 * and shows the continuation prompt:
+					 * without the below check, interactive shell
+					 * will ignore even lines with bare <newline>,
+					 * and show the continuation prompt:
 					 * ps1_prompt$ <enter>
-					 * ps2> _   <=== wrong, should be ps1
-					 * Without check #2, "cmd & <newline>"
-					 * is similarly mistreated.
-					 * (BTW, this makes "cmd & cmd"
-					 * and "cmd && cmd" non-orthogonal.
-					 * Really, ask yourself, why
-					 * "cmd && <newline>" doesn't start
-					 * cmd but waits for more input?
-					 * No reason...)
+					 * ps2> _   <=== wrong prompt, should be ps1
 					 */
 					struct pipe *pi = ctx.list_head;
-					if (pi->num_cmds != 0       /* check #1 */
-					 && pi->followup != PIPE_BG /* check #2 */
-					) {
+					if (pi->num_cmds != 0)
 						continue;
-					}
 				}
 				/* Treat newline as a command separator. */
 				done_pipe(&ctx, PIPE_SEQ);
