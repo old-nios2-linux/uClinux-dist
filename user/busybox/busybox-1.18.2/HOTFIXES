@@ -3,3 +3,4 @@ busybox-1.18.2-hush.patch
 busybox-1.18.2-libbb.patch
 busybox-1.18.2-modprobe.patch
 busybox-1.18.2-modprobe-small.patch
+busybox-1.18.2-wc.patch
