@@ -5,7 +5,7 @@
 int default_session_handle(struct sm_message *msg, struct sm_session *session);
 
 sm_uint32_t index;
-void taskload_init(int argc, char *argv[])
+void icc_task_init(int argc, char *argv[])
 {
 	struct sm_session *session;
 	index = sm_create_session(LOCAL_SESSION, SP_PACKET);
@@ -18,7 +18,7 @@ void taskload_init(int argc, char *argv[])
 	coreb_msg("%s() end\n", __func__);
 }
 
-void taskload_exit(void)
+void icc_task_exit(void)
 {
 	sm_destroy_session(index);
 }
@@ -42,7 +42,7 @@ int default_session_handle(struct sm_message *msg, struct sm_session *session)
 		int len = 64;
 		int dst_ep = msg->src_ep;
 		int dst_cpu = msg->src;
-		void *send_buf = sm_request(len, session);
+		void *send_buf = sm_send_request(len, session);
 		coreb_msg("coreb send buf %x\n", send_buf);
 		if (!send_buf)
 			coreb_msg("NO MEM\n");
@@ -53,7 +53,7 @@ int default_session_handle(struct sm_message *msg, struct sm_session *session)
 		coreb_msg("msg payload %s \n", buf);
 	}
 
-	sm_release(buf, len, session);
+	sm_recv_release(buf, len, session);
 
 	return 0;
 }

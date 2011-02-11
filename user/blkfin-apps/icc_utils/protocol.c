@@ -370,13 +370,13 @@ int sm_send_error(struct sm_session *session, sm_uint32_t remote_ep,
 			0, SM_PACKET_ERROR);
 }
 
-void *sm_request(sm_uint32_t size, struct sm_session *session)
+void *sm_send_request(sm_uint32_t size, struct sm_session *session)
 {
 	void *buf = get_free_buffer(size);
 	return buf;
 }
 
-void sm_release(void *addr, sm_uint32_t size, struct sm_session *session)
+void sm_recv_release(void *addr, sm_uint32_t size, struct sm_session *session)
 {
 	struct sm_message *msg = NULL;
 	if (!list_empty(&session->messages)) {
