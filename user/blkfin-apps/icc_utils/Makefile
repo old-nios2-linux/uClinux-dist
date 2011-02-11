@@ -10,7 +10,12 @@ LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
 KERNELDIR := ${PWD}/../../../linux-2.6.x
-TASK_LOAD_ADDR := 0xFEB0C000
+TASK_LOAD_BASE := 0xfeb00000
+TASK_LOAD_ALIGN := 4096
+TASK_LOAD_OFF := $(shell readelf -l icc|grep $(TASK_LOAD_BASE)|awk '{ print $$6}')
+TASK_LOAD_ADDR := $(shell let a=$(TASK_LOAD_BASE);let b=$(TASK_LOAD_OFF);expr $$a + $$b)
+TASK_LOAD_ADDR := $(shell echo $(TASK_LOAD_ADDR)|awk 'BEGIN {x = 0} {x=($$1+$(TASK_LOAD_ALIGN))/$(TASK_LOAD_ALIGN)}  END {printf "%d",x}')
+TASK_LOAD_ADDR := $(shell echo $(TASK_LOAD_ADDR)|awk 'BEGIN {x = 0} {x=$$1*$(TASK_LOAD_ALIGN)}  END {printf "%x",x}')
 
 all: icc icc_testcase icc_task
 
