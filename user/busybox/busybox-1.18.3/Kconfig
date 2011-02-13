@@ -131,7 +131,6 @@ config USER_BUSYBOX_FEATURE_INSTALLER
 config USER_BUSYBOX_INSTALL_NO_USR
 	bool "Don't use /usr"
 	default n
-	depends on USER_BUSYBOX_FEATURE_INSTALLER
 	help
 	  Disable use of /usr. busybox --install and "make install"
 	  will install applets only to /bin and /sbin,

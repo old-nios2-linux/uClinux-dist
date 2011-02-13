@@ -40,6 +40,11 @@ for h in ${hotfixes} ; do
 		echo "APPLYING"
 		patch ${popts} >/dev/null < hotfixes/${h}
 		echo ${h} >> HOTFIXES
+
+		pushd .. >/dev/null
+		./config.in-to-kconfig.sh
+		popd >/dev/null
+
 		if [[ -d .svn ]] ; then
 			svn add -q HOTFIXES
 			svn commit -m "apply upstream ${url}${h}"
