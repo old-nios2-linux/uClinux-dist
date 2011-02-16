@@ -261,10 +261,11 @@ unsigned int elf_sym_addr(void *buf, const char *symname)
 	for (i = 0; i < symnum; i++) {
 		if (strcmp(strtab + symtab[i].st_name, symname) == 0) {
 			ret = symtab[i].st_value;
+			return ret;
 		}
 	}
 
-	return ret;
+	return 0;
 }
 
 
