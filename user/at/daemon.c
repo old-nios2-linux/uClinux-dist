@@ -111,20 +111,8 @@ daemon_setup()
     FILE *fp;
 
     if (!daemon_debug) {
-	close(0);
-	close(1);
-	close(2);
-	if ((open("/dev/null", O_RDWR) != 0) ||
-	    (open("/dev/null", O_RDWR) != 1) ||
-	    (open("/dev/null", O_RDWR) != 2)) {
-	    perr("Error redirecting I/O");
-	}
-	pid = fork();
-	if (pid == -1) {
-	    perr("Cannot fork");
-	} else if (pid != 0) {
-	    exit(0);
-	}
+	if (daemon(1, 0))
+	    perr("Error daemonizing");
     }
     old_umask = umask(S_IWGRP | S_IWOTH);
 
