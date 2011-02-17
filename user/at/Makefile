@@ -42,7 +42,7 @@ INSTALL		= /usr/bin/install -c
 
 CLONES		= atq atrm 
 ATOBJECTS	= at.o panic.o perm.o y.tab.o lex.yy.o
-RUNOBJECTS	= atd.o daemon.o $(LIBOBJS)
+RUNOBJECTS	= atd.o daemon.o $(LIBOBJS) getloadavg.o
 CSRCS   	= at.c atd.c panic.c perm.c daemon.c getloadavg.c \
 			y.tab.c y.tab.h lex.yy.c
 HEADERS 	= at.h panic.h parsetime.h perm.h daemon.h getloadavg.h\
