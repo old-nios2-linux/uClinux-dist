@@ -201,7 +201,7 @@ run_file(const char *filename, uid_t uid, gid_t gid)
      * by the main atd loop.
      */
 
-    pid = fork();
+    pid = vfork();
     if (pid == -1)
 	perr("Cannot fork");
 
@@ -306,7 +306,7 @@ run_file(const char *filename, uid_t uid, gid_t gid)
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
 
-    pid = fork();
+    pid = vfork();
     if (pid < 0)
 	perr("Error in fork");
 
