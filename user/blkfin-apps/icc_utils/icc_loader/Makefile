@@ -2,20 +2,19 @@ CC = bfin-uclinux-gcc
 
 # we have to clobber a bunch of flags as they are normally geared towards
 # running under linux, not a bare metal environment like core b
+ICC_INCLUDE := ${pwd}/../icc_core
 CFLAGS  ?=
-CFLAGS  += -I$(KERNELDIR)/drivers/staging/icc/include -g
+CFLAGS  += -I$(KERNELDIR)/drivers/staging/icc/include -I$(ICC_INCLUDE) -g
 LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
 KERNELDIR := ${PWD}/../../../../linux-2.6.x
 
-all: icc_test
+all: icc_loader
 
-icc_test: icc_test.o
-	$(CC) $(CFLAGS) icc_test.o  -o $@ > $@.map
-romfs: icc_test
-	$(ROMFSINST) -d /bin/icc_test
+icc_loader: icc_loader.o
+	$(CC) $(CFLAGS) icc_loader.o  -o $@ > $@.map
 clean:
-	rm -f *.map *.dump *.elf *.gdb *.o icc_test
+	rm -rf *.o *.map *.gdb icc_loader
 
-.PHONY: all clean romfs
+.PHONY: all clean

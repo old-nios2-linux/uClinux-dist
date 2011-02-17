@@ -7,7 +7,7 @@
 #include <asm-generic/errno-base.h>
 #include <linux/bitmap.h>
 #include <icc.h>
-#include "protocol.h"
+#include <protocol.h>
 
 struct coreb_icc_node coreb_info;
 struct sm_message scratch_msg;

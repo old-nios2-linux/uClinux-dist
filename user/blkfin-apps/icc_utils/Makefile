@@ -1,41 +1,21 @@
-CC = bfin-elf-gcc -g
-LD = bfin-elf-ld
+ICC_TOP_DIR := $(shell pwd)
+all: icc icc_loader icc_example
+icc: icc_core
+	$(MAKE) -C icc_core
 
-# we have to clobber a bunch of flags as they are normally geared towards
-# running under linux, not a bare metal environment like core b
-CPPFLAGS =
-CFLAGS  ?= -mcpu=bf561
-CFLAGS  += -mmulticore -mcoreb -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/drivers/staging/icc/include -DCONFIG_BF561 -D__KERNEL__
-LDFLAGS  = $(CFLAGS)
-ASFLAGS  = $(CFLAGS)
-PWD:= $(shell pwd)
-KERNELDIR := ${PWD}/../../../linux-2.6.x
-TASK_LOAD_BASE := 0xfeb00000
-TASK_LOAD_ALIGN := 4096
-TASK_LOAD_OFF := $(shell readelf -l icc|grep $(TASK_LOAD_BASE)|awk '{ print $$6}')
-TASK_LOAD_ADDR := $(shell let a=$(TASK_LOAD_BASE);let b=$(TASK_LOAD_OFF);expr $$a + $$b)
-TASK_LOAD_ADDR := $(shell echo $(TASK_LOAD_ADDR)|awk 'BEGIN {x = 0} {x=($$1+$(TASK_LOAD_ALIGN))/$(TASK_LOAD_ALIGN)}  END {printf "%d",x}')
-TASK_LOAD_ADDR := $(shell echo $(TASK_LOAD_ADDR)|awk 'BEGIN {x = 0} {x=$$1*$(TASK_LOAD_ALIGN)}  END {printf "%x",x}')
+iccloader:
+	$(MAKE) -C icc_loader
 
-all: icc icc_testcase icc_task
+icc_example:
+	$(MAKE) -C example/task
 
-ICC_OBJS = coreb_start.o test.o corebboot.o vsprintf.o mempool.o protocol.o
-icc: $(ICC_OBJS) bf561.lds coreb.lds
-	$(CC) -Wl,--verbose -Wl,-M -T coreb.lds -I${KERNELINCDIR} $(LDFLAGS) $(ICC_OBJS) -o $@ > $@.map
-	bfin-elf-objdump -x -D $@ > $@.dump
-
-icc_testcase:
-	$(MAKE) -C icc_test
-
-icc_task:
-	$(CC) $(CFLAGS) -c test_task.c
-	$(LD) -o task1 -T coreb.lds --just-symbol icc test_task.o -Ttext $(TASK_LOAD_ADDR)
-
-romfs: icc
-	$(ROMFSINST) /bin/icc
-	$(MAKE) -C icc_test romfs
+romfs: icc_core/icc icc_loader/icc_loader
+	$(ROMFSINST) -d icc_core/icc /bin/icc
+	$(ROMFSINST) -d icc_loader/icc_loader /bin/icc_loader
 
 clean:
-	rm -f *.map *.dump *.elf *.gdb *.o icc
+	$(MAKE) -C icc_core clean
+	$(MAKE) -C icc_loader clean
+	$(MAKE) -C example/task clean
 
 .PHONY: all clean romfs

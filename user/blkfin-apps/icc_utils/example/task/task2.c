@@ -1,5 +1,5 @@
 #include <icc.h>
-#include "protocol.h"
+#include <protocol.h>
 
 #define LOCAL_SESSION 5
 int default_session_handle(struct sm_message *msg, struct sm_session *session);
@@ -38,7 +38,7 @@ int default_session_handle(struct sm_message *msg, struct sm_session *session)
 	}
 	/* handle payload */
 	coreb_msg("processing msg %s\n", buf);
-	if (*(char *)buf == '1') {
+	if (*(char *)buf == '0') {
 		int len = 64;
 		int dst_ep = msg->src_ep;
 		int dst_cpu = msg->src;

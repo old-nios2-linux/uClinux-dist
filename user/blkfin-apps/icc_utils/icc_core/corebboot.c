@@ -45,14 +45,14 @@
 #include <mach/bf561.h>
 #include <mach/cdefBF561.h>
 #include <icc.h>
-#include "blackfin.h"
+#include <blackfin.h>
 #include <asm/cplb.h>
 #include <asm/irqflags.h>
 
 #include <stdarg.h>
 #include <asm/blackfin.h>
 
-#include "protocol.h"
+#include <protocol.h>
 
 extern void evt_evt7(void );
 extern void evt_evt2(void );
