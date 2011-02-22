@@ -350,7 +350,12 @@ endmenu
 menu "Blackfin canned demos"
 
 config USER_NDSO
-	bool "Networked Software Defined Storage Oscilloscope"
+	bool "Networked Software Defined Storage Oscilloscope /dev/sport"
+	select LIB_LIBPNG
+	select USER_GNUPLOT
+
+config USER_NDSO_IIO
+	bool "Networked Software Defined Storage Oscilloscope IIO"
 	select LIB_LIBPNG
 	select USER_GNUPLOT
 

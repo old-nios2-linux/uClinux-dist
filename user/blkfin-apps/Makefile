@@ -16,6 +16,7 @@ dir_$(CONFIG_USER_ALSA_UTILS)                    += alsa-utils
 dir_$(CONFIG_USER_BTSCO)                         += btsco
 dir_$(CONFIG_USER_AWG)                           += ndso
 dir_$(CONFIG_USER_NDSO)                          += ndso
+dir_$(CONFIG_USER_NDSO_IIO)                      += ndso
 dir_$(CONFIG_USER_PPIFPGACGI)                    += ndso
 dir_$(CONFIG_USER_NET_AUDIO)                     += net_audio
 dir_$(CONFIG_USER_SDLEXAMPLES)                   += sdl-examples

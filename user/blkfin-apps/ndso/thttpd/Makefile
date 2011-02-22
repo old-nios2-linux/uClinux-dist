@@ -3,6 +3,10 @@ ifdef CONFIG_USER_NDSO
 EXEC = ndso
 endif
 
+ifdef CONFIG_USER_NDSO_IIO
+EXEC = ndso
+endif
+
 ifdef CONFIG_USER_AWG
 EXEC = awg
 endif
