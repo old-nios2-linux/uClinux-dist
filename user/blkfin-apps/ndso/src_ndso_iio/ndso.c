@@ -488,27 +488,29 @@ make_file_init(int form_method, char **getvars, char **postvars, s_info * info)
 
 	fprintf(info->pFile_init, "plot \"%s\" ", info->pFILENAME_T_OUT);
 
-	for (i = 0, j = 0; i < info->num_channels; i++) {
+	/* Last channel is the timestamp */
+
+	for (i = 0, j = 0; i < info->num_channels - 1; i++) {
 		while (!((info->channel_en_mask >> j++) & 1)) ;
-		if (i == (info->num_channels - 1)) {
+		if (i == (info->num_channels - 2)) {
 			if (str2num(postvars[info->sdisplay.smooth]))
 				fprintf(info->pFile_init,
-					"using 1:%d smooth %s title \"ch%d\"",
-					i + 2, postvars[info->sdisplay.smooth],
+					"using %d:%d smooth %s title \"ch%d\"",
+					info->num_channels, i + 1, postvars[info->sdisplay.smooth],
 					j - 1);
 			else
 				fprintf(info->pFile_init,
-					"using 1:%d title \"ch%d\"", i + 2,
+					"using %d:%d title \"ch%d\"",info->num_channels, i + 1,
 					j - 1);
 		} else {
 			if (str2num(postvars[info->sdisplay.smooth]))
 				fprintf(info->pFile_init,
-					"using 1:%d smooth %s title \"ch%d\", '' ",
-					i + 2, postvars[info->sdisplay.smooth],
+					"using %d:%d smooth %s title \"ch%d\", '' ",
+					info->num_channels, i + 1, postvars[info->sdisplay.smooth],
 					j - 1);
 			else
 				fprintf(info->pFile_init,
-					"using 1:%d title \"ch%d\", '' ", i + 2,
+					"using %d:%d title \"ch%d\", '' ",info->num_channels, i + 1,
 					j - 1);
 		}
 	}

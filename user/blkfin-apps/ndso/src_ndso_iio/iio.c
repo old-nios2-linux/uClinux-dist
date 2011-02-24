@@ -71,10 +71,6 @@ void process_scan(s_info * info,
 {
 	int k;
 
-	int64_t val = *(int64_t *)
-	    (data + scan_size - sizeof(int64_t));
-	fprintf(info->pFile_samples, "%lld ", val - tstmp);
-
 	for (k = 0; k < num_channels; k++) {
 
 		switch (infoarray[k].bytes) {
@@ -110,8 +106,8 @@ void process_scan(s_info * info,
 				/* special case for timestamp */
 				if (infoarray[k].scale == 1.0f &&
 				    infoarray[k].offset == 0.0f)
-					fprintf(info->pFile_samples, " %lld",
-						val);
+					fprintf(info->pFile_samples, "%lld ",
+						val  - tstmp);
 				else
 					fprintf(info->pFile_samples, "%05f ",
 						((float)val +
@@ -148,8 +144,8 @@ int iio_enable_selected_channels(char *dev_dir_name, unsigned long ch_mask)
 		goto error_free_name;
 	}
 	while (ent = readdir(dp), ent != NULL)
-		if (strcmp(ent->d_name + strlen(ent->d_name) - strlen("_en"),
-			   "_en") == 0) {
+		if ((strcmp(ent->d_name + strlen(ent->d_name) - strlen("_en"),
+			   "_en") == 0) && !(strcmp(ent->d_name, "timestamp_en") == 0)) {
 			ret = asprintf(&filename,
 				       "%s/%s", scan_el_dir, ent->d_name);
 			if (ret < 0) {
@@ -324,7 +320,7 @@ int iio_sample(int form_method, char **getvars, char **postvars, s_info * info,
 		ret = -ENOMEM;
 		goto error_free_triggername;
 	}
-//      printf("%s %s\n", dev_dir_name, trigger_name);
+
 	/* Set the device trigger to be the data rdy trigger found above */
 	ret = write_sysfs_string_and_verify("trigger/current_trigger",
 					    dev_dir_name, trigger_name);
@@ -343,11 +339,7 @@ int iio_sample(int form_method, char **getvars, char **postvars, s_info * info,
 	if (ret < 0)
 		goto error_free_buf_dir_name;
 
-	scan_size = read_sysfs_posint("bytes_per_datum", buf_dir_name);
-	if (ret < 0)
-		goto error_free_buf_dir_name;
-
-	size_from_channelarray(infoarray, num_channels);
+	scan_size = size_from_channelarray(infoarray, num_channels);
 
 	data = malloc(scan_size * buf_len);
 	if (!data) {
@@ -389,7 +381,6 @@ int iio_sample(int form_method, char **getvars, char **postvars, s_info * info,
 
 	write_sysfs_int("frequency", trig_dir_name, info->stime_s.sps);
 
-
 	do {
 		read_size = fread(&dat, 1, sizeof(struct iio_event_data),
 				  fp_ev);
@@ -416,6 +407,7 @@ int iio_sample(int form_method, char **getvars, char **postvars, s_info * info,
 	if (read_size == -EAGAIN) {
 		printf("nothing available\n");
 	}
+
 
 	int64_t tstmp = *(int64_t *)
 	    (data + scan_size - sizeof(int64_t));
