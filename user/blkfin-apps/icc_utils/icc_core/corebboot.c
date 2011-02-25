@@ -146,21 +146,20 @@ void coreb_msg(char *fmt, ...)
 	int i;
 	char buf[64] = "COREB: ";
 	struct sm_message_queue *queue = (struct sm_message_queue *)MSGQ_START_ADDR;
-	struct sm_message *msg = &queue->messages[0];
+	struct sm_msg *msg = &queue->messages[0];
 	sm_atomic_t sent;
-	void *p = (void *)MSG_BUF_ADDR;
+	sent = sm_atomic_read(&queue->sent);
+	void *p = (void *)DEBUG_MSG_BUF_ADDR + (sent % SM_MSGQ_LEN) * 64;
 	va_start(args, fmt);
 	i = vsprintf(buf + 7, fmt, args);
 	va_end(args);
 	memset(p, 0, 64);
+	SSYNC();
 	strcpy(p, buf);
-	sent = sm_atomic_read(&queue->sent);
-	memset(&msg[sent%SM_MSGQ_LEN], 0, sizeof(struct sm_message));
-	msg[(sent%SM_MSGQ_LEN)].type = SM_BAD_MSG;
-	msg[(sent%SM_MSGQ_LEN)].dst_ep = 1;
-	msg[(sent%SM_MSGQ_LEN)].dst = 0;
-	msg[(sent%SM_MSGQ_LEN)].src = 1;
-	msg[(sent%SM_MSGQ_LEN)].payload = p;
+	memset(&msg[sent%SM_MSGQ_LEN], 0, sizeof(struct sm_msg));
+	msg[(sent % SM_MSGQ_LEN)].type = SM_BAD_MSG;
+	msg[(sent % SM_MSGQ_LEN)].dst_ep = 1;
+	msg[(sent % SM_MSGQ_LEN)].payload = p;
 	sent++;
 	sm_atomic_write(&queue->sent, sent);
 	platform_send_ipi_cpu(0, IRQ_SUPPLE_0);
@@ -332,7 +331,7 @@ void coreb_icc_dispatcher(void)
 		sm_atomic_t sent = sm_atomic_read(&inqueue->sent);
 		sm_atomic_t received = sm_atomic_read(&inqueue->received);
 		sm_atomic_t pending;
-		coreb_msg("@@@sm msgq sent=%d received=%d\n", sent, received);
+//		coreb_msg("@@@sm msgq sent=%d received=%d\n", sent, received);
 	}
 	msg_handle();
 
