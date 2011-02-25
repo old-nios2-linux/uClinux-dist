@@ -30,6 +30,11 @@ SECTIONS
     /* basiccrt.o(.text) */
     *(.l1.text)
   } >MEM_L1_CODE =0
+  .text_icc        :
+  {
+    *(.icc.text)
+  } >MEM_ICC =0
+
   .init           :
   {
     KEEP (*(.init))
@@ -100,6 +105,10 @@ SECTIONS
   {
     *(.l1.data)
   } >MEM_L1_DATA_A =0
+  .data_icc        :
+  {
+    *(.icc.data)
+  } >MEM_ICC =0
   .rodata         : { *(.rodata .rodata.* .gnu.linkonce.r.*) } >MEM_L2
   .rodata1        : { *(.rodata1) } >MEM_L2
   .sdata2         :

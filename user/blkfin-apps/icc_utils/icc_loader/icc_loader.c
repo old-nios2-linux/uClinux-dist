@@ -332,18 +332,41 @@ static int open_icc(void)
 	return ret;
 }
 
-static void send_test(int fd)
+static void send_test(int fd, const char *optarg)
 {
 	struct sm_packet pkt;
-	char buf[64] = "1234567890abcdef";
+	char payload[64] = "1234";
+	void *buf;
+	struct l3_proto_head *l3h;
+
+	buf = malloc(1024);
+	if (!buf) {
+		printf("malloc failed\n");
+	}
+	memset(buf, 0, 1024);
+
+	l3h = (struct l3_proto_head *)payload;
+
+	if( strcmp("audio", optarg) == 0)
+		l3h->type = L3_TYPE_AUDIO;
+	else
+		l3h->type = L3_TYPE_VIDEO;
+	l3h->chunk_addr = buf;
+	l3h->chunk_size = 1024;
+	l3h->status = 0;
+	l3h->todo = 1;
+
 	memset(&pkt, 0, sizeof(struct sm_packet));
 
 	pkt.local_ep = 9;
-	pkt.remote_ep = 5;
+	if( strcmp("audio", optarg) == 0)
+		pkt.remote_ep = 6;
+	else
+		pkt.remote_ep = 5;
 	pkt.type = SP_PACKET;
 	pkt.dst_cpu = 1;
 	pkt.buf_len = 16;
-	pkt.buf = buf;
+	pkt.buf = payload;
 
 	printf("sp packet %d\n", pkt.type);
 
@@ -357,7 +380,13 @@ static void send_test(int fd)
 	memset(buf, 0, 64);
 	ioctl(fd, CMD_SM_RECV, &pkt);
 
-	printf("%s \n", pkt.buf);
+	l3h = (struct l3_proto_head *)pkt.buf;
+
+	printf("%x \n", l3h->type);
+	printf("%x \n", l3h->chunk_addr);
+	printf("%x \n", l3h->chunk_size);
+	printf("%x \n", l3h->status);
+	printf("%x \n", l3h->todo);
 
 	sleep(3);
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
@@ -423,11 +452,11 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 
 	ioctl(fd, CMD_SM_SEND, &pkt);
 
-//	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
+	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 
-//	free(task1);
+	free(task1);
 }
-#define GETOPT_FLAGS "rsl:e:khV"
+#define GETOPT_FLAGS "rs:l:e:kfhV"
 #define a_argument required_argument
 static struct option const long_opts[] = {
 	{"receive",	no_argument, NULL, 'r'},
@@ -435,6 +464,7 @@ static struct option const long_opts[] = {
 	{"load",	no_argument, NULL, 'l'},
 	{"exec",	no_argument, NULL, 'e'},
 	{"kill",	no_argument, NULL, 'k'},
+	{"force",	no_argument, NULL, 'f'},
 	{"help",	no_argument, NULL, 'h'},
 	{"version",	no_argument, NULL, 'V'},
 	{NULL,		no_argument, NULL, 0x0}
@@ -450,7 +480,7 @@ __attribute__ ((noreturn))
 static void show_usage(int exit_status)
 {
 	printf(
-		"\nUsage: icc_test [options] \n"
+		"\nUsage: icc_loader [options] \n"
 		"\n"
 		"Options:\n"
 	);
@@ -467,11 +497,14 @@ int main(int argc, char *argv[])
 
 	while ((i=getopt_long(argc, argv, GETOPT_FLAGS, long_opts, NULL)) != -1) {
 		switch (i) {
+		case 'f':
+			force = true;
+			break;
 		case 'r':
 			recv_test(fd);
 			break;
 		case 's':
-			send_test(fd);
+			send_test(fd, optarg);
 			break;
 		case 'l':
 			buf = map_elf(optarg, &stat);

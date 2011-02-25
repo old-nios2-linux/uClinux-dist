@@ -4,7 +4,7 @@ CC = bfin-uclinux-gcc
 # running under linux, not a bare metal environment like core b
 ICC_INCLUDE := ${pwd}/../icc_core
 CFLAGS  ?=
-CFLAGS  += -I$(KERNELDIR)/drivers/staging/icc/include -I$(ICC_INCLUDE) -g
+CFLAGS  += -I$(KERNELDIR)/arch/blackfin/mach-bf561/include -I$(KERNELDIR)/drivers/staging/icc/include -I$(ICC_INCLUDE) -g
 LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
