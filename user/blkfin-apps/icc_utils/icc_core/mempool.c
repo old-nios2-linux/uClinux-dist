@@ -157,6 +157,7 @@ struct gen_pool *gen_pool_create(int min_alloc_order)
 	else
 		pool = &gmempool[i];
 
+	coreb_msg("@@@ gen pool create%d \n", i);
 	pool->chunks = &gchunk[i * MAX_CHUNK];
 	pool->min_alloc_order = min_alloc_order;
 	return pool;
@@ -166,8 +167,7 @@ int gen_pool_add(struct gen_pool *pool, unsigned long addr, size_t size)
 {
 	struct gen_pool_chunk *chunk;
 	int nbits = size >> pool->min_alloc_order;
-	int nbytes = sizeof(struct gen_pool_chunk) +
-				(nbits + BITS_PER_BYTE - 1) / BITS_PER_BYTE;
+	int nbytes = (nbits + BITS_PER_BYTE - 1) / BITS_PER_BYTE;
 	int chunkid = find_next_zero_bit(pool->chunk_bits, BITS_PER_LONG, 0);
 
 //	coreb_msg("@@@ gen pool nbits%d \n", nbits);
@@ -230,7 +230,7 @@ unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
 	for_each_set_bit(_chunk, pool->chunk_bits, BITS_PER_LONG) {
 
 //		coreb_msg("@@@ gen pool chunkid %0x\n", _chunk);
-		chunk = &gchunk[_chunk];
+		chunk = &pool->chunks[_chunk];
 
 		end_bit = (chunk->end_addr - chunk->start_addr) >> order;
 

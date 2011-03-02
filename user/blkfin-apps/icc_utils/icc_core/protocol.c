@@ -18,6 +18,16 @@ struct sm_task sm_task1;
 
 struct sm_proto *sm_protos[SP_MAX];
 
+struct sm_message *get_message()
+{
+	return (struct sm_message *)gen_pool_alloc(coreb_info.msg_pool, 1 << 6);
+}
+
+void free_message(struct sm_message *message)
+{
+	gen_pool_free(coreb_info.msg_pool, (sm_uint32_t)message, 1 << 6);
+}
+
 void *get_free_buffer(sm_uint32_t size)
 {
 	return gen_pool_alloc(coreb_info.pool, size);
@@ -480,7 +490,6 @@ int iccqueue_getpending(sm_uint32_t srccpu)
 	sm_atomic_t sent = sm_atomic_read(&inqueue->sent);
 	sm_atomic_t received = sm_atomic_read(&inqueue->received);
 	sm_atomic_t pending;
-	coreb_msg("@@@sent=%d received=%d\n", sent, received);
 	pending = sent - received;
 	if(pending < 0)
 		pending += USHRT_MAX;
@@ -519,12 +528,17 @@ static int sm_default_sendmsg(struct sm_message *message, struct sm_session *ses
 }
 
 static int
-sm_default_recvmsg(struct sm_message *message, struct sm_session *session)
+sm_default_recvmsg(struct sm_msg *msg, struct sm_session *session)
 {
 	int slot;
 	int ret = 0;
 	int cpu = blackfin_core_id();
-	struct sm_msg *msg = &message->msg;
+	struct sm_message *message;
+
+	if (!list_empty(&session->messages)) {
+		message = list_first_entry(&session->messages,
+					struct sm_message, next);
+	}
 
 	coreb_msg("type %x, dstep %d, srcep %d \n", msg->type, msg->dst_ep, msg->src_ep);
 	switch (msg->type) {
@@ -544,6 +558,7 @@ sm_default_recvmsg(struct sm_message *message, struct sm_session *session)
 		break;
 	case SM_SESSION_PACKET_CONNECT_DONE:
 		session->flags = SM_CONNECT;
+		coreb_msg("connected %x %d\n", session->flags, session->remote_ep);
 		break;
 	case SM_SESSION_PACKET_CLOSE:
 		session->remote_ep = 0;
@@ -556,13 +571,17 @@ sm_default_recvmsg(struct sm_message *message, struct sm_session *session)
 		coreb_msg("recved packet msg handle%x\n", (unsigned int)session->handle);
 		if (session->handle)
 			ret = session->handle(message, session);
-		if (!ret)
+		if (!ret) {
+			free_message(message);
 			return 0;
+		}
 	case SM_SESSION_PACKET_READY:
 		if (session->handle)
 			ret = session->handle(message, session);
-		if (!ret)
+		if (!ret) {
+			free_message(message);
 			return 0;
+		}
 	case SM_PACKET_ERROR:
 		coreb_msg("SM ERROR %08x\n", msg->payload);
 		break;
@@ -613,7 +632,7 @@ void msg_handle(void)
 	struct sm_msg *msg;
 	struct sm_session *session;
 	int pending;
-	struct sm_message *message = &scratch_message;
+	struct sm_message *message = get_message();
 	sm_uint32_t index;
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
@@ -625,13 +644,13 @@ void msg_handle(void)
 		return;
 	coreb_msg("msg type %x index %d session type %x\n", msg->type, index, session->type);
 	if (session && (SM_MSG_PROTOCOL(msg->type) == session->type)) {
-		coreb_msg("%s msg type %x\n", __func__, msg->type);
+		coreb_msg("%s msg type %x alloc %x\n", __func__, msg->type, (unsigned long)message);
 		memcpy(&message->msg, msg, sizeof(struct sm_msg));
 		message->dst = cpu;
 		message->src = cpu ^ 1;
 		list_add(&message->next, &session->messages);
 		if (session->proto_ops->recvmsg)
-			session->proto_ops->recvmsg(message, session);
+			session->proto_ops->recvmsg(msg, session);
 		else
 			coreb_msg("unsupported protocol\n");
 	} else {
