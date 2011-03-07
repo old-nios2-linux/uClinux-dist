@@ -2,3 +2,4 @@ busybox-1.18.3-buildsys.patch
 busybox-1.18.3-modutils24.patch
 busybox-1.18.3-wget.patch
 busybox-1.18.3-klogd.patch
+busybox-1.18.3-menuconfig.patch
