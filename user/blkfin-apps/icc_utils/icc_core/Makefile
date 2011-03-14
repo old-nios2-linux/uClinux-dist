@@ -15,7 +15,7 @@ all: icc
 
 ICC_OBJS = coreb_start.o test.o corebboot.o vsprintf.o mempool.o protocol.o
 icc: $(ICC_OBJS)
-	$(CC) -Wl,--verbose -Wl,-M -T ${ICC_INCLUDE}/coreb.lds -I${KERNELINCDIR} $(LDFLAGS) $(ICC_OBJS) -o $@ > $@.map
+	$(CC) -Wl,--verbose -Wl,-M -T coreb.lds -I${KERNELINCDIR} $(LDFLAGS) $(ICC_OBJS) -o $@ > $@.map
 	bfin-elf-objdump -x -D $@ > $@.dump
 
 clean:
