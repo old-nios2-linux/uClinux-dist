@@ -142,13 +142,19 @@ eend $? errnoent.h errnoent.h.old
 # it into a list of actual numbers, and then only complain when new
 # ioctls have been *added*.  we'll keep around the old ones forever
 # in case someone runs an old binary with the old ioctl.
-ebegin "ioctl list"
+ebegin "ioctl list (common)"
 sh ./linux/ioctlent.sh "$ksrc/include" "$arch_inc" | grep -v -e '^Looking for' -e ' is a'
 ${CPP} -dD -I. -Wall linux/ioctlsort.c -o ioctlsort.i
 ${CC} -Wall ioctlsort.i -o ioctlsort
 ./ioctlsort > ioctlent.h
-! diff -u ioctlent.h $(get_header ioctlent.h) | sed 1,2d | grep -qs '^\-'
-eend $? ioctlent.h ioctlsort ioctlsort.i ioctls.h ioctldefs.h
+grep -v '"asm' ioctlent.h > ioctlent.linux.h.in
+grep '"asm' ioctlent.h > ioctlent.arch.h.in
+! diff -u ioctlent.linux.h.in linux/ioctlent.h.in | sed 1,2d | grep -qs '^\-'
+eend $? ioctlent.h ioctlent.linux.h.in ioctlsort ioctlsort.i ioctls.h ioctldefs.h
+
+ebegin "ioctl list (bfin)"
+! diff -u ioctlent.arch.h.in linux/bfin/ioctlent.h.in | sed 1,2d | grep -qs '^\-'
+eend $? ioctlent.arch.h.in
 
 # easy: output is exactly what we want
 ebegin "signal list"
