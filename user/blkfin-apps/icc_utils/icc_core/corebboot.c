@@ -54,6 +54,19 @@
 
 #include <protocol.h>
 
+static inline void coreb_idle(void)
+{
+	__asm__ __volatile__( \
+			".align 8;" \
+			"nop;"  \
+			"nop;"  \
+			"idle;" \
+			: \
+			:  \
+			);
+}
+
+
 extern void evt_evt7(void );
 extern void evt_evt2(void );
 extern void evt_evt3(void );
@@ -264,16 +277,6 @@ inline int readipend(void)
 	return _tmp;
 }
 
-#define coreb_idle() \
-	__asm__ __volatile__( \
-			".align 8;" \
-			"nop;"	\
-			"nop;"	\
-			"idle;" \
-			: \
-			:  \
-			)
-
 
 void bfin_setup_caches(unsigned int cpu)
 {
@@ -317,10 +320,9 @@ void bfin_setup_caches(unsigned int cpu)
 
 }
 
+void icc_run_task(void);
 void coreb_icc_dispatcher(void)
 {
-
-	int pending;
 	int cpu = 1;
 	int bfin_irq_flags;
 	struct sm_msg *msg;
@@ -328,22 +330,7 @@ void coreb_icc_dispatcher(void)
 		/*to do drop no control messages*/
 		coreb_idle();
 	}
-	pending = iccqueue_getpending(cpu);
-	if (!pending) {
-		coreb_idle();
-
-		coreb_msg("@@@ wake up\n");
-		return;
-	}
-	{
-		struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[1];
-		sm_atomic_t sent = sm_atomic_read(&inqueue->sent);
-		sm_atomic_t received = sm_atomic_read(&inqueue->received);
-		sm_atomic_t pending;
-		coreb_msg("@@@sm msgq sent=%d received=%d\n", sent, received);
-	}
-	msg_handle();
-
+	icc_run_task();
 }
 
 void icc_init(void)

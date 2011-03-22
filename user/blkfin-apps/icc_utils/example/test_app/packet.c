@@ -44,24 +44,31 @@ static void send_test(int fd, const char *optarg)
 	char payload[64] = "1234";
 	void *buf;
 	struct l3_proto_head *l3h;
-
-	buf = malloc(1024);
-	if (!buf) {
-		printf("malloc failed\n");
-	}
-	memset(buf, 0, 1024);
+	int simple = 0;
 
 	l3h = (struct l3_proto_head *)payload;
 
 	if( strcmp("audio", optarg) == 0)
 		l3h->type = L3_TYPE_AUDIO;
-	else
+	else if(strcmp("video", optarg) == 0)
 		l3h->type = L3_TYPE_VIDEO;
-	l3h->chunk_addr = buf;
-	l3h->chunk_size = 1024;
-	l3h->status = 0;
-	l3h->todo = 1;
+	else {
+		strcpy(payload, optarg);
+		simple = 1;
+	}
+	if (!simple) {
+		buf = malloc(1024);
+		if (!buf) {
+			printf("malloc failed\n");
+		}
+		memset(buf, 0, 1024);
 
+
+		l3h->chunk_addr = buf;
+		l3h->chunk_size = 1024;
+		l3h->status = 0;
+		l3h->todo = 1;
+	}
 	memset(&pkt, 0, sizeof(struct sm_packet));
 
 	pkt.local_ep = 9;
