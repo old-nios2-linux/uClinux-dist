@@ -332,94 +332,6 @@ static int open_icc(void)
 	return ret;
 }
 
-static void send_test(int fd, const char *optarg)
-{
-	struct sm_packet pkt;
-	char payload[64] = "1234";
-	void *buf;
-	struct l3_proto_head *l3h;
-
-	buf = malloc(1024);
-	if (!buf) {
-		printf("malloc failed\n");
-	}
-	memset(buf, 0, 1024);
-
-	l3h = (struct l3_proto_head *)payload;
-
-	if( strcmp("audio", optarg) == 0)
-		l3h->type = L3_TYPE_AUDIO;
-	else
-		l3h->type = L3_TYPE_VIDEO;
-	l3h->chunk_addr = buf;
-	l3h->chunk_size = 1024;
-	l3h->status = 0;
-	l3h->todo = 1;
-
-	memset(&pkt, 0, sizeof(struct sm_packet));
-
-	pkt.local_ep = 9;
-	if( strcmp("audio", optarg) == 0)
-		pkt.remote_ep = 6;
-	else
-		pkt.remote_ep = 5;
-	pkt.type = SP_PACKET;
-	pkt.dst_cpu = 1;
-	pkt.buf_len = 16;
-	pkt.buf = payload;
-
-	printf("sp packet %d\n", pkt.type);
-
-	printf("begin create ep\n");
-	ioctl(fd, CMD_SM_CREATE, &pkt);
-	printf("finish create ep session index = %d\n", pkt.session_idx);
-
-
-	ioctl(fd, CMD_SM_SEND, &pkt);
-
-	memset(buf, 0, 64);
-	ioctl(fd, CMD_SM_RECV, &pkt);
-
-	l3h = (struct l3_proto_head *)pkt.buf;
-
-	printf("%x \n", l3h->type);
-	printf("%x \n", l3h->chunk_addr);
-	printf("%x \n", l3h->chunk_size);
-	printf("%x \n", l3h->status);
-	printf("%x \n", l3h->todo);
-
-	sleep(3);
-	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
-
-}
-
-static void recv_test(int fd)
-{
-	struct sm_packet pkt;
-	char buf[64] = "1234567890abcdef";
-	memset(&pkt, 0, sizeof(struct sm_packet));
-
-	pkt.local_ep = 9;
-	pkt.remote_ep = 5;
-	pkt.type = SP_PACKET;
-	pkt.dst_cpu = 1;
-	pkt.buf_len = 16;
-	pkt.buf = buf;
-
-	printf("begin create ep\n");
-	ioctl(fd, CMD_SM_CREATE, &pkt);
-	printf("finish create ep session index = %d\n", pkt.session_idx);
-
-
-	ioctl(fd, CMD_SM_SEND, &pkt);
-
-
-	ioctl(fd, CMD_SM_RECV, &pkt);
-
-
-	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
-}
-
 static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exit_addr)
 {
 	struct sm_packet pkt;
@@ -456,11 +368,9 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 
 	free(task1);
 }
-#define GETOPT_FLAGS "rs:l:e:kfhV"
+#define GETOPT_FLAGS "l:e:kfhV"
 #define a_argument required_argument
 static struct option const long_opts[] = {
-	{"receive",	no_argument, NULL, 'r'},
-	{"send",	no_argument, NULL, 's'},
 	{"load",	no_argument, NULL, 'l'},
 	{"exec",	no_argument, NULL, 'e'},
 	{"kill",	no_argument, NULL, 'k'},
@@ -494,17 +404,12 @@ int main(int argc, char *argv[])
 	void *buf;
 	int fd = open_icc();
 	unsigned int task_init_addr, task_exit_addr;
+	struct sm_packet pkt;
 
 	while ((i=getopt_long(argc, argv, GETOPT_FLAGS, long_opts, NULL)) != -1) {
 		switch (i) {
 		case 'f':
 			force = true;
-			break;
-		case 'r':
-			recv_test(fd);
-			break;
-		case 's':
-			send_test(fd, optarg);
 			break;
 		case 'l':
 			buf = map_elf(optarg, &stat);
@@ -522,6 +427,8 @@ int main(int argc, char *argv[])
 			unmap_elf(buf, &stat);
 			break;
 		case 'k':
+			memset(&pkt, 0, sizeof(struct sm_packet));
+			ioctl(fd, 8, &pkt);
 			break;
 		case 'h': show_usage(EXIT_SUCCESS);
 		case 'V': show_version();
