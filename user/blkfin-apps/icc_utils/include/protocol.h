@@ -15,7 +15,7 @@ int iccqueue_getpending(sm_uint32_t srccpu);
 int init_sm_session_table(void);
 
 
-int sm_send_packet(sm_uint32_t session_idx, sm_uint32_t dst_ep,
-		sm_uint32_t dst_cpu, void *buf, sm_uint32_t len);
+int sm_send_packet(sm_uint32_t session_idx, sm_uint16_t dst_ep,
+		sm_uint16_t dst_cpu, void *buf, sm_uint32_t len);
 
 #endif
