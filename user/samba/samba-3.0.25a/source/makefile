@@ -4,7 +4,13 @@ else
 SHARED := disable
 endif
 
-CONFOPTS = --prefix= --with-smbmount --with-privatedir=/etc/config \
+ifeq ($(wildcard $(LINUXDIR)/include/linux/smb.h),)
+SMBMOUNT := without
+else
+SMBMOUNT := with
+endif
+
+CONFOPTS = --prefix= --$(SMBMOUNT)-smbmount --with-privatedir=/etc/config \
 			--with-configdir=/etc/config --with-logfilebase=/var/log \
 			--without-ldap --disable-cups --disable-pie \
 			--$(SHARED)-shared --disable-debug --disable-developer \
