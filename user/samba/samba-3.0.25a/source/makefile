@@ -5,6 +5,12 @@ SHARED := disable
 endif
 
 ifeq ($(wildcard $(LINUXDIR)/include/linux/smb.h),)
+ifneq ($(CONFIG_USER_SAMBA_SMBMOUNT)$(CONFIG_USER_SAMBA_SMBUMOUNT),)
+$(warning smbmount / smbumount disabled due to newer kernel not supporting it)
+$(warning use the cifs filesystem instead)
+endif
+CONFIG_USER_SAMBA_SMBMOUNT =
+CONFIG_USER_SAMBA_SMBUMOUNT =
 SMBMOUNT := without
 else
 SMBMOUNT := with
