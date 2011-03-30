@@ -362,11 +362,14 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 
 	ioctl(fd, CMD_SM_CREATE, &pkt);
 
+	pkt.type = SM_TASK_RUN;
 	ioctl(fd, CMD_SM_SEND, &pkt);
 
+	sleep(5);
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 
 	free(task1);
+
 }
 #define GETOPT_FLAGS "l:e:kfhV"
 #define a_argument required_argument
