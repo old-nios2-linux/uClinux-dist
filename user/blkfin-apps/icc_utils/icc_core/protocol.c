@@ -29,6 +29,7 @@ sm_uint16_t iccq_should_stop;
 
 struct sm_task sm_task1;
 int sm_task1_status = 0;
+int sm_task1_control_ep = 0;
 
 struct sm_proto *sm_protos[SP_MAX];
 
@@ -111,6 +112,8 @@ static struct sm_session* sm_index_to_session(sm_uint32_t session_idx)
 	struct sm_session_table *table = coreb_info.icc_info.sessions_table;
 	if (session_idx < 0 && session_idx >= MAX_SESSIONS)
 		return NULL;
+	if (!test_bit(session_idx, table->bits))
+		return NULL;
 	session = &table->sessions[session_idx];
 	return session;
 }
@@ -189,7 +192,7 @@ int sm_create_session(sm_uint32_t src_ep, sm_uint32_t type)
 		table->sessions[index].flags = 0;
 		table->sessions[index].type = type;
 		table->sessions[index].proto_ops = sm_protos[type];
-		INIT_LIST_HEAD(&table->sessions[index].bufs);
+		INIT_LIST_HEAD(&table->sessions[index].tx_messages);
 		INIT_LIST_HEAD(&table->sessions[index].rx_messages);
 		coreb_msg("create ep index %d srcep %d\n", index, src_ep);
 		sm_put_session_table();
@@ -293,8 +296,10 @@ void sm_handle_control_message(sm_uint32_t cpu)
 			memcpy(&sm_task1, msg->payload,
 				sizeof(struct sm_task));
 			coreb_msg("task init %x\n", sm_task1.task_init);
+			sm_task1_control_ep = msg->src_ep;
 			if (sm_task1.task_init)
 				sm_task1_status = 1;
+
 			coreb_msg("finish %s\n", __func__);
 			break;
 		case SM_TASK_KILL:
@@ -328,7 +333,44 @@ sm_send_control_msg(struct sm_session *session, sm_uint32_t remote_ep,
 	if (ret)
 		return -EAGAIN;
 	return ret;
+}
 
+int sm_send_task_run_ack(sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu)
+{
+	int ret;
+	struct sm_msg *m = &scratch_msg;
+	memset(m, 0, sizeof(struct sm_msg));
+
+	m->type = SM_TASK_RUN_ACK;
+	m->src_ep = 0;
+	m->dst_ep = remote_ep;
+	m->length = 0;
+	m->payload = 0;
+
+	ret = sm_send_message_internal(m, dst_cpu, blackfin_core_id());
+	if (ret)
+		return -EAGAIN;
+	return ret;
+}
+
+int sm_send_task_kill_ack(struct sm_session *session, sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu)
+{
+	int ret;
+	struct sm_msg *m = &scratch_msg;
+	memset(m, 0, sizeof(struct sm_msg));
+
+	m->type = SM_TASK_KILL_ACK;
+	m->src_ep = 0;
+	m->dst_ep = remote_ep;
+	m->length = 0;
+	m->payload = 0;
+
+	ret = sm_send_message_internal(m, dst_cpu, blackfin_core_id());
+	if (ret)
+		return -EAGAIN;
+	return ret;
 }
 
 int
@@ -395,7 +437,7 @@ void *sm_send_request(sm_uint32_t size, sm_uint32_t session_index)
 	return buf;
 }
 
-void sm_recv_release(void *addr, sm_uint32_t size, sm_uint32_t session_idx)
+int sm_recv_release(void *addr, sm_uint32_t size, sm_uint32_t session_idx)
 {
 	struct sm_message *message = NULL;
 	struct sm_msg *msg = NULL;
@@ -404,14 +446,21 @@ void sm_recv_release(void *addr, sm_uint32_t size, sm_uint32_t session_idx)
 		message = list_first_entry(&session->rx_messages,
 					struct sm_message, next);
 		msg = &message->msg;
+
 	}
+
+	if (msg && msg->payload != addr)
+		return -EINVAL;
+
 	if (SM_MSG_PROTOCOL(msg->type) == SP_PACKET)
 		sm_send_packet_ack(session, msg->src_ep, message->src, msg->payload, msg->length);
 	else
 		sm_send_session_packet_ack(session, msg->src_ep, message->src, msg->payload, msg->length);
 
 	list_del(&message->next);
+	coreb_msg("free message %x\n", (unsigned long)message);
 	free_message(message);
+	return 0;
 }
 
 int
@@ -625,19 +674,22 @@ void icc_run_task(void)
 	char *task_argv[SM_MAX_TASKARGS];
 	struct sm_task *task;
 	int i;
+	int cpu = blackfin_core_id();
 	task = &sm_task1;
 	for (i = 0; i < SM_MAX_TASKARGS; i++) {
 		task_argv[i] = task->task_argv[i];
 	}
 
 	if (sm_task1_status == 1) {
+		coreb_msg("%s\n", __func__);
 		sm_task1_status = 2;
+		sm_send_task_run_ack(sm_task1_control_ep, cpu ^ 1);
 		sm_task1.task_init(sm_task1.task_argc, task_argv);
 	}
 	coreb_idle();
 }
 
-int icc_wait()
+int icc_wait(int session_mask)
 {
 	int cpu = blackfin_core_id();
 	int pending = iccqueue_getpending(cpu);
@@ -647,7 +699,7 @@ int icc_wait()
 		return 0;
 	}
 	{
-		struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[1];
+		struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[cpu];
 		sm_atomic_t sent = sm_atomic_read(&inqueue->sent);
 		sm_atomic_t received = sm_atomic_read(&inqueue->received);
 		sm_atomic_t pending;
