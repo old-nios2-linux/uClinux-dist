@@ -346,7 +346,9 @@ top_srcdir = @top_srcdir@
 xtlibdir = @xtlibdir@
 ACLOCAL_AMFLAGS = -I m4
 AUTOMAKE_OPTIONS = foreign subdir-objects
-AM_CFLAGS = ${regular_CFLAGS} -I${top_builddir}/include -I${top_srcdir}/include ${kinclude_CFLAGS}
+AM_CPPFLAGS = ${regular_CFLAGS} -I${top_builddir}/include -I${top_srcdir}/include ${kinclude_CFLAGS}
+@ENABLE_SHARED_FALSE@AM_CPPFLAGS += -DNO_SHARED_LIBS=1
+
 SUBDIRS = extensions $(am__append_1) $(am__append_2)
 
 # libiptc
@@ -361,8 +363,6 @@ libiptc_libip6tc_la_SOURCES = libiptc/libip6tc.c
 libiptc_libip6tc_la_LDFLAGS = -version-info 0:0:0
 libxtables_la_SOURCES = xtables.c
 libxtables_la_LDFLAGS = -version-info ${libxtables_vcurrent}:0:${libxtables_vage}
-@ENABLE_SHARED_FALSE@libxtables_la_CFLAGS = ${AM_CFLAGS} -DNO_SHARED_LIBS=1
-@ENABLE_SHARED_TRUE@libxtables_la_CFLAGS = ${AM_CFLAGS}
 @ENABLE_SHARED_FALSE@libxtables_la_LIBADD = 
 @ENABLE_SHARED_TRUE@libxtables_la_LIBADD = -ldl
 iptables_multi_SOURCES = iptables-multi.c iptables-save.c \

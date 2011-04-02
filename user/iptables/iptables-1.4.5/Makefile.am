@@ -3,7 +3,10 @@
 ACLOCAL_AMFLAGS  = -I m4
 AUTOMAKE_OPTIONS = foreign subdir-objects
 
-AM_CFLAGS        = ${regular_CFLAGS} -I${top_builddir}/include -I${top_srcdir}/include ${kinclude_CFLAGS}
+AM_CPPFLAGS      = ${regular_CFLAGS} -I${top_builddir}/include -I${top_srcdir}/include ${kinclude_CFLAGS}
+if !ENABLE_SHARED
+AM_CPPFLAGS     += -DNO_SHARED_LIBS=1
+endif
 SUBDIRS          = extensions
 if ENABLE_DEVEL
 SUBDIRS         += include
@@ -27,10 +30,8 @@ lib_LTLIBRARIES      += libxtables.la
 libxtables_la_SOURCES = xtables.c
 libxtables_la_LDFLAGS = -version-info ${libxtables_vcurrent}:0:${libxtables_vage}
 if ENABLE_SHARED
-libxtables_la_CFLAGS  = ${AM_CFLAGS}
 libxtables_la_LIBADD  = -ldl
 else
-libxtables_la_CFLAGS  = ${AM_CFLAGS} -DNO_SHARED_LIBS=1
 libxtables_la_LIBADD  =
 endif
 
