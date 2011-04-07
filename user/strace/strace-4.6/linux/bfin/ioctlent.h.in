@@ -51,6 +51,7 @@
 	{"asm-generic/ioctls.h",	"TIOCGPTN",	0x5430},
 	{"asm-generic/ioctls.h",	"TIOCSPTLCK",	0x5431},
 	{"asm-generic/ioctls.h",	"TCGETX",	0x5432},
+	{"asm-generic/ioctls.h",	"TIOCGDEV",	0x5432},
 	{"asm-generic/ioctls.h",	"TCSETX",	0x5433},
 	{"asm-generic/ioctls.h",	"TCSETXF",	0x5434},
 	{"asm-generic/ioctls.h",	"TCSETXW",	0x5435},
