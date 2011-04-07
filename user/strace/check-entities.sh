@@ -150,7 +150,7 @@ ${CC} -Wall ioctlsort.i -o ioctlsort
 grep -v '"asm' ioctlent.h > ioctlent.linux.h.in
 grep '"asm' ioctlent.h > ioctlent.arch.h.in
 ! diff -u ioctlent.linux.h.in linux/ioctlent.h.in | sed 1,2d | grep -qs '^\-'
-eend $? ioctlent.h ioctlent.linux.h.in ioctlsort ioctlsort.i ioctls.h ioctldefs.h
+eend $? ioctlent.linux.h.in ioctlent.h ioctlsort ioctlsort.i ioctls.h ioctldefs.h
 
 ebegin "ioctl list (bfin)"
 ! diff -u ioctlent.arch.h.in linux/bfin/ioctlent.h.in | sed 1,2d | grep -qs '^\-'
