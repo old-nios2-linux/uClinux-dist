@@ -245,7 +245,7 @@ unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
 
 		addr = chunk->start_addr + ((unsigned long)start_bit << order);
 
-		memset(addr, 0, (nbits << order));
+		memset((void *)addr, 0, (nbits << order));
 		bitmap_set(chunk->bits, start_bit, nbits);
 		return addr;
 	}
@@ -262,7 +262,7 @@ unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
  */
 void gen_pool_free(struct gen_pool *pool, unsigned long addr, size_t size)
 {
-	int _chunk;
+	unsigned long _chunk;
 	struct gen_pool_chunk *chunk;
 	unsigned long flags;
 	int order = pool->min_alloc_order;
@@ -284,7 +284,7 @@ void gen_pool_free(struct gen_pool *pool, unsigned long addr, size_t size)
 
 int gen_pool_check(struct gen_pool *pool, unsigned long addr, size_t size)
 {
-	int _chunk;
+	unsigned long _chunk;
 	struct gen_pool_chunk *chunk;
 	unsigned long flags;
 	int order = pool->min_alloc_order;

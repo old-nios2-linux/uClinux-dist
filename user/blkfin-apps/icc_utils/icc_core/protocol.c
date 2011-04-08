@@ -27,6 +27,9 @@ struct sm_msg scratch_msg;
 struct sm_message scratch_message;
 sm_uint16_t iccq_should_stop;
 
+#define SM_TASK_NONE 0
+#define SM_TASK_INIT 1
+#define SM_TASK_RUNNING 2
 struct sm_task sm_task1;
 int sm_task1_status = 0;
 int sm_task1_control_ep = 0;
@@ -66,6 +69,7 @@ int init_sm_session_table(void)
 		coreb_msg("@@@ alloc session table failed\n");
 		return -ENOMEM;
 	}
+	coreb_info.icc_info.sessions_table->nfree = MAX_ENDPOINTS; 
 }
 
 static int sm_message_enqueue(int dstcpu, int srccpu, struct sm_msg *msg)
@@ -190,6 +194,8 @@ int sm_create_session(sm_uint32_t src_ep, sm_uint32_t type)
 		table->sessions[index].remote_ep = 0;
 		table->sessions[index].pid = 0;
 		table->sessions[index].flags = 0;
+		table->sessions[index].n_uncompleted = 0;
+		table->sessions[index].n_avail = 0;
 		table->sessions[index].type = type;
 		table->sessions[index].proto_ops = sm_protos[type];
 		INIT_LIST_HEAD(&table->sessions[index].tx_messages);
@@ -203,7 +209,7 @@ int sm_create_session(sm_uint32_t src_ep, sm_uint32_t type)
 }
 
 int sm_register_session_handler(struct sm_session *session,
-			void (*handle)(struct sm_message *message))
+			void (*handle)(struct sm_message *message, struct sm_session *session))
 {
 	coreb_msg("%s\n", __func__);
 	if (handle)
@@ -217,18 +223,37 @@ sm_wait_for_connect_ack(struct sm_session *session)
 	return 0;
 }
 
-int sm_destroy_session(sm_uint32_t src_ep)
+int sm_destroy_session(sm_uint32_t session_idx)
 {
-	struct sm_session_table *table = sm_get_session_table();
-	sm_uint32_t index = sm_find_session(src_ep, 0, table);
-	coreb_msg("%s index %d\n", __func__, index);
-	int ret = 0;
-	if (index < 0)
-		ret = -EINVAL;
+	struct sm_message *message;
+	struct sm_msg *msg;
+	struct sm_session *session;
+	struct sm_session_table *table;
+	session = sm_index_to_session(session_idx);
+	if (!session)
+		return -EINVAL;
+	while (!list_empty(&session->rx_messages)) {
+		message = list_first_entry(&session->rx_messages,
+				struct sm_message, next);
+		msg = &message->msg;
 
-	sm_free_session(index, table);
+		if (session->flags == SM_CONNECT)
+			sm_send_session_packet_ack(session, msg->src_ep,
+					message->src, msg->payload, msg->length);
+		else
+			sm_send_packet_ack(session, msg->src_ep,
+					message->src, msg->payload, msg->length);
+		list_del(&message->next);
+		free_message(message);
+	}
+
+	if (session->flags == SM_CONNECT)
+		sm_send_close(session, msg->src_ep, message->src);
+
+	table = sm_get_session_table();
+	sm_free_session(session_idx, table);
 	sm_put_session_table();
-	return ret;
+	return 0;
 }
 
 static int sm_connect_session(sm_uint32_t dst_ep, sm_uint32_t dst_cpu,
@@ -266,6 +291,32 @@ static int sm_disconnect_session(sm_uint32_t dst_ep, sm_uint32_t src_ep)
 	return 0;
 }
 
+static int sm_open_session(sm_uint32_t index)
+{
+	struct sm_session *session;
+	session = sm_index_to_session(index);
+	if (!session)
+		return -EINVAL;
+	if (session->flags == SM_CONNECT) {
+		session->flags |= SM_OPEN;
+		return 0;
+	}
+	return -EINVAL;
+}
+
+static int sm_close_session(sm_uint32_t index)
+{
+	struct sm_session *session;
+	session = sm_index_to_session(index);
+	if (!session)
+		return -EINVAL;
+	if (session->flags & SM_OPEN) {
+		session->flags &= ~SM_OPEN;
+		return 0;
+	}
+	return -EINVAL;
+}
+
 #define SM_MAX_TASKARGS 3
 void sm_handle_control_message(sm_uint32_t cpu)
 {
@@ -280,7 +331,7 @@ void sm_handle_control_message(sm_uint32_t cpu)
 
 	if ((SM_MSG_PROTOCOL(msg->type) == SP_CORE_CONTROL) || (SM_MSG_PROTOCOL(msg->type) == SP_TASK_MANAGER)) {
 
-		coreb_msg("%s\n", __func__);
+		coreb_msg("%s %x %x\n", __func__, msg->type, SM_TASK_RUN);
 		switch (msg->type) {
 		case SM_CORE_START:
 			iccq_should_stop = 0;
@@ -298,7 +349,7 @@ void sm_handle_control_message(sm_uint32_t cpu)
 			coreb_msg("task init %x\n", sm_task1.task_init);
 			sm_task1_control_ep = msg->src_ep;
 			if (sm_task1.task_init)
-				sm_task1_status = 1;
+				sm_task1_status = SM_TASK_INIT;
 
 			coreb_msg("finish %s\n", __func__);
 			break;
@@ -306,7 +357,7 @@ void sm_handle_control_message(sm_uint32_t cpu)
 			if (sm_task1.task_init)
 				sm_task1.task_exit();
 			memset(&sm_task1, 0, sizeof(struct sm_task));
-			sm_task1_status = 0;
+			sm_task1_status = SM_TASK_NONE;
 			break;
 		}
 		sm_message_dequeue(cpu, msg);
@@ -410,6 +461,27 @@ int sm_send_connect_done(struct sm_session *session, sm_uint32_t remote_ep,
 			0, SM_SESSION_PACKET_CONNECT_DONE);
 }
 
+int sm_send_session_active(struct sm_session *session, sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu)
+{
+	return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+			0, SM_SESSION_PACKET_ACTIVE);
+}
+
+int sm_send_session_active_ack(struct sm_session *session, sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu)
+{
+	return sm_send_control_msg(session, remote_ep, dst_cpu, SM_OPEN,
+			0, SM_SESSION_PACKET_ACTIVE_ACK);
+}
+
+int sm_send_session_active_noack(struct sm_session *session, sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu)
+{
+	return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+			0, SM_SESSION_PACKET_ACTIVE_ACK);
+}
+
 int sm_send_close(struct sm_session *session, sm_uint32_t remote_ep,
 			sm_uint32_t dst_cpu)
 {
@@ -458,6 +530,7 @@ int sm_recv_release(void *addr, sm_uint32_t size, sm_uint32_t session_idx)
 		sm_send_session_packet_ack(session, msg->src_ep, message->src, msg->payload, msg->length);
 
 	list_del(&message->next);
+	session->n_avail--;
 	coreb_msg("free message %x\n", (unsigned long)message);
 	free_message(message);
 	return 0;
@@ -468,47 +541,45 @@ sm_send_packet(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 		sm_uint16_t dst_cpu, void *buf, sm_uint32_t len)
 {
 	struct sm_session *session;
-	struct sm_msg *m;
 	void *payload_buf = NULL;
 	int ret = -EAGAIN;
+	struct sm_message *message = get_message();
 
 	session = sm_index_to_session(session_idx);
-	m = &scratch_msg;
-	memset(m, 0, sizeof(struct sm_msg));
 
-	m->src_ep = session->local_ep;
-	m->dst_ep = dst_ep;
-	m->length = len;
-	m->type = SM_MSG_TYPE(session->type, 0);
+	message->msg.src_ep = session->local_ep;
+	message->msg.dst_ep = dst_ep;
+	message->msg.length = len;
+	message->msg.type = SM_MSG_TYPE(session->type, 0);
 
-	if (m->length) {
+	if (message->msg.length) {
 		if (!check_buffer_inpool(buf, len)) {
-			payload_buf = get_free_buffer(m->length);
+			payload_buf = get_free_buffer(message->msg.length);
 			if (!payload_buf) {
 				ret = -ENOMEM;
 				goto out;
 			}
-			m->payload = payload_buf;
-			memcpy(m->payload, buf, m->length);
+			message->msg.payload = payload_buf;
+			memcpy(message->msg.payload, buf, message->msg.length);
 		} else {
-			m->payload = buf;
-			coreb_msg("%s() %s \n", __func__, m->payload);
+			message->msg.payload = buf;
+			coreb_msg("%s() %s \n", __func__, message->msg.payload);
 		}
 	} else {
 		ret = -EINVAL;
 		goto out;
 	}
-	ret = session->proto_ops->sendmsg(m, session);
+	ret = session->proto_ops->sendmsg(message, session);
 	if (ret)
 		goto fail;
 
-	ret = sm_send_message_internal(m, dst_cpu, blackfin_core_id());
+	ret = sm_send_message_internal(&message->msg, dst_cpu, blackfin_core_id());
 	if (!ret)
 		goto out;
 
 fail:
 	if (payload_buf)
-		free_buffer(payload_buf, m->length);
+		free_buffer(payload_buf, message->msg.length);
 out:
 	return ret;
 }
@@ -564,8 +635,10 @@ static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 	memcpy(&message->msg, msg, sizeof(struct sm_msg));
 	message->dst = cpu;
 	message->src = cpu ^ 1;
+	if (session->handle)
+		session->handle(message, session);
 	list_add(&message->next, &session->rx_messages);
-
+	session->n_avail++;
 	return ret;
 }
 
@@ -575,8 +648,10 @@ static int sm_default_sendmsg(struct sm_message *message, struct sm_session *ses
 	coreb_msg("%s msg type %x\n", __func__, msg->type);
 	switch (SM_MSG_PROTOCOL(msg->type)) {
 	case SP_PACKET:
-		break;
 	case SP_SESSION_PACKET:
+		SM_MSG_TYPE(session->type, 0);
+		list_add(&message->next, &session->tx_messages);
+		session->n_uncompleted++;
 		break;
 	case SM_PACKET_ERROR:
 		coreb_msg("SM ERROR %08x\n", msg->payload);
@@ -590,16 +665,30 @@ static int sm_default_sendmsg(struct sm_message *message, struct sm_session *ses
 static int
 sm_default_recvmsg(struct sm_msg *msg, struct sm_session *session)
 {
-	int slot;
 	int ret = 0;
 	int cpu = blackfin_core_id();
+	struct sm_message *uncompleted;
 
 	coreb_msg("type %x, dstep %d, srcep %d \n", msg->type, msg->dst_ep, msg->src_ep);
 	switch (msg->type) {
 	case SM_PACKET_CONSUMED:
 	case SM_SESSION_PACKET_COMSUMED:
+		list_for_each_entry(uncompleted, &session->tx_messages, next) {
+			if ((uncompleted->msg.payload == msg->payload) &&
+					(uncompleted->msg.dst_ep == msg->src_ep)) {
+				coreb_msg("ack matched free buf %x\n", msg->payload);
+				goto matched;
+			}
+			coreb_msg("unmatched ack %08x %x uncomplete tx %08x\n", msg->payload, msg->length, uncompleted->msg.payload);
+		}
+		coreb_msg("unmatched ack\n");
+		break;
+matched:
+		list_del(&uncompleted->next);
+		session->n_uncompleted--;
 		coreb_msg("free buffer %x\n", msg->payload);
-		free_buffer(msg->payload, 0x1000);
+		free_buffer(msg->payload, uncompleted->msg.length);
+		free_message(uncompleted);
 		break;
 	case SM_SESSION_PACKET_CONNECT_ACK:
 		session->remote_ep = msg->src_ep;
@@ -608,11 +697,25 @@ sm_default_recvmsg(struct sm_msg *msg, struct sm_session *session)
 	case SM_SESSION_PACKET_CONNECT:
 		session->remote_ep = msg->src_ep;
 		session->flags = SM_CONNECTING;
+		session->type = SP_SESSION_PACKET;
 		sm_send_connect_ack(session, msg->src_ep, cpu ^ 1);
 		break;
 	case SM_SESSION_PACKET_CONNECT_DONE:
 		session->flags = SM_CONNECT;
 		coreb_msg("connected %x %d\n", session->flags, session->remote_ep);
+		break;
+	case SM_SESSION_PACKET_ACTIVE:
+		if (session->flags & SM_OPEN)
+			sm_send_session_active_ack(session, msg->src_ep, cpu ^ 1);
+		else
+			sm_send_session_active_noack(session, msg->src_ep, cpu ^ 1);
+		break;
+	case SM_SESSION_PACKET_ACTIVE_ACK:
+		if (session->flags & SM_OPEN) {
+			if (msg->payload == SM_OPEN) {
+				session->flags |= SM_ACTIVE;
+			}
+		}
 		break;
 	case SM_SESSION_PACKET_CLOSE:
 		session->remote_ep = 0;
@@ -680,36 +783,45 @@ void icc_run_task(void)
 		task_argv[i] = task->task_argv[i];
 	}
 
-	if (sm_task1_status == 1) {
-		coreb_msg("%s\n", __func__);
-		sm_task1_status = 2;
+	if (sm_task1_status == SM_TASK_INIT) {
+		sm_task1_status = SM_TASK_RUNNING;
 		sm_send_task_run_ack(sm_task1_control_ep, cpu ^ 1);
 		sm_task1.task_init(sm_task1.task_argc, task_argv);
 	}
 	coreb_idle();
 }
 
+int icc_get_session_status(void *user_param, uint32_t session_idx)
+{
+	int ret = 0;
+	struct sm_session_status *param = (struct sm_session_status *)user_param;
+	struct sm_session *session = sm_index_to_session(session_idx);
+	if (!session)
+		return -EINVAL;
+
+	param->avail = session->n_avail;
+	param->uncomplete = session->n_uncompleted;
+	param->status = session->flags;
+
+	return ret;
+}
+
+uint32_t msg_handle(void);
 int icc_wait(int session_mask)
 {
 	int cpu = blackfin_core_id();
 	int pending = iccqueue_getpending(cpu);
+	uint32_t avail = 0;
 	if (!pending) {
 		coreb_idle();
 		coreb_msg("@@@ wake up\n");
 		return 0;
 	}
-	{
-		struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[cpu];
-		sm_atomic_t sent = sm_atomic_read(&inqueue->sent);
-		sm_atomic_t received = sm_atomic_read(&inqueue->received);
-		sm_atomic_t pending;
-		coreb_msg("@@@sm msgq sent=%d received=%d\n", sent, received);
-	}
-	msg_handle();
-	return pending;
+	avail = msg_handle();
+	return avail;
 }
 
-void msg_handle(void)
+uint32_t msg_handle(void)
 {
 	int cpu = blackfin_core_id(); /* cpu_id(); */
 	struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[cpu];
@@ -718,7 +830,9 @@ void msg_handle(void)
 	struct sm_msg *msg;
 	struct sm_session *session;
 	int pending;
+	struct sm_session_status sstatus;
 	sm_uint32_t index;
+	uint32_t avail = 0;
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
 	index = sm_find_session(msg->dst_ep, 0, coreb_info.icc_info.sessions_table);
@@ -727,17 +841,21 @@ void msg_handle(void)
 	pending = iccqueue_getpending(cpu);
 	if (!pending) {
 		coreb_msg("BUG\n");
-		return;
+		return 0;
 	}
 	coreb_msg("msg type %x index %d session type %x\n", msg->type, index, session->type);
 	if (session && (SM_MSG_PROTOCOL(msg->type) == session->type)) {
-		if (session->proto_ops->recvmsg)
+		if (session->proto_ops->recvmsg) {
 			session->proto_ops->recvmsg(msg, session);
-		else
+			icc_get_session_status(&sstatus, index);
+			avail = sstatus.avail;
+		} else
 			coreb_msg("unsupported protocol\n");
+
 	} else {
+		coreb_msg("discard msg type\n", msg->type);
 		sm_message_dequeue(cpu, msg);
-		/* to do send error ack to cpu 0 */
 	}
+	return avail;
 }
 

@@ -137,6 +137,16 @@ char *strcpy(char *dest, const char *src)
 	return tmp;
 }
 
+size_t strlen(const char *s)
+{
+	const char *sc;
+
+	for (sc = s; *sc != '\0'; ++sc)
+		/* nothing */;
+	return sc - s;
+}
+
+
 void platform_send_ipi_cpu(unsigned int cpu, int irq)
 {
 	int offset = (irq == IRQ_SUPPLE_0) ? 6 : 8;
