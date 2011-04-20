@@ -283,7 +283,7 @@ doinchild(fn, fp, rbuf, rbln)
 	    /*
 	     * Fork a child to execute functions.
 	     */
-		if ((Cpid = fork()) == 0) {
+		if ((Cpid = vfork()) == 0) {
 
 		/*
 		 * Begin the child process.
