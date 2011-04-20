@@ -440,9 +440,11 @@
  * mblen() and mbtowc() functions.
  */
 
+#ifdef __UCLIBC_HAS_WCHAR__
 #define	HASSETLOCALE	1
 #define	HASWIDECHAR	1
 #define	WIDECHARINCL	<wctype.h>
+#endif
 
 
 /*
