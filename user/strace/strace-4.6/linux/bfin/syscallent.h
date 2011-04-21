@@ -405,5 +405,5 @@
 	{ 3,	0,	sys_cacheflush,		"cacheflush"	}, /* 374 */
 	{ 5,	TD|TF,	printargs,		"name_to_handle_at"	}, /* 375 */
 	{ 3,	TD,	printargs,		"open_by_handle_at"	}, /* 376 */
-	{ 2,	0,	printargs,		"clock_adjtime"	}. /* 377 */
+	{ 2,	0,	printargs,		"clock_adjtime"	}, /* 377 */
 	{ 1,	TD,	printargs,		"syncfs"	}, /* 378 */
