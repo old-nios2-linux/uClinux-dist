@@ -1,7 +1,7 @@
 VER = madplay-0.15.2b
 
 CONF_OPTS = \
-	--without-x
+	LDFLAGS="-L$(STAGEDIR)/usr/lib"
 
 include $(ROOTDIR)/tools/autotools.mk
 
