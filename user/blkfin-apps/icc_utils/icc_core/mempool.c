@@ -1,7 +1,7 @@
 #include <linux/bitmap.h>
 #include "mempool.h"
 
-
+#define BITOP_WORD(nr)          ((nr) / BITS_PER_LONG)
 /**
  * gen_pool_create - create a new special memory pool
  * @min_alloc_order: log base 2 of number of bytes each bitmap bit represents
@@ -15,7 +15,6 @@
 #define MAX_CHUNK 32
 struct gen_pool gmempool[MAX_POOL];
 struct gen_pool_chunk gchunk[MAX_POOL * MAX_CHUNK];
-
 
 void coreb_msg(char *fmt, ...);
 

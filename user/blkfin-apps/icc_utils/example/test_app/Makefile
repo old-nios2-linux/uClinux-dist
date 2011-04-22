@@ -1,4 +1,4 @@
-CC = bfin-uclinux-gcc
+CC ?= bfin-uclinux-gcc
 
 # we have to clobber a bunch of flags as they are normally geared towards
 # running under linux, not a bare metal environment like core b
@@ -10,10 +10,16 @@ ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
 KERNELDIR := ${PWD}/../../../../../linux-2.6.x
 
-all: packet_test session_packet_test
+all: scalar_test packet_test session_packet_test
 
 packet_test: packet.o
 	$(CC) $(CFLAGS) $< -o $@ > $@.map
+
+scalar_test: scalar.o
+	$(CC) $(CFLAGS) $< -o $@ > $@.map
+
+packet_wrap_test: wrap_test.o icc_wrap.o
+	$(CC) $(CFLAGS) $? -o $@ > $@.map
 
 session_packet_test: session_packet.o
 	$(CC) $(CFLAGS) $< -o $@ > $@.map
