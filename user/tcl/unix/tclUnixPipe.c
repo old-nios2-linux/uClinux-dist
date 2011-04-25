@@ -379,7 +379,7 @@ TclpCreateProcess(interp, argc, argv, inputFile, outputFile, errorFile,
     }
 
     joinThisError = (errorFile == outputFile);
-    pid = fork();
+    pid = vfork();
     if (pid == 0) {
 	fd = GetFd(errPipeOut);
 
