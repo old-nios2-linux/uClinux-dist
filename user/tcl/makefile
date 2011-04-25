@@ -7,6 +7,7 @@ build/build: makefile
 	rm -rf build
 	mkdir build
 	(cd build; sh ../unix/configure $(CONFIGURE_OPTS) $(CONFOPTS))
+	sed -i.tmp 's:-L/lib :-L$(ROOTDIR)/user/tcl/build :' build/tclConfig.sh
 	touch build/build
 
 clean:
