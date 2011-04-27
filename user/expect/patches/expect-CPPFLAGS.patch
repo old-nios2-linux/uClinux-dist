@@ -1,3 +1,5 @@
+upstream CPPFLAGS build system has been rewritten so that this "just works"
+
 --- Makefile.in
 +++ Makefile.in
 @@ -280,7 +280,7 @@

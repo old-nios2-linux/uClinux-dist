@@ -1,7 +1,7 @@
-Index: configure.in
-===================================================================
---- configure.in	(revision 10151)
-+++ configure.in	(working copy)
+https://sourceforge.net/tracker/?func=detail&aid=3293844&group_id=13179&atid=313179
+
+--- configure.in
++++ configure.in
 @@ -1054,7 +1054,7 @@ else
    AC_DEFINE(SIMPLE_EVENT)
  fi
@@ -11,10 +11,8 @@ Index: configure.in
  AC_HAVE_FUNCS(getpty)
  
  # following test sets SETPGRP_VOID if setpgrp takes 0 args, else takes 2
-Index: configure
-===================================================================
---- configure	(revision 10151)
-+++ configure	(working copy)
+--- configure
++++ configure
 @@ -5902,7 +5902,7 @@ EOF
  
  fi
@@ -24,10 +22,8 @@ Index: configure
  do
  echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
  echo "configure:5909: checking for $ac_func" >&5
-Index: expect_cf.h.in
-===================================================================
---- expect_cf.h.in	(revision 10151)
-+++ expect_cf.h.in	(working copy)
+--- expect_cf.h.in
++++ expect_cf.h.in
 @@ -101,6 +101,7 @@
  #undef HAVE_TERMIO
  #undef HAVE_TERMIOS
@@ -36,10 +32,8 @@ Index: expect_cf.h.in
  #undef HAVE__GETPTY
  #undef HAVE_GETPTY
  #undef HAVE_OPENPTY
-Index: exp_command.c
-===================================================================
---- exp_command.c	(revision 10151)
-+++ exp_command.c	(working copy)
+--- exp_command.c
++++ exp_command.c
 @@ -906,7 +906,12 @@ when trapping, see below in child half o
  	goto parent_error;
      }
