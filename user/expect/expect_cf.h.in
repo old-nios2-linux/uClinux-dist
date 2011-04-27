@@ -101,6 +101,7 @@
 #undef HAVE_TERMIO
 #undef HAVE_TERMIOS
 #undef HAVE_SGTTYB
+#undef HAVE_FORK
 #undef HAVE__GETPTY
 #undef HAVE_GETPTY
 #undef HAVE_OPENPTY

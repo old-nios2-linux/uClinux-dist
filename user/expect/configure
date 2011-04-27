@@ -5902,7 +5902,7 @@ EOF
 
 fi
 
-for ac_func in _getpty
+for ac_func in _getpty fork
 do
 echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
 echo "configure:5909: checking for $ac_func" >&5

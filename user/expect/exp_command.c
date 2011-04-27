@@ -906,7 +906,12 @@ when trapping, see below in child half of fork */
 	goto parent_error;
     }
 
-    if ((pid = fork()) == -1) {
+#ifdef HAVE_FORK
+    pid = fork();
+#else
+    pid = vfork();
+#endif
+    if (pid == -1) {
 	exp_error(interp,"fork: %s",Tcl_PosixError(interp));
 	goto parent_error;
     }
@@ -1067,13 +1072,21 @@ when trapping, see below in child half of fork */
 		} else {
 			expErrorLog("open(slave pty): %s\r\n",Tcl_ErrnoMsg(errno));
 		}
+#ifdef HAVE_FORK
 		exit(-1);
+#else
+		_exit(-1);
+#endif
 	}
 	/* sanity check */
 	if (slave != 0) {
 		restore_error_fd
 		expErrorLog("exp_getptyslave: slave = %d but expected 0\n",slave);
+#ifdef HAVE_FORK
 		exit(-1);
+#else
+		_exit(-1);
+#endif
 	}
 
 /* The test for hpux may have to be more specific.  In particular, the */
@@ -1196,7 +1209,11 @@ when trapping, see below in child half of fork */
 	if (wc == -1) {
 		restore_error_fd
 		expErrorLog("child: sync byte write: %s\r\n",Tcl_ErrnoMsg(errno));
+#ifdef HAVE_FORK
 		exit(-1);
+#else
+		_exit(-1);
+#endif
 	}
 	close(sync_fds[1]);
 
@@ -1208,7 +1225,11 @@ when trapping, see below in child half of fork */
 	if (rc == -1) {
 		restore_error_fd
 		expErrorLog("child: sync byte read: %s\r\n",Tcl_ErrnoMsg(errno));
+#ifdef HAVE_FORK
 		exit(-1);
+#else
+		_exit(-1);
+#endif
 	}
 	close(sync2_fds[0]);
 
@@ -1224,7 +1245,11 @@ when trapping, see below in child half of fork */
 
 	/* if exec failed, communicate the reason back to the parent */
 	write(status_pipe[1], &errno, sizeof errno);
+#ifdef HAVE_FORK
 	exit(-1);
+#else
+	_exit(-1);
+#endif
 	/*NOTREACHED*/
 parent_error:
     Tcl_DStringFree(&dstring);
@@ -2688,6 +2713,7 @@ char **argv;
     return ((result == -1)?TCL_ERROR:TCL_OK);
 }
 
+#ifdef HAVE_FORK
 /*ARGSUSED*/
 static int
 Exp_ForkCmd(clientData, interp, argc, argv)
@@ -2721,6 +2747,7 @@ char **argv;
 	expDiagLog("fork: returns {%s}\r\n",interp->result);
 	return(TCL_OK);
 }
+#endif
 
 /*ARGSUSED*/
 static int
@@ -3092,7 +3119,9 @@ static struct exp_cmd_data cmd_data[]  = {
 {"disconnect",	exp_proc(Exp_DisconnectCmd),	0,	0},
 {"exit",	exp_proc(Exp_ExitCmd),	0,	EXP_REDEFINE},
 {"exp_continue",exp_proc(Exp_ExpContinueCmd),0,	0},
+#ifdef HAVE_FORK
 {"fork",	exp_proc(Exp_ForkCmd),	0,	0},
+#endif
 {"exp_pid",	exp_proc(Exp_ExpPidCmd),	0,	0},
 {"getpid",	exp_proc(Exp_GetpidDeprecatedCmd),0,	0},
 {"interpreter",	Exp_InterpreterObjCmd,	0,	0,	0},
