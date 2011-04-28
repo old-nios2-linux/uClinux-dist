@@ -7,6 +7,7 @@
 FILES = dlsof.h dproto.h dfile.c dmnt.c dnode.c dproc.c dsock.c dstore.c
 LINKFILES = $(addprefix lsof/,$(FILES))
 
+FLTFLAGS += -s 0x10000
 
 all: $(LINKFILES)
 	$(MAKE) -C lsof
