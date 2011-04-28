@@ -76,6 +76,7 @@ set bootargs_param6  "root=/dev/mtdblock0 rw ip=$targetip earlyprintk=serial,uar
 #set bootargs_param8  "ubi.mtd=1 root=ubi0:ubifs1 rw rootfstype=ubifs earlyprintk=serial,uart$def_uart_port,$baud_rate console=ttyBF$def_uart_port,$baud_rate" 
 set bootargs_param9  "root=/dev/mtdblock0 rw earlyprintk=serial,uart$def_uart_port,$baud_rate console=tty0 console=ttyBF$def_uart_port,$baud_rate" 
 set bootargs_param10 "root=/dev/mtdblock0 rw earlyprintk=serial,uart$def_uart_port,$baud_rate console=ttyBFJC0,$baud_rate"
+set bootargs_param11 "root=/dev/mtdblock0 rw ip=$targetip mem=60M max_mem=64M earlyprintk=serial,uart$def_uart_port,$baud_rate console=ttyBF$def_uart_port,$baud_rate"
 set bootargs 	     $bootargs_param0
 
 set linux_version "not found"

@@ -31,7 +31,15 @@ while 1 {
             send "N\r"
         }
 
-        -re "Staging drivers.*STAGING.*\\\[.*]" {
+        -re "Enable ICACHE.*BFIN_ICACHE.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Enable DCACHE.*BFIN_DCACHE.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "\[^ \]Staging drivers.*STAGING.*\\\[.*]" {
             send "Y\r"
         }
 
