@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 int num_iterations = 1000000;
 #define fail(fmt, args...) fprintf(stderr, "FAIL: " fmt "\n", ## args)
@@ -34,9 +35,15 @@ static void bg_launch_busy(void)
 	} else if (busy == -1)
 		failp("vfork() failed");
 }
+
 static void bg_kill_busy(void)
 {
+	int status;
+	int ret;
 	kill(busy, SIGTERM);
+	ret = waitpid(busy, &status, 0);
+	if (ret == -1)
+		perror("wait failed\n");
 }
 
 int test_xchg32(void)

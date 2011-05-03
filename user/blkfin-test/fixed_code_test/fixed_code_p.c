@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 const int num_iterations = 1000000, num_threads = 10;
 #define fail(fmt, args...) fprintf(stderr, "FAIL: " fmt "\n", ##args)
@@ -38,9 +39,16 @@ static void bg_launch_busy(void)
 	} else if (busy == -1)
 		errp("vfork() failed");
 }
+
 static void bg_kill_busy(void)
 {
+	int status;
+	int ret;
 	kill(busy, SIGTERM);
+	ret = waitpid(busy, &status, 0);
+	if (ret == -1)
+		perror("wait failed\n");
+
 }
 
 void ptest(void *func, void *arg)
