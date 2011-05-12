@@ -297,6 +297,10 @@ int main(int argc, char *argv[])
 	draw_filled_rectangle(0,0, screen_width-1, screen_height-1, 0xff0000);
 	draw_filled_rectangle(1,1, screen_width-2, screen_height-2, 0xffffff);
 	draw_lissajous();
+
+	if (munmap(screen_ptr, screen_height * screen_width * (bits_per_pixel/ 8)) < 0)
+		perror("munmap frame buffer failed\n");
+
 	close(screen_fd);
 	
 	return 0;
