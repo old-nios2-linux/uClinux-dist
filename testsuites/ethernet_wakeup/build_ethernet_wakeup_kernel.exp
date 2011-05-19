@@ -38,7 +38,7 @@ while 1 {
         }
 
         -re "MMC/SD/SDIO card support \\\(MMC\\\).*\\\[.*]" {
-            send "Y\r"
+            send "N\r"
         }
 
 #Power Management
