@@ -42,7 +42,7 @@ set rootfs_size 0xb80000
 set spi_rootfs_start_addr 0x80000
 set spi_rootfs_size 0x17ffff
 set pnor_rootfs_num 2
-set spi_rootfs_num 4
+set spi_rootfs_num 6
 set nand_rootfs_num 7
  
 } elseif { $board_type == "BF518F-EZBRD" } {
