@@ -1,0 +1,71 @@
+mcapi_trans_stub.lo: mcapi_trans_stub.c \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/stdint.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/string.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/newlib.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/config.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/ieeefp.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/reent.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/_types.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/lock.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/include/stddef.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/string.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/errno.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/errno.h \
+  include/mcapi.h include/mcapi_datatypes.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/types.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/_types.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/types.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/features.h \
+  include/transport_sm.h include/mcapi_datatypes.h \
+  /opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/include/stdarg.h \
+  ../../../../linux-2.6.x/drivers/staging/icc/include/icc.h
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/stdint.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/string.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/newlib.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/config.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/ieeefp.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/reent.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/_types.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/lock.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/include/stddef.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/string.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/errno.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/errno.h:
+
+include/mcapi.h:
+
+include/mcapi_datatypes.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/types.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/_types.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/types.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/features.h:
+
+include/transport_sm.h:
+
+include/mcapi_datatypes.h:
+
+/opt/uClinux/bfin-elf/lib/gcc/bfin-elf/4.3.5/include/stdarg.h:
+
+../../../../linux-2.6.x/drivers/staging/icc/include/icc.h:
