@@ -4,7 +4,7 @@
 #define LOCAL_SESSION 5
 
 sm_uint32_t __icc_task_data session_index;
-void  __icc_task icc_task_init(int argc, char *argv[])
+void  icc_task_init(int argc, char *argv[])
 {
 	struct sm_session *session;
 	void *buf;
@@ -48,7 +48,7 @@ void  __icc_task icc_task_init(int argc, char *argv[])
 	coreb_msg("%s() end\n", __func__);
 }
 
-void  __icc_task icc_task_exit(void)
+void  icc_task_exit(void)
 {
 	sm_destroy_session(session_index);
 }
