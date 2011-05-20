@@ -33,6 +33,7 @@ sm_uint16_t iccq_should_stop;
 struct sm_task sm_task1;
 int sm_task1_status = 0;
 int sm_task1_control_ep = 0;
+uint32_t sm_task1_msg_buffer = 0;
 
 struct sm_proto *sm_protos[SP_MAX];
 
@@ -70,6 +71,21 @@ int init_sm_session_table(void)
 		return -ENOMEM;
 	}
 	coreb_info.icc_info.sessions_table->nfree = MAX_ENDPOINTS; 
+}
+
+static int get_msg_src(struct sm_msg *msg)
+{
+	unsigned int n = 0;
+	unsigned int offset;
+	unsigned int align = 256;
+	offset = (unsigned int)msg - MSGQ_START_ADDR;
+	if (align < sizeof(struct sm_message_queue))
+		align = (sizeof(struct sm_message_queue) + align - 1) / align;
+	n = offset / align;
+	if ((n % 2) == 0)
+		return n + 1;
+	else
+		return 0;
 }
 
 static int sm_message_enqueue(int dstcpu, int srccpu, struct sm_msg *msg)
@@ -110,7 +126,7 @@ static int sm_put_session_table(void)
 	return 0;
 }
 
-static struct sm_session* sm_index_to_session(sm_uint32_t session_idx)
+struct sm_session* sm_index_to_session(sm_uint32_t session_idx)
 {
 	struct sm_session *session;
 	struct sm_session_table *table = coreb_info.icc_info.sessions_table;
@@ -122,11 +138,11 @@ static struct sm_session* sm_index_to_session(sm_uint32_t session_idx)
 	return session;
 }
 
-static sm_uint32_t sm_session_to_index(struct sm_session *session)
+sm_uint32_t sm_session_to_index(struct sm_session *session)
 {
 	struct sm_session_table *table = coreb_info.icc_info.sessions_table;
 	sm_uint32_t index;
-	if ((session > &table->sessions[0])
+	if ((session >= &table->sessions[0])
 		&& (session < &table->sessions[MAX_SESSIONS])) {
 		return ((session - &table->sessions[0])/sizeof(struct sm_session));
 	}
@@ -163,8 +179,7 @@ static int sm_free_session(sm_uint32_t slot, struct sm_session_table *table)
 	return 0;
 }
 
-static int
-sm_find_session(sm_uint32_t local_ep, sm_uint32_t remote_ep,
+int sm_find_session(sm_uint32_t local_ep, sm_uint32_t remote_ep,
 			struct sm_session_table *table)
 {
 	sm_uint32_t index;
@@ -188,7 +203,16 @@ int sm_create_session(sm_uint32_t src_ep, sm_uint32_t type)
 {
 	coreb_msg("create ep \n");
 	struct sm_session_table *table = sm_get_session_table();
-	sm_uint32_t index = sm_alloc_session(table);
+	sm_uint32_t index = sm_find_session(src_ep, 0, table);
+	if (index >= 0 && index < 32) {
+		coreb_msg("already bound index %d srcep %d\n", index, src_ep);
+		return -EEXIST;
+	}
+	if (type >= SP_MAX) {
+		coreb_msg("bad type %x\n", type);
+		return -EINVAL;
+	}
+	index = sm_alloc_session(table);
 	if (index >=0 && index <32) {
 		table->sessions[index].local_ep = src_ep;
 		table->sessions[index].remote_ep = 0;
@@ -208,12 +232,17 @@ int sm_create_session(sm_uint32_t src_ep, sm_uint32_t type)
 	return -EAGAIN;
 }
 
-int sm_register_session_handler(struct sm_session *session,
+int sm_register_session_handler(sm_uint32_t session_idx,
 			void (*handle)(struct sm_message *message, struct sm_session *session))
 {
-	coreb_msg("%s\n", __func__);
+	struct sm_session *session = sm_index_to_session(session_idx);
+	if (!session)
+		return -EINVAL;
+
 	if (handle)
-		session->handle= handle;
+		session->handle = handle;
+
+	coreb_msg("%s handle %x\n", __func__, session->handle);
 	return 0;
 }
 
@@ -256,7 +285,7 @@ int sm_destroy_session(sm_uint32_t session_idx)
 	return 0;
 }
 
-static int sm_connect_session(sm_uint32_t dst_ep, sm_uint32_t dst_cpu,
+int sm_connect_session(sm_uint32_t dst_ep, sm_uint32_t dst_cpu,
 			sm_uint32_t src_ep)
 {
 	struct sm_session_table *table;
@@ -277,7 +306,7 @@ static int sm_connect_session(sm_uint32_t dst_ep, sm_uint32_t dst_cpu,
 	return 0;
 }
 
-static int sm_disconnect_session(sm_uint32_t dst_ep, sm_uint32_t src_ep)
+int sm_disconnect_session(sm_uint32_t dst_ep, sm_uint32_t src_ep)
 {
 	struct sm_session_table *table;
 	table = sm_get_session_table();
@@ -291,7 +320,7 @@ static int sm_disconnect_session(sm_uint32_t dst_ep, sm_uint32_t src_ep)
 	return 0;
 }
 
-static int sm_open_session(sm_uint32_t index)
+int sm_open_session(sm_uint32_t index)
 {
 	struct sm_session *session;
 	session = sm_index_to_session(index);
@@ -304,7 +333,7 @@ static int sm_open_session(sm_uint32_t index)
 	return -EINVAL;
 }
 
-static int sm_close_session(sm_uint32_t index)
+int sm_close_session(sm_uint32_t index)
 {
 	struct sm_session *session;
 	session = sm_index_to_session(index);
@@ -348,8 +377,13 @@ void sm_handle_control_message(sm_uint32_t cpu)
 				sizeof(struct sm_task));
 			coreb_msg("task init %x\n", sm_task1.task_init);
 			sm_task1_control_ep = msg->src_ep;
+			sm_task1_msg_buffer = msg->payload;
 			if (sm_task1.task_init)
 				sm_task1_status = SM_TASK_INIT;
+
+			sm_send_task_run_ack(sm_task1_control_ep, cpu ^ 1);
+
+			delay(1);
 
 			coreb_msg("finish %s\n", __func__);
 			break;
@@ -375,7 +409,8 @@ sm_send_control_msg(struct sm_session *session, sm_uint32_t remote_ep,
 	memset(m, 0, sizeof(struct sm_msg));
 
 	m->type = type;
-	m->src_ep = session->local_ep;
+	if (session)
+		m->src_ep = session->local_ep;
 	m->dst_ep = remote_ep;
 	m->length = len;
 	m->payload = payload;
@@ -397,7 +432,8 @@ int sm_send_task_run_ack(sm_uint32_t remote_ep,
 	m->src_ep = 0;
 	m->dst_ep = remote_ep;
 	m->length = 0;
-	m->payload = 0;
+	if (sm_task1_msg_buffer)
+		m->payload = sm_task1_msg_buffer;
 
 	ret = sm_send_message_internal(m, dst_cpu, blackfin_core_id());
 	if (ret)
@@ -437,7 +473,29 @@ sm_send_session_packet_ack(struct sm_session *session, sm_uint32_t remote_ep,
 		sm_uint32_t dst_cpu, sm_uint32_t payload, sm_uint32_t len)
 {
 	return sm_send_control_msg(session, remote_ep, dst_cpu, payload,
-					len, SM_SESSION_PACKET_COMSUMED);
+					len, SM_SESSION_PACKET_CONSUMED);
+}
+
+int sm_send_scalar_cmd(struct sm_session *session, sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu, sm_uint32_t payload, sm_uint32_t len)
+{
+	return sm_send_control_msg(session, remote_ep, dst_cpu, payload,
+			len, SM_SCALAR_READY_64);
+}
+
+int sm_send_scalar_ack(struct sm_session *session, sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu, sm_uint32_t payload, sm_uint32_t len)
+{
+	return sm_send_control_msg(session, remote_ep, dst_cpu, payload,
+			len, SM_SCALAR_CONSUMED);
+}
+
+	int
+sm_send_session_scalar_ack(struct sm_session *session, sm_uint32_t remote_ep,
+		sm_uint32_t dst_cpu, sm_uint32_t payload, sm_uint32_t len)
+{
+	return sm_send_control_msg(session, remote_ep, dst_cpu, payload,
+			len, SM_SESSION_SCALAR_CONSUMED);
 }
 
 int sm_send_connect(struct sm_session *session, sm_uint32_t remote_ep,
@@ -537,6 +595,50 @@ int sm_recv_release(void *addr, sm_uint32_t size, sm_uint32_t session_idx)
 }
 
 int
+sm_send_scalar(sm_uint32_t session_idx, sm_uint16_t dst_ep,
+		sm_uint16_t dst_cpu, sm_uint32_t scalar0, sm_uint32_t scalar1, sm_uint32_t type)
+{
+	struct sm_session *session;
+	int ret = -EAGAIN;
+	struct sm_message *message = get_message();
+
+	session = sm_index_to_session(session_idx);
+
+	message->msg.src_ep = session->local_ep;
+	message->msg.dst_ep = dst_ep;
+	message->msg.payload = scalar0;
+	message->msg.length = scalar1;
+
+	switch (type) {
+	case 1:
+		message->msg.type = SM_SCALAR_READY_8;
+		break;
+	case 2:
+		message->msg.type = SM_SCALAR_READY_16;
+		break;
+	case 4:
+		message->msg.type = SM_SCALAR_READY_32;
+		break;
+	case 8:
+		message->msg.type = SM_SCALAR_READY_64;
+		break;
+	}
+
+	ret = session->proto_ops->sendmsg(message, session);
+	if (ret)
+		goto fail;
+
+	ret = sm_send_message_internal(&message->msg, dst_cpu, blackfin_core_id());
+	if (!ret)
+		goto out;
+
+fail:
+	free_message(message);
+out:
+	return ret;
+}
+
+int
 sm_send_packet(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 		sm_uint16_t dst_cpu, void *buf, sm_uint32_t len)
 {
@@ -578,14 +680,82 @@ sm_send_packet(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 		goto out;
 
 fail:
+	free_message(message);
 	if (payload_buf)
 		free_buffer(payload_buf, message->msg.length);
 out:
 	return ret;
 }
 
+int sm_recv_scalar(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *src_cpu, sm_uint32_t *scalar0,
+				sm_uint32_t *scalar1, sm_uint32_t *type)
+{
+	struct sm_message *message;
+	struct sm_msg *msg;
+	struct sm_session *session;
+	int cpu = blackfin_core_id();
+	int ret = 0;
+	uint32_t size = 0;
+
+	session = sm_index_to_session(session_idx);
+
+	coreb_msg(" %s session type %x localep%d\n",__func__, session->type, session->local_ep);
+	if (!list_empty(&session->rx_messages)) {
+		message = list_first_entry(&session->rx_messages,
+					struct sm_message, next);
+		msg = &message->msg;
+
+		coreb_msg(" msg type %x\n", msg->type);
+		if (src_ep)
+			*src_ep = message->msg.src_ep;
+		if (src_cpu)
+			*src_cpu = message->src;
+		if (scalar0)
+			*scalar0 = msg->payload;
+		if (scalar1)
+			*scalar1 = msg->length;
+
+		switch (msg->type) {
+			case SM_SCALAR_READY_8:
+				size = 1;
+				break;
+			case SM_SCALAR_READY_16:
+				size = 2;
+				break;
+			case SM_SCALAR_READY_32:
+				size = 4;
+				break;
+			case SM_SCALAR_READY_64:
+				size = 8;
+				break;
+		}
+
+		if (type)
+			*type = size;
+
+
+		if (SM_MSG_PROTOCOL(msg->type) == SP_SCALAR)
+			sm_send_scalar_ack(session, msg->src_ep, message->src,
+					msg->payload, msg->length);
+		else if (SM_MSG_PROTOCOL(msg->type) == SP_SESSION_SCALAR)
+			sm_send_session_scalar_ack(session, msg->src_ep, message->src,
+					msg->payload, msg->length);
+
+		list_del(&message->next);
+		session->n_avail--;
+		coreb_msg("%s() s0%x s1%x avail %d\n", __func__, *scalar0, *scalar1, session->n_avail);
+		ret = 1;
+
+
+	} else {
+		ret = -EAGAIN;
+	}
+	coreb_msg(" %s msg\n",__func__);
+	return ret;
+}
+
 int sm_recv_packet(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *src_cpu, void **buf,
-				sm_uint32_t len)
+				sm_uint32_t *len)
 {
 	struct sm_message *message;
 	struct sm_msg *msg;
@@ -604,6 +774,8 @@ int sm_recv_packet(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 			*src_ep = message->msg.src_ep;
 		if (src_cpu)
 			*src_cpu = message->src;
+		if (len)
+			*len = message->msg.length;
 		coreb_msg("%s() %s\n", __func__, msg->payload);
 		*buf = msg->payload;
 		ret = msg->length;
@@ -635,10 +807,15 @@ static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 	memcpy(&message->msg, msg, sizeof(struct sm_msg));
 	message->dst = cpu;
 	message->src = cpu ^ 1;
-	if (session->handle)
+	if (session->handle) {
+		coreb_msg("default handler\n");
 		session->handle(message, session);
-	list_add(&message->next, &session->rx_messages);
-	session->n_avail++;
+		free_message(message);
+	} else {
+		list_add(&message->next, &session->rx_messages);
+		session->n_avail++;
+		coreb_msg("avail %d \n", session->n_avail);
+	}
 	return ret;
 }
 
@@ -649,7 +826,8 @@ static int sm_default_sendmsg(struct sm_message *message, struct sm_session *ses
 	switch (SM_MSG_PROTOCOL(msg->type)) {
 	case SP_PACKET:
 	case SP_SESSION_PACKET:
-		SM_MSG_TYPE(session->type, 0);
+	case SP_SCALAR:
+	case SP_SESSION_SCALAR:
 		list_add(&message->next, &session->tx_messages);
 		session->n_uncompleted++;
 		break;
@@ -672,10 +850,9 @@ sm_default_recvmsg(struct sm_msg *msg, struct sm_session *session)
 	coreb_msg("type %x, dstep %d, srcep %d \n", msg->type, msg->dst_ep, msg->src_ep);
 	switch (msg->type) {
 	case SM_PACKET_CONSUMED:
-	case SM_SESSION_PACKET_COMSUMED:
+	case SM_SESSION_PACKET_CONSUMED:
 		list_for_each_entry(uncompleted, &session->tx_messages, next) {
-			if ((uncompleted->msg.payload == msg->payload) &&
-					(uncompleted->msg.dst_ep == msg->src_ep)) {
+			if (uncompleted->msg.payload == msg->payload) {
 				coreb_msg("ack matched free buf %x\n", msg->payload);
 				goto matched;
 			}
@@ -688,6 +865,23 @@ matched:
 		session->n_uncompleted--;
 		coreb_msg("free buffer %x\n", msg->payload);
 		free_buffer(msg->payload, uncompleted->msg.length);
+		free_message(uncompleted);
+		break;
+	case SM_SCALAR_CONSUMED:
+	case SM_SESSION_SCALAR_CONSUMED:
+		list_for_each_entry(uncompleted, &session->tx_messages, next) {
+			if (uncompleted->msg.payload == msg->payload) {
+				coreb_msg("ack matched free buf %x\n", msg->payload);
+				goto matched1;
+			}
+			coreb_msg("unmatched ack %08x %x uncomplete tx %08x\n", msg->payload, msg->length, uncompleted->msg.payload);
+		}
+		coreb_msg("unmatched ack\n");
+		break;
+matched1:
+		list_del(&uncompleted->next);
+		session->n_uncompleted--;
+		coreb_msg("free message %x\n", uncompleted);
 		free_message(uncompleted);
 		break;
 	case SM_SESSION_PACKET_CONNECT_ACK:
@@ -731,6 +925,16 @@ matched:
 	case SM_SESSION_PACKET_READY:
 		msg_recv_internal(msg, session);
 		break;
+	case SM_SCALAR_READY_8:
+	case SM_SCALAR_READY_16:
+	case SM_SCALAR_READY_32:
+	case SM_SCALAR_READY_64:
+	case SM_SESSION_SCALAR_READY_8:
+	case SM_SESSION_SCALAR_READY_16:
+	case SM_SESSION_SCALAR_READY_32:
+	case SM_SESSION_SCALAR_READY_64:
+		msg_recv_internal(msg, session);
+		break;
 	case SM_PACKET_ERROR:
 		coreb_msg("SM ERROR %08x\n", msg->payload);
 		break;
@@ -766,10 +970,26 @@ struct sm_proto session_packet_proto = {
 	.error = sm_default_error,
 };
 
+struct sm_proto scalar_proto = {
+	.sendmsg = sm_default_sendmsg,
+	.recvmsg = sm_default_recvmsg,
+	.shutdown = sm_default_shutdown,
+	.error = sm_default_error,
+};
+
+struct sm_proto session_scalar_proto = {
+	.sendmsg = sm_default_sendmsg,
+	.recvmsg = sm_default_recvmsg,
+	.shutdown = sm_default_shutdown,
+	.error = sm_default_error,
+};
+
 void register_sm_proto(void)
 {
 	sm_protos[SP_PACKET] = &packet_proto;
 	sm_protos[SP_SESSION_PACKET] = &session_packet_proto;
+	sm_protos[SP_SCALAR] = &scalar_proto;
+	sm_protos[SP_SESSION_SCALAR] = &session_scalar_proto;
 }
 
 void icc_run_task(void)
@@ -783,15 +1003,16 @@ void icc_run_task(void)
 		task_argv[i] = task->task_argv[i];
 	}
 
+	coreb_msg("before run task\n");
 	if (sm_task1_status == SM_TASK_INIT) {
 		sm_task1_status = SM_TASK_RUNNING;
-		sm_send_task_run_ack(sm_task1_control_ep, cpu ^ 1);
+		coreb_msg("before run task1\n");
 		sm_task1.task_init(sm_task1.task_argc, task_argv);
 	}
 	coreb_idle();
 }
 
-int icc_get_session_status(void *user_param, uint32_t session_idx)
+int sm_get_session_status(void *user_param, uint32_t session_idx)
 {
 	int ret = 0;
 	struct sm_session_status *param = (struct sm_session_status *)user_param;
@@ -804,6 +1025,51 @@ int icc_get_session_status(void *user_param, uint32_t session_idx)
 	param->status = session->flags;
 
 	return ret;
+}
+
+int icc_handle_scalar_cmd(struct sm_msg *msg)
+{
+	int ret;
+	uint32_t scalar0, scalar1;
+	uint16_t src_cpu;
+	struct sm_session *session;
+	int index;
+
+	if (msg->type != SM_SCALAR_READY_64)
+		return 0;
+
+	scalar0 = msg->payload;
+	scalar1 = msg->length;
+
+	src_cpu = get_msg_src(msg);
+
+	coreb_msg("scalar cmd %x %d\n", scalar0, src_cpu);
+
+	if (SM_SCALAR_CMD(scalar0) != SM_SCALAR_CMD_HEAD)
+		return 0;
+
+	sm_send_scalar_ack(NULL, msg->src_ep, src_cpu,
+			msg->payload, msg->length);
+
+	coreb_msg("scalar cmd %x %x\n", SM_SCALAR_CMD(scalar0), SM_SCALAR_CMD_HEAD);
+	switch (SM_SCALAR_CMDARG(scalar0)) {
+	case SM_SCALAR_CMD_GET_SESSION_ID:
+		index = sm_find_session(scalar1, 0, coreb_info.icc_info.sessions_table);
+		session = sm_index_to_session(index);
+		if (session) {
+			scalar0 = MK_SM_SCALAR_CMD_ACK(SM_SCALAR_CMD_GET_SESSION_ID);
+			scalar1 = index;
+			sm_send_scalar_cmd(NULL, msg->src_ep, src_cpu, scalar0,
+					scalar1);
+		}
+		break;
+	case SM_SCALAR_CMD_GET_SESSION_TYPE:
+		break;
+	default:
+		return 0;
+	}
+
+	return 1;
 }
 
 uint32_t msg_handle(void);
@@ -835,19 +1101,30 @@ uint32_t msg_handle(void)
 	uint32_t avail = 0;
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
+	if (icc_handle_scalar_cmd(msg)) {
+		sm_message_dequeue(cpu, msg);
+		return;
+	}
+
 	index = sm_find_session(msg->dst_ep, 0, coreb_info.icc_info.sessions_table);
 
 	session = sm_index_to_session(index);
+	if (!session) {
+		sm_message_dequeue(cpu, msg);
+		return;
+	}
+
 	pending = iccqueue_getpending(cpu);
 	if (!pending) {
 		coreb_msg("BUG\n");
 		return 0;
 	}
+
 	coreb_msg("msg type %x index %d session type %x\n", msg->type, index, session->type);
 	if (session && (SM_MSG_PROTOCOL(msg->type) == session->type)) {
 		if (session->proto_ops->recvmsg) {
 			session->proto_ops->recvmsg(msg, session);
-			icc_get_session_status(&sstatus, index);
+			sm_get_session_status(&sstatus, index);
 			avail = sstatus.avail;
 		} else
 			coreb_msg("unsupported protocol\n");
