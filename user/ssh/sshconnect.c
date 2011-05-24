@@ -1174,7 +1174,7 @@ ssh_local_cmd(const char *args)
 	if ((shell = getenv("SHELL")) == NULL)
 		shell = _PATH_BSHELL;
 
-	pid = fork();
+	pid = vfork();
 	if (pid == 0) {
 		debug3("Executing %s -c \"%s\"", shell, args);
 		execl(shell, shell, "-c", args, (char *)NULL);
