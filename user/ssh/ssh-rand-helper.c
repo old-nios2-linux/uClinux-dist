@@ -328,7 +328,7 @@ hash_command_output(entropy_cmd_t *src, unsigned char *hash)
 
 	(void)gettimeofday(&tv_start, NULL); /* record start time */
 
-	switch (pid = fork()) {
+	switch (pid = vfork()) {
 		case -1: /* Error */
 			close(p[0]);
 			close(p[1]);

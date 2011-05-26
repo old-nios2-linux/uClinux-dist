@@ -172,13 +172,13 @@ do_local_cmd(arglist *a)
 			fprintf(stderr, " %s", a->list[i]);
 		fprintf(stderr, "\n");
 	}
-	if ((pid = fork()) == -1)
+	if ((pid = vfork()) == -1)
 		fatal("do_local_cmd: fork: %s", strerror(errno));
 
 	if (pid == 0) {
 		execvp(a->list[0], a->list);
 		perror(a->list[0]);
-		exit(1);
+		_exit(1);
 	}
 
 	do_cmd_pid = pid;
