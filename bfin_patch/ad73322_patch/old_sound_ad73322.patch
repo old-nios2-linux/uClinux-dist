@@ -96,7 +96,7 @@ Index: sound/blackfin/ad73322.c
 ===================================================================
 --- sound/blackfin/ad73322.c	(revision 0)
 +++ sound/blackfin/ad73322.c	(revision 0)
-@@ -0,0 +1,1087 @@
+@@ -0,0 +1,1082 @@
 +/*
 + * File:         sound/blackfin/ad73322.c
 + * Based on:	 sound/blackfin/ad73311.c
@@ -952,11 +952,6 @@ Index: sound/blackfin/ad73322.c
 +			return -EBUSY;
 +		}
 +		gpio_direction_output(GPIO_RESET, 0);
-+#if CONFIG_SND_BF5XX_SPORT_NUM != 0
-+		tmp_reg = bfin_read_PORT_MUX();
-+		bfin_write_PORT_MUX(tmp_reg|0x0E00);
-+		bfin_write_PORTG_FER(0xFFFF);
-+#endif
 +	}
 +
 +	snd_card_create(-1, NULL, THIS_MODULE, sizeof(struct snd_ad73322),
