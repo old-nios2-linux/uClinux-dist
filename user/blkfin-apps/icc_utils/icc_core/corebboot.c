@@ -7,39 +7,10 @@
  * Licensed under the GPL-2.
  */
 
-#if 0
-#include <linux/module.h>
-#include <linux/delay.h>
-#include <linux/init.h>
-#include <linux/spinlock.h>
-#include <linux/sched.h>
-#include <linux/interrupt.h>
-#include <linux/cache.h>
-#include <linux/profile.h>
-#include <linux/errno.h>
-#include <linux/mm.h>
-#include <linux/cpu.h>
-#include <linux/smp.h>
-#include <linux/cpumask.h>
-#include <linux/seq_file.h>
-#include <linux/slab.h>
-#include <asm/atomic.h>
-#include <asm/cacheflush.h>
-#include <asm/mmu_context.h>
-#include <asm/pgtable.h>
-#include <asm/pgalloc.h>
-#include <asm/processor.h>
-#include <asm/ptrace.h>
-#include <asm/cpu.h>
-#include <asm/time.h>
-#include <linux/err.h>
-#endif
-
 #include <generated/autoconf.h>
 
 #include <mach/defBF561.h>
 
-//#include <asm/posix_types.h>
 #include <linux/types.h>
 #include <mach/irq.h>
 #include <mach/bf561.h>
@@ -92,7 +63,8 @@ sm_uint16_t intcnt;
 #define BFIN_IPI_CALL_FUNC    1
 #define BFIN_IPI_CPU_STOP     2
 
-#ifdef CONFIG_BFIN_EXTMEM_WRITETHROUGH
+#ifndef CONFIG_BFIN_EXTMEM_WRITETHROUGH
+#config error need CONFIG_BFIN_EXTMEM_WRITETHROUGH
 #endif
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 
@@ -163,6 +135,8 @@ void platform_clear_ipi(unsigned int cpu, int irq)
 	SSYNC();
 }
 
+#define DEBUG
+#ifdef DEBUG
 void coreb_msg(char *fmt, ...)
 {
 	va_list args;
@@ -196,6 +170,9 @@ void coreb_msg(char *fmt, ...)
 	platform_send_ipi_cpu(0, IRQ_SUPPLE_0);
 	delay(1);
 }
+#else
+# define coreb_msg(x) do {} while (0)
+#endif
 
 void init_exception_vectors(void)
 {
@@ -292,21 +269,10 @@ void bfin_setup_caches(unsigned int cpu)
 {
 	unsigned long addr;
 	int i;
-	unsigned int *p = (int *) 0xFEB1FFFC;
-
-//	coreb_msg("IPEND %X \n", readipend());
 
 	addr = 4 * 1024 * 1024;
 	i = 0;
 
-#if 0
-	i++;
-	bfin_write32(ICPLB_ADDR0 + i * 4, COREB_L1_CODE_START);
-	bfin_write32(ICPLB_DATA0 + i * 4, (L1_IMEMORY | PAGE_SIZE_4MB));
-	bfin_write32(DCPLB_ADDR0 + i * 4, COREB_L1_DATA_A_START);
-	bfin_write32(DCPLB_DATA0 + i * 4, (L1_DMEMORY | PAGE_SIZE_4MB));
-	i++;
-#endif
 
 	bfin_write32(ICPLB_ADDR0 + i * 4, L2_START);
 	bfin_write32(ICPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_1MB));

@@ -596,7 +596,7 @@ int sm_recv_release(void *addr, sm_uint32_t size, sm_uint32_t session_idx)
 
 int
 sm_send_scalar(sm_uint32_t session_idx, sm_uint16_t dst_ep,
-		sm_uint16_t dst_cpu, sm_uint32_t scalar0, sm_uint32_t scalar1, sm_uint32_t type)
+		sm_uint16_t dst_cpu, sm_uint32_t scalar0, sm_uint32_t scalar1, sm_uint32_t size)
 {
 	struct sm_session *session;
 	int ret = -EAGAIN;
@@ -609,7 +609,7 @@ sm_send_scalar(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 	message->msg.payload = scalar0;
 	message->msg.length = scalar1;
 
-	switch (type) {
+	switch (size) {
 	case 1:
 		message->msg.type = SM_SCALAR_READY_8;
 		break;
@@ -688,14 +688,14 @@ out:
 }
 
 int sm_recv_scalar(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *src_cpu, sm_uint32_t *scalar0,
-				sm_uint32_t *scalar1, sm_uint32_t *type)
+				sm_uint32_t *scalar1, sm_uint32_t *size)
 {
 	struct sm_message *message;
 	struct sm_msg *msg;
 	struct sm_session *session;
 	int cpu = blackfin_core_id();
 	int ret = 0;
-	uint32_t size = 0;
+	uint32_t len = 0;
 
 	session = sm_index_to_session(session_idx);
 
@@ -716,23 +716,22 @@ int sm_recv_scalar(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 			*scalar1 = msg->length;
 
 		switch (msg->type) {
-			case SM_SCALAR_READY_8:
-				size = 1;
-				break;
-			case SM_SCALAR_READY_16:
-				size = 2;
-				break;
-			case SM_SCALAR_READY_32:
-				size = 4;
-				break;
-			case SM_SCALAR_READY_64:
-				size = 8;
-				break;
+		case SM_SCALAR_READY_8:
+			len = 1;
+			break;
+		case SM_SCALAR_READY_16:
+			len = 2;
+			break;
+		case SM_SCALAR_READY_32:
+			len = 4;
+			break;
+		case SM_SCALAR_READY_64:
+			len = 8;
+			break;
 		}
 
-		if (type)
-			*type = size;
-
+		if (size)
+			*size = len;
 
 		if (SM_MSG_PROTOCOL(msg->type) == SP_SCALAR)
 			sm_send_scalar_ack(session, msg->src_ep, message->src,
