@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
 		count = strtol(argv[3], NULL, 0);
 		mtdLockInfo.length = mtdInfo.erasesize * count;
 	} else {
-		mtdLockInfo.length = mtdInfo.size - mtdInfo.erasesize;
+		mtdLockInfo.length = mtdInfo.size;
 	}
 
 	if(ioctl(fd, MEMUNLOCK, &mtdLockInfo))
