@@ -17,7 +17,6 @@ set timeout 300
 spawn make config
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -26,43 +25,47 @@ while 1 {
             send "y\r"
         }
 
-        -re "Networking support \\\(NET\\\).*\\\[././.]" {
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
+        -re "Networking support \\\(NET\\\).*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "Bluetooth subsystem support \\\(BT\\\).*\\\[./././.]" {
+        -re "Bluetooth subsystem support.*BT.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "L2CAP protocol support \\\(BT_L2CAP\\\).*\\\[./././.]" {
+        -re "L2CAP protocol support.*BT_L2CAP.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "SCO links support \\\(BT_SCO\\\).*\\\[./././.]" {
+        -re "SCO links support.*BT_SCO.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "RFCOMM protocol support \\\(BT_RFCOMM\\\).*\\\[./././.]" {
+        -re "RFCOMM protocol support \\\(BT_RFCOMM\\\).*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "RFCOMM TTY support \\\(BT_RFCOMM_TTY\\\).*\\\[././.]" {
+        -re "RFCOMM TTY support \\\(BT_RFCOMM_TTY\\\).*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "BNEP protocol support \\\(BT_BNEP\\\).*\\\[./././.]" {
+        -re "BNEP protocol support \\\(BT_BNEP\\\).*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "Multicast filter support \\\(BT_BNEP_MC_FILTER\\\).*\\\[././.]" {
+        -re "Multicast filter support \\\(BT_BNEP_MC_FILTER\\\).*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "Protocol filter support \\\(BT_BNEP_PROTO_FILTER\\\).*\\\[././.]" {
+        -re "Protocol filter support \\\(BT_BNEP_PROTO_FILTER\\\).*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "HIDP protocol support \\\(BT_HIDP\\\).*\\\[./././.]" {
+        -re "HIDP protocol support.*BT_HIDP.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -98,10 +101,6 @@ while 1 {
             send "Y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
             sleep .01
             send "\r"
@@ -124,15 +123,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source copy_image.exp
 
 send_user "Ending $argv0\n"
