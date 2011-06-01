@@ -31,12 +31,16 @@ while 1 {
             send "N\r"
         }
 
-        -re "Enable ICACHE.*BFIN_ICACHE.*\\\[.*]" {
+        -re "Enable ICACHE for L2 SRAM.*BFIN_L2_ICACHEABLE.*\\\[.*]" {
             send "N\r"
         }
 
-        -re "Enable DCACHE.*BFIN_DCACHE.*\\\[.*]" {
+        -re "Enable DCACHE for L2 SRAM.*BFIN_L2_DCACHEABLE.*\\\[.*]" {
             send "N\r"
+        }
+
+        -re "\[Pp]olicy.*Write back.*BFIN_EXTMEM_WRITEBACK.*Write through.*BFIN_EXTMEM_WRITETHROUGH.*choice.*\\\[.*]" {
+            send "2\r"
         }
 
         -re "\[^ \]Staging drivers.*STAGING.*\\\[.*]" {
