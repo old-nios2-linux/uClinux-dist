@@ -1,6 +1,9 @@
 ICC_TOP_DIR := $(shell pwd)
-all:   icc  icc_loader  icc_example
+all:    libmcapi icc  icc_loader  icc_example
 icc_example: icc
+
+libmcapi:
+	$(MAKE) -C libmcapi_coreb
 
 icc: icc_core
 	$(MAKE) -C  icc_core
@@ -8,7 +11,7 @@ icc: icc_core
 icc_loader: 
 	$(MAKE) -C  $@ 
 
-icc_example:
+icc_example: libmcapi
 	$(MAKE) -C example/task
 	$(MAKE) -C example/test_app
 
@@ -23,5 +26,6 @@ clean:
 	$(MAKE) -C icc_loader clean
 	$(MAKE) -C example/task clean
 	$(MAKE) -C example/test_app clean
+	$(MAKE) -C libmcapi_coreb clean
 
 .PHONY: all clean romfs icc_loader
