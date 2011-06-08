@@ -16,6 +16,10 @@ cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
 
+cd $uclinux_path/testsuites
+step "Release L1 space as much as possible"
+source make_release_L1.exp
+
 cd $uclinux_path
 set timeout 300
 spawn make config
@@ -28,6 +32,10 @@ while 1 {
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "Serial ATA \\\(prod\\\) and Parallel ATA \\\(experimental\\\) drivers.*ATA.*\\\[.*]" {
@@ -63,26 +71,6 @@ while 1 {
         }
 
         -re "Codepage 437 \\\(United States, Canada\\\).*NLS_CODEPAGE_437.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Locate interrupt entry code in L1 Memory.*I_ENTRY_L1.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Locate entire ASM lowlevel excepetion.*EXCPT_IRQ_SYSC_L1.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Locate frequently called do_irq dispatcher function in L1 Memory.*DO_IRQ_L1.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Locate frequently called timer_interrupt.*function in L1 Memory.*CORE_TIMER_IRQ_L1.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Locate access_ok function in L1 Memory.*ACCESS_OK_L1.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -123,10 +111,6 @@ while 1 {
             send "N\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
             sleep .01
             send "\r"
@@ -150,11 +134,11 @@ while 1 {
 
 cd $uclinux_path/testsuites
 step "Make"
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
 step "Copy linux"
-source  copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
