@@ -300,8 +300,8 @@ int gen_pool_check(struct gen_pool *pool, unsigned long addr, size_t size)
 				if (!test_bit(bit++, chunk->bits))
 					return 0;
 			}
-			break;
+			return 1;
 		}
 	}
-	return 1;
+	return 0;
 }

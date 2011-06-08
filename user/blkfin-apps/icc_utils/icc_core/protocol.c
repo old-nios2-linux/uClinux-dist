@@ -665,7 +665,7 @@ sm_send_packet(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 			memcpy(message->msg.payload, buf, message->msg.length);
 		} else {
 			message->msg.payload = buf;
-			coreb_msg("%s() %s \n", __func__, message->msg.payload);
+			coreb_msg("%s() in pool %x %s \n", __func__, (unsigned int)buf, message->msg.payload);
 		}
 	} else {
 		ret = -EINVAL;
@@ -732,13 +732,6 @@ int sm_recv_scalar(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 
 		if (size)
 			*size = len;
-
-		if (SM_MSG_PROTOCOL(msg->type) == SP_SCALAR)
-			sm_send_scalar_ack(session, msg->src_ep, message->src,
-					msg->payload, msg->length);
-		else if (SM_MSG_PROTOCOL(msg->type) == SP_SESSION_SCALAR)
-			sm_send_session_scalar_ack(session, msg->src_ep, message->src,
-					msg->payload, msg->length);
 
 		list_del(&message->next);
 		session->n_avail--;
@@ -1047,9 +1040,6 @@ int icc_handle_scalar_cmd(struct sm_msg *msg)
 	if (SM_SCALAR_CMD(scalar0) != SM_SCALAR_CMD_HEAD)
 		return 0;
 
-	sm_send_scalar_ack(NULL, msg->src_ep, src_cpu,
-			msg->payload, msg->length);
-
 	coreb_msg("scalar cmd %x %x\n", SM_SCALAR_CMD(scalar0), SM_SCALAR_CMD_HEAD);
 	switch (SM_SCALAR_CMDARG(scalar0)) {
 	case SM_SCALAR_CMD_GET_SESSION_ID:
@@ -1125,6 +1115,8 @@ uint32_t msg_handle(void)
 			session->proto_ops->recvmsg(msg, session);
 			sm_get_session_status(&sstatus, index);
 			avail = sstatus.avail;
+			if (avail)
+				coreb_msg("index %d avail %d\n", index, avail);
 		} else
 			coreb_msg("unsupported protocol\n");
 
