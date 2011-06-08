@@ -38,6 +38,8 @@ notice, this list of conditions and the following disclaimer.
 #include <transport_sm.h>
 #include <icc.h>
 #define COREB_MEMPOOL_START 0x3D00000
+#define MASTER_NODE_ID 0
+#define SLAVE_NODE_ID 1
 
 #define SEMKEYPATH "/dev/null"  /* Path used on ftok for semget key  */
 #define SEMKEYID 1              /* Id used on ftok for semget key    */
@@ -136,7 +138,7 @@ mcapi_boolean_t mcapi_trans_set_node_num(mcapi_uint_t n)
 
 mcapi_boolean_t mcapi_trans_get_node_num(mcapi_uint_t* node)
 {
-	*node = c_db->nodes[c_db->num_nodes - 1].node_num;
+	*node = c_db->nodes[SLAVE_NODE_ID].node_num;
 	return MCAPI_TRUE;
 }
 
@@ -144,7 +146,7 @@ mcapi_boolean_t mcapi_trans_get_port_num(mcapi_uint_t port_index, mcapi_uint_t *
 {
 	int rc = MCAPI_FALSE;
 	int i;
-	for (i = 0; i < c_db->num_nodes ; i++) {
+	for (i = SLAVE_NODE_ID; i < SLAVE_NODE_ID + c_db->num_nodes ; i++) {
 		if (c_db->nodes[i].node_d.endpoints[port_index].valid) {
 			*port_num = c_db->nodes[i].node_d.endpoints[port_index].port_num;
 			rc = MCAPI_TRUE;
@@ -157,7 +159,7 @@ mcapi_boolean_t mcapi_trans_get_remote_port_num(mcapi_uint_t port_index, mcapi_u
 {
 	int rc = MCAPI_FALSE;
 	int i;
-	for (i = c_db->num_nodes; i < c_db->num_nodes*2 ; i++) {
+	for (i = MASTER_NODE_ID; i < MASTER_NODE_ID + c_db->num_nodes; i++) {
 		if (c_db->nodes[i].node_d.endpoints[port_index].valid) {
 			*port_num = c_db->nodes[i].node_d.endpoints[port_index].port_num;
 			rc = MCAPI_TRUE;
@@ -266,7 +268,21 @@ mcapi_boolean_t mcapi_trans_decode_handle_internal (uint32_t handle, uint16_t *n
 	return rc;
 }
 
+void setup_request_internal (mcapi_endpoint_t send, mcapi_endpoint_t recv,
+		mcapi_request_t* request, size_t size, mcapi_request_type type)
+{
+	if (!request)
+		return;
 
+	coreb_msg("%s[%i,%i]\n", __func__, send, recv);
+	request->send_endpoint = send;
+	request->recv_endpoint = recv;
+	request->valid = MCAPI_TRUE;
+	request->size = size;
+	request->cancelled = MCAPI_FALSE;
+	request->type = type;
+
+}
 
 /****************** error checking queries *************************/
 /* checks if the given node is valid */
@@ -542,6 +558,7 @@ mcapi_boolean_t mcapi_trans_create_endpoint(mcapi_endpoint_t *endpoint,  mcapi_u
 	node_index = mcapi_trans_get_node_index(node_num);
 
 	mcapi_dprintf(1," node index %d ep index %d\n", node_index, endpoint_index);
+	coreb_msg(" node index %d ep index %d\n", node_index, endpoint_index);
 
 	if (c_db->nodes[node_index].node_d.endpoints[endpoint_index].valid == MCAPI_FALSE) {
 
@@ -570,7 +587,7 @@ mcapi_boolean_t mcapi_trans_get_endpoint_internal (mcapi_endpoint_t *e, mcapi_ui
 	mcapi_dprintf(2," mcapi_trans_get_endpoint_internal node_num=%d, port_num=%d\n",
 			node_num,port_num);
 
-	for (i = 0; i < c_db->num_nodes; i++) {
+	for (i = SLAVE_NODE_ID; i < SLAVE_NODE_ID + c_db->num_nodes; i++) {
 		if (c_db->nodes[i].node_num == node_num) { 
 			for (j = 0; j < c_db->nodes[i].node_d.num_endpoints; j++) {
 				if ((c_db->nodes[i].node_d.endpoints[j].valid) && 
@@ -585,7 +602,7 @@ mcapi_boolean_t mcapi_trans_get_endpoint_internal (mcapi_endpoint_t *e, mcapi_ui
 	if (rc)
 		return rc;
 
-	for (i = c_db->num_nodes; i < c_db->num_nodes * 2; i++) {
+	for (i = MASTER_NODE_ID; i < MASTER_NODE_ID + c_db->num_nodes; i++) {
 		if (c_db->nodes[i].node_num == node_num) { 
 			for (j = 0; j < c_db->nodes[i].node_d.num_endpoints; j++) {
 				if ((c_db->nodes[i].node_d.endpoints[j].valid) && 
@@ -600,10 +617,10 @@ mcapi_boolean_t mcapi_trans_get_endpoint_internal (mcapi_endpoint_t *e, mcapi_ui
 	if (rc)
 		return rc;
 
-	rc = mcapi_trans_get_remote_endpoint(0, port_num, &port_index);
+	rc = mcapi_trans_get_remote_endpoint(MASTER_NODE_ID, port_num, &port_index);
 	if (rc) {
 
-		i = c_db->num_nodes;
+		i = MASTER_NODE_ID;
 		c_db->nodes[i].node_num = node_num;
 		c_db->nodes[i].node_d.endpoints[port_index].valid = MCAPI_TRUE;
 		c_db->nodes[i].node_d.endpoints[port_index].port_num = port_num;
@@ -692,12 +709,15 @@ void mcapi_trans_msg_send_i( mcapi_endpoint_t  send_endpoint, mcapi_endpoint_t  
 
 	mcapi_trans_get_remote_port_num(re, &re_num);
 	mcapi_dprintf(1,"index %d, re %d, rn %d re_num %d\n", index, re, rn, re_num);
+	coreb_msg("index %d, re %d, rn %d re_num %d\n", index, re, rn, re_num);
 	ret = sm_send_packet(index, re_num, rn, buffer, buffer_size);
 	if (ret) {
 		mcapi_dprintf(1,"send failed\n");
 		*mcapi_status = ret;
 	} else
 		*mcapi_status = MCAPI_SUCCESS;
+
+	setup_request_internal(send_endpoint, receive_endpoint, request, buffer_size, SEND);
 }
 
 
@@ -716,14 +736,16 @@ void mcapi_trans_msg_recv_i( mcapi_endpoint_t  receive_endpoint,  char* buffer, 
 	int ret;
 	int index;
 	uint32_t len;
+	mcapi_endpoint_t  send_endpoint;
 	char *buf = NULL;
+	mcapi_uint_t *port_num;
 	mcapi_boolean_t completed =  (*mcapi_status == MCAPI_SUCCESS) ? MCAPI_FALSE : MCAPI_TRUE;
 
 	mcapi_trans_decode_handle_internal(receive_endpoint,&rn,&re);
 
 	index = re;
 
-	ret = sm_recv_packet(index,&sn, &se, &buf, &len);
+	ret = sm_recv_packet(index,&se, &sn, &buf, &len);
 	if (ret) {
 		mcapi_dprintf(1,"recv failed\n");
 		*mcapi_status = ret;
@@ -731,10 +753,14 @@ void mcapi_trans_msg_recv_i( mcapi_endpoint_t  receive_endpoint,  char* buffer, 
 	if (buf) {
 		memcpy(buffer, buf, len);
 		mcapi_dprintf(1,"index %d, se %d, sn %d\n", index, se, sn);
-		coreb_msg("buffer %s len %d\n", buffer, len);
+		coreb_msg("buffer %s len %d se %d sn %d\n", buffer, len, se, sn);
+		sm_recv_release(buf, len, index);
 		*mcapi_status = MCAPI_SUCCESS;
 	} else
 		*mcapi_status = MCAPI_SUCCESS;
+
+	send_endpoint = 0;
+	setup_request_internal(send_endpoint, receive_endpoint, request, len, RECV);
 }
 
 
@@ -827,6 +853,8 @@ void  mcapi_trans_pktchan_send_i( mcapi_pktchan_send_hndl_t send_handle, void* b
 		*mcapi_status = ret;
 	} else
 		*mcapi_status = MCAPI_SUCCESS;
+
+	setup_request_internal(send_handle, c_db->nodes[sn].node_d.endpoints[se].recv_endpt, request, size, SEND);
 }
 
 
@@ -845,6 +873,7 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 	int index;
 	uint32_t len;
 	int i;
+	mcapi_endpoint_t send_endpoint;
 	buffer_entry* db_buff = NULL;
 
 	mcapi_boolean_t completed =  (*mcapi_status == MCAPI_SUCCESS) ? MCAPI_FALSE : MCAPI_TRUE;
@@ -868,7 +897,7 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 
 	index = re;
 
-	ret = sm_recv_packet(index,&sn, &se, db_buff->buff, &len);
+	ret = sm_recv_packet(index,&se, &sn, db_buff->buff, &len);
 	if (ret) {
 		mcapi_dprintf(1,"recv failed\n");
 		*mcapi_status = ret;
@@ -879,6 +908,8 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 	*buffer = db_buff->buff;
 	*mcapi_status = MCAPI_SUCCESS;
 
+	send_endpoint = mcapi_trans_encode_handle_internal(sn,se);
+	setup_request_internal(send_endpoint, receive_handle, request, len, RECV);
 }
 
 
