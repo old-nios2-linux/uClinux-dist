@@ -5,17 +5,18 @@
 
 #include <mcapi.h>
 #include <mcapi_datatypes.h>
+#include <mcapi_test.h>
 #include <stdio.h>
 #include <stdlib.h> /* for malloc */
 #include <string.h>
 
-#define NODE_NUM 11
-#define PORT_NUM1 5
-#define PORT_NUM2 200
-
 #define BUFF_SIZE 64
 
 #define WRONG wrong(__LINE__);
+
+
+char buffer[BUFF_SIZE];
+
 void wrong(unsigned line)
 {
 }
@@ -36,15 +37,26 @@ mcapi_request_t request;
   }
 }
 
-void recv (mcapi_endpoint_t recv,mcapi_status_t status,int exp_status) {
+void recv_loopback (mcapi_endpoint_t recv,mcapi_status_t status,int exp_status) {
   size_t recv_size;
-  char buffer[BUFF_SIZE];
-mcapi_request_t request;
-  mcapi_msg_recv_i(recv,buffer,BUFF_SIZE,&request,&status);
+mcapi_request_t request1;
+mcapi_request_t request2;
+mcapi_endpoint_t send_back;
+  mcapi_msg_recv_i(recv,buffer,BUFF_SIZE,&request1,&status);
   if (status != exp_status) { WRONG}
   if (status == MCAPI_SUCCESS) {
     coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,buffer);
   }
+
+ send_back = mcapi_get_endpoint(MASTER_NODE_NUM, MASTER_PORT_NUM1, &status);
+
+  coreb_msg("endpoint=%i sendback: buf %x\n",(int)send_back, (unsigned int)buffer);
+  mcapi_msg_send_i(recv,send_back,buffer,BUFF_SIZE,1,&request2,&status);
+  if (status != exp_status) { WRONG}
+  if (status == MCAPI_SUCCESS) {
+    coreb_msg("endpoint=%i has sent: [%s]\n",(int)recv,buffer);
+  }
+
 }
 
 void icc_task_init(int argc, char *argv[]) {
@@ -56,12 +68,12 @@ void icc_task_init(int argc, char *argv[]) {
 
  coreb_msg("[%s] %d\n", __func__, __LINE__);
   /* create a node */
-  mcapi_initialize(NODE_NUM,&version,&status);
+  mcapi_initialize(SLAVE_NODE_NUM,&version,&status);
   if (status != MCAPI_SUCCESS) { WRONG }
  coreb_msg("[%s] %d\n", __func__, __LINE__);
 
   /* create endpoints */
-  ep1 = mcapi_create_endpoint (PORT_NUM1,&status);
+  ep1 = mcapi_create_endpoint (SLAVE_PORT_NUM1,&status);
   if (status != MCAPI_SUCCESS) { WRONG }
   coreb_msg("ep1 %x   \n", ep1);
   /* send and recv messages on the endpoints */
@@ -71,22 +83,10 @@ void icc_task_init(int argc, char *argv[]) {
   
 while(1) {
 if (icc_wait())
- // recv (ep1,status,MCAPI_SUCCESS);
+ recv_loopback(ep1,status,MCAPI_SUCCESS);
 
- ep2 = mcapi_get_endpoint(1, 101, &status);
-
-//  send (ep1,ep2,"2Hello MCAPI",status,MCAPI_SUCCESS);
 }
 
-#if 0
-  while (1) {
-	avail = mcapi_msg_available(ep1, &status);
-	if (avail > 0) {
- recv (ep1,status,MCAPI_SUCCESS);
-		break;
-	}
-  }
-#endif
   mcapi_finalize(&status);
   coreb_msg("   Test PASSED\n");
   return; 
