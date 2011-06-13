@@ -113,7 +113,7 @@ while 1 {
         }
 
         -re "SoC ADAU1373 Audio support.*SND_BF5XX_SOC_ADAU1373.*\\\[.*]" {
-            send "M\r"
+            send "N\r"
         }
 
         -re "SoC ADAU1761 Audio support.*SND_BF5XX_SOC_ADAU1761.*\\\[.*]" {
