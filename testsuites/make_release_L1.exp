@@ -75,11 +75,11 @@ while 1 {
         }
 
         -re "Locate icache flush funcs in L1 Inst Memory.*ICACHE_FLUSH_L1.*\\\[.*]" {
-            send "N\r"
+            send "Y\r"
         }
 
         -re "Locate dcache flush funcs in L1 Inst Memory.*DCACHE_FLUSH_L1.*\\\[.*]" {
-            send "N\r"
+            send "Y\r"
         }
 
         -re "Locate sys_bfin_spinlock function in L1 Memory.*SYS_BFIN_SPINLOCK_L1.*\\\[.*]" {
