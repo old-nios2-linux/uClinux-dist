@@ -9,7 +9,6 @@
  * Licensed under the GPL-2 or later.
  */
 
-#include <bfin_sram.h>
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>

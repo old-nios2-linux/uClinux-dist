@@ -9,7 +9,6 @@
  * Licensed under the GPL-2 or later.
  */
 
-#include <bfin_sram.h>
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -77,15 +76,15 @@ static void send_test(int fd, const char *optarg)
 	else
 		pkt.remote_ep = 5;
 	pkt.type = SP_PACKET;
-	pkt.dst_cpu = 1;
-	pkt.buf_len = 16;
-	pkt.buf = payload;
-
 	printf("sp packet %d\n", pkt.type);
 
 	printf("begin create ep\n");
 	ioctl(fd, CMD_SM_CREATE, &pkt);
 	printf("finish create ep session index = %d\n", pkt.session_idx);
+
+	pkt.dst_cpu = 1;
+	pkt.buf_len = 16;
+	pkt.buf = payload;
 
 
 	ioctl(fd, CMD_SM_SEND, &pkt);
