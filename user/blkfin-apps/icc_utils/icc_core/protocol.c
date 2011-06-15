@@ -911,10 +911,12 @@ matched1:
 		session->remote_ep = 0;
 		session->flags = 0;
 	case SM_PACKET_READY:
-		coreb_msg("recved packet msg handle%x\n", (unsigned int)session->handle);
-		msg_recv_internal(msg, session);
-		break;
 	case SM_SESSION_PACKET_READY:
+		if (SM_MSG_PROTOCOL(msg->type) != session->type) {
+			coreb_msg("msg type %08x unmatch session type %08x\n", msg->type, session->type);
+			break;
+		}
+		coreb_msg("recved packet msg handle%x\n", (unsigned int)session->handle);
 		msg_recv_internal(msg, session);
 		break;
 	case SM_SCALAR_READY_8:
@@ -1004,20 +1006,22 @@ void icc_run_task(void)
 	coreb_idle();
 }
 
-int sm_get_session_status(void *user_param, uint32_t session_idx)
+int sm_get_session_status(uint32_t session_idx, uint32_t *avail, uint32_t *uncomplete, uint32_t *status)
 {
 	int ret = 0;
-	struct sm_session_status *param = (struct sm_session_status *)user_param;
 	struct sm_session *session = sm_index_to_session(session_idx);
 	if (!session)
 		return -EINVAL;
 
-	param->avail = session->n_avail;
-	param->uncomplete = session->n_uncompleted;
-	param->status = session->flags;
-
+	if (avail)
+		*avail = session->n_avail;
+	if (uncomplete)
+		*uncomplete = session->n_uncompleted;
+	if (status)
+		*status = session->flags;
 	return ret;
 }
+
 
 int icc_handle_scalar_cmd(struct sm_msg *msg)
 {
@@ -1110,11 +1114,10 @@ uint32_t msg_handle(void)
 	}
 
 	coreb_msg("msg type %x index %d session type %x\n", msg->type, index, session->type);
-	if (session && (SM_MSG_PROTOCOL(msg->type) == session->type)) {
+	if (session) {
 		if (session->proto_ops->recvmsg) {
 			session->proto_ops->recvmsg(msg, session);
-			sm_get_session_status(&sstatus, index);
-			avail = sstatus.avail;
+			sm_get_session_status(index, &avail, NULL, NULL);
 			if (avail)
 				coreb_msg("index %d avail %d\n", index, avail);
 		} else
