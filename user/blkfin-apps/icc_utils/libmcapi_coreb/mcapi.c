@@ -646,6 +646,7 @@ void mcapi_open_pktchan_recv_i(
      non-blocking functions that don't check for this - is that intentional or an
      oversight in the spec? */
 
+    	coreb_msg("%s %d\n", __func__, __LINE__);
   if (! valid_status_param(mcapi_status)) {
     if (mcapi_status != NULL) {
       *mcapi_status = MCAPI_EPARAM;
@@ -655,14 +656,23 @@ void mcapi_open_pktchan_recv_i(
     if (! valid_request_param(request)) {
       *mcapi_status = MCAPI_EPARAM;
     } else if (! mcapi_trans_valid_endpoint(receive_endpoint) ) {
+    	coreb_msg("%s %d status %d\n", __func__, __LINE__, *mcapi_status);
       *mcapi_status = MCAPI_ENOT_ENDP;
     } else if ( mcapi_trans_channel_type (receive_endpoint) == MCAPI_SCL_CHAN) {
+
+    	coreb_msg("%s %d status %d\n", __func__, __LINE__, *mcapi_status);
       *mcapi_status = MCAPI_ECHAN_TYPE;
     } else if (! mcapi_trans_recv_endpoint (receive_endpoint)) {
+
+    	coreb_msg("%s %d status %d\n", __func__, __LINE__, *mcapi_status);
       *mcapi_status = MCAPI_EDIR;
     } else if ( !mcapi_trans_connected (receive_endpoint)) {
+
+    	coreb_msg("%s %d status %d\n", __func__, __LINE__, *mcapi_status);
       *mcapi_status = MCAPI_ENOT_CONNECTED;
     }
+
+    	coreb_msg("%s %d status %d\n", __func__, __LINE__, *mcapi_status);
     mcapi_trans_open_pktchan_recv_i(recv_handle,receive_endpoint,request,mcapi_status);
   }
 }
@@ -755,6 +765,7 @@ void mcapi_pktchan_recv_i(
 { 
   /* MCAPI_EPACKLIMIT, MCAPI_ENO_BUFFER, and MCAPI_ENO_REQUEST are handled at the transport layer */
 
+   	coreb_msg("%s %d\n", __func__, __LINE__);
   if (! valid_status_param(mcapi_status)) {
     if (mcapi_status != NULL) {
       *mcapi_status = MCAPI_EPARAM;
@@ -762,12 +773,20 @@ void mcapi_pktchan_recv_i(
   } else {
     *mcapi_status = MCAPI_SUCCESS; 
     if (! valid_request_param(request)) {
+
+   	coreb_msg("%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_EPARAM;
     } else   if (! valid_buffer_param(buffer)) {
+
+   	coreb_msg("%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_EPARAM;
     } else if (! mcapi_trans_valid_pktchan_recv_handle(receive_handle) ) {
+
+   	coreb_msg("%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ENOT_HANDLE;
     }
+
+   	coreb_msg("%s %d %d\n", __func__, __LINE__, *mcapi_status);
     mcapi_trans_pktchan_recv_i (receive_handle,buffer,request,mcapi_status);
   }
 }
@@ -838,6 +857,52 @@ void mcapi_pktchan_free(
     }
   }
 }
+
+void mcapi_pktchan_recv_close_i(
+		MCAPI_IN mcapi_pktchan_recv_hndl_t receive_handle, 
+		MCAPI_OUT mcapi_request_t* request, 
+		MCAPI_OUT mcapi_status_t* mcapi_status)
+{
+
+	if (! valid_status_param(mcapi_status)) {
+		if (mcapi_status != NULL) {
+			*mcapi_status = MCAPI_EPARAM;
+		}
+	} else {
+		*mcapi_status = MCAPI_SUCCESS;  
+		if (! valid_request_param(request)) {
+			*mcapi_status = MCAPI_EPARAM;
+		} else if (! mcapi_trans_valid_pktchan_recv_handle(receive_handle) ) {
+			*mcapi_status = MCAPI_ENOT_HANDLE;
+		} else if (! mcapi_trans_pktchan_recv_isopen (receive_handle)) {
+			*mcapi_status = MCAPI_ENOT_OPEN;
+		}
+		mcapi_trans_pktchan_recv_close_i (receive_handle,request,mcapi_status);
+	}
+}
+
+void mcapi_pktchan_send_close_i(
+		MCAPI_IN mcapi_pktchan_send_hndl_t send_handle, 
+		MCAPI_OUT mcapi_request_t* request, 
+		MCAPI_OUT mcapi_status_t* mcapi_status)
+{
+	if (! valid_status_param(mcapi_status)) {
+		if (mcapi_status != NULL) {
+			*mcapi_status = MCAPI_EPARAM;
+		}
+	} else {
+		*mcapi_status = MCAPI_SUCCESS;
+		if (! mcapi_trans_valid_pktchan_recv_handle(send_handle) ) {
+			*mcapi_status = MCAPI_ENOT_HANDLE;
+		} else if (! mcapi_trans_pktchan_send_isopen (send_handle)) {
+			*mcapi_status = MCAPI_ENOT_OPEN;
+		} if (! valid_request_param(request)) {
+			*mcapi_status = MCAPI_EPARAM;
+		}  
+		mcapi_trans_pktchan_send_close_i (send_handle,request,mcapi_status);
+	}
+}
+
 
 void  mcapi_connect_sclchan_i(
         MCAPI_IN mcapi_endpoint_t send_endpoint, 
