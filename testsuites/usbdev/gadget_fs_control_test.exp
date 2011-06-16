@@ -62,7 +62,7 @@ if [ catch {exec make clean -f Makefile.usb -C src} ] {
 }
 
 if [ catch {exec make -f Makefile.usb -C src} ] {
-    send_user "FAIL: Build testusb\n"
+    send_user "FAIL: Build usb\n"
     send_user "$errorInfo\n"
     case_fail $case_num
 } else {
@@ -244,7 +244,7 @@ set timeout 3
 send "ls /dev/gadget/ -l\r"
 while 1 {
     expect {
-        -re "musb_hdrc.*$kernel_prompt" {
+        -re "(musb_hdrc|musb-hdrc).*$kernel_prompt" {
             case_pass $case_num
             break
         }
