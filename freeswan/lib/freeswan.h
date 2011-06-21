@@ -53,7 +53,6 @@
  * the include files do.
  */
 #include <linux/version.h>
-#include <linux/autoconf.h> /* get the nat traversal settings */
 
 #ifndef KERNEL_VERSION
 #define KERNEL_VERSION(x,y,z) (((x)<<16)+((y)<<8)+(z))

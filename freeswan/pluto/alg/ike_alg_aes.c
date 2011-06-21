@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stddef.h>
 #include <sys/types.h>
-#include <linux/autoconf.h>
 #include <freeswan.h>
 
 #include "constants.h"

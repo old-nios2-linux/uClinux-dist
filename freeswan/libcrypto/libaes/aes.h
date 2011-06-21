@@ -40,7 +40,6 @@
 #else 
 #  include <sys/types.h>
 #endif
-#include <linux/config.h>
 
 // CONFIGURATION OPTIONS (see also aes.c)
 //

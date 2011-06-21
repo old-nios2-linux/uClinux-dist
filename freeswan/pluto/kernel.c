@@ -38,7 +38,6 @@
 # include <pfkey.h>
 #endif /* KLIPS */
 
-#include <linux/config.h>
 #ifdef CONFIG_LEDMAN
 #include <linux/ledman.h>
 #endif
