@@ -7,7 +7,7 @@ FREESWANLIB   = ../lib/libfreeswan.a
 LIBDESINCLS   =
 LIBDESLITE    = $(ROOTDIR)/lib/libdes/libdes.a
 LIBGMPINCLS   =
-LIBGMP        = $(ROOTDIR)/lib/libgmp/libgmp.a
+LIBGMP        = -lgmp
 
 CFLAGS += -DUSE_ASM_BYTEORDER=1 -D__USE_BSD
 ifdef CONFIG_USER_FLATFSD_FLATFSD
