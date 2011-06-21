@@ -85,6 +85,11 @@ echo 4096 > /proc/sys/vm/min_free_kbytes
 echo 300  > /proc/sys/vm/vfs_cache_pressure
 
 #
+# Automount stuff if people have it configured
+#
+[ -e /etc/fstab ] && mount -a
+
+#
 # Do random network setup
 #
 #dhcpcd &
