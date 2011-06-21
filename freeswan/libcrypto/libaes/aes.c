@@ -112,7 +112,7 @@
 #define FOUR_IM_TABLES
 #else
 /* Defaults... no idea what they are optimal for :-) */
-#error tune your aes please
+#warning tune your aes please
 
 #define UNROLL
 //#define PARTIAL_UNROLL
