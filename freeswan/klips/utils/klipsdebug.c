@@ -53,6 +53,8 @@ char klipsdebug_c_version[] = "RCSID $Id: klipsdebug.c,v 1.45 2002/03/08 21:44:0
 #include <stdio.h>
 #include <getopt.h>
 
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+
 __u32 bigbuf[1024];
 char *program_name;
 char me[] = "ipsec klipsdebug";
