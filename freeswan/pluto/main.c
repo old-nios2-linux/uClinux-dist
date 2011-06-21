@@ -476,36 +476,11 @@ main(int argc, char **argv)
 
     /* If not suppressed, do daemon fork */
 
-#ifndef __uClinux__
     if (fork_desired)
     {
-	{
-	    pid_t pid = fork();
-
-	    if (pid < 0)
-	    {
-		int e = errno;
-
-		fprintf(stderr, "pluto: fork failed (%d %s)\n",
-		    errno, strerror(e));
-		exit_pluto(1);
-	    }
-
-	    if (pid != 0)
-	    {
-		/* parent: die, after filling PID into lock file.
-		 * must not use exit_pluto: lock would be removed!
-		 */
-		exit(fill_lock(lockfd, pid)? 0 : 1);
-	    }
-	}
-
-	if (setsid() < 0)
-	{
-	    int e = errno;
-
-	    fprintf(stderr, "setsid() failed in main(). Errno %d: %s\n",
-		errno, strerror(e));
+	if (daemon(1, log_to_stderr)) {
+	    fprintf(stderr, "pluto: fork failed (%d %s)\n",
+		errno, strerror(errno));
 	    exit_pluto(1);
 	}
 
@@ -517,7 +492,9 @@ main(int argc, char **argv)
 		if ((!log_to_stderr || i != 2)
 		&& i != ctl_fd)
 		    close(i);
+	}
 
+	if (log_to_stderr) {
 	    /* make sure that stdin, stdout, stderr are reserved */
 	    if (open("/dev/null", O_RDONLY) != 0)
 		abort();
@@ -526,20 +503,9 @@ main(int argc, char **argv)
 	    if (!log_to_stderr && dup2(0, 2) != 2)
 		abort();
 	}
-    }
-    else
-#endif
-    {
-#ifdef __uClinux__
-	if (fork_desired)
-	{
-	    setpgrp();
-	}
-#endif
-	/* no daemon fork: we have to fill in lock file */
+
+	/* daemon fork: we have to fill in lock file */
 	(void) fill_lock(lockfd, getpid());
-	fprintf(stdout, "Pluto initialized\n");
-	fflush(stdout);
     }
 
     init_constants();
