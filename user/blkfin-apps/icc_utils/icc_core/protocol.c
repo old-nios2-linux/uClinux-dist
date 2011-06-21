@@ -286,10 +286,11 @@ int sm_destroy_session(sm_uint32_t session_idx)
 }
 
 int sm_connect_session(sm_uint32_t dst_ep, sm_uint32_t dst_cpu,
-			sm_uint32_t src_ep)
+			sm_uint32_t src_ep, sm_uint32_t type)
 {
 	struct sm_session_table *table;
 	struct sm_session *session;
+	uint32_t msg_type;
 	table = sm_get_session_table();
 	sm_uint32_t index = sm_find_session(src_ep, 0, table);
 	sm_put_session_table();
@@ -297,7 +298,16 @@ int sm_connect_session(sm_uint32_t dst_ep, sm_uint32_t dst_cpu,
 	if (!session)
 		return -EINVAL;
 
-	sm_send_connect(session, dst_ep, dst_cpu);
+	if (type == SP_SESSION_SCALAR) {
+		session->type = SP_SESSION_SCALAR;
+		msg_type = SM_SESSION_SCALAR_CONNECT;
+	} else if (type == SP_SESSION_PACKET) {
+		session->type = SP_SESSION_PACKET;
+		msg_type = SM_SESSION_PACKET_CONNECT;
+	} else
+		return -EINVAL;
+
+	sm_send_connect(session, dst_ep, dst_cpu, msg_type);
 	if (sm_wait_for_connect_ack(session))
 		return -EAGAIN;
 	table->sessions[index].remote_ep = dst_ep;
@@ -499,24 +509,36 @@ sm_send_session_scalar_ack(struct sm_session *session, sm_uint32_t remote_ep,
 }
 
 int sm_send_connect(struct sm_session *session, sm_uint32_t remote_ep,
-			sm_uint32_t dst_cpu)
+			sm_uint32_t dst_cpu, sm_uint32_t type)
 {
 	return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
-			0, SM_SESSION_PACKET_CONNECT);
+			0, type);
 }
 
 int sm_send_connect_ack(struct sm_session *session, sm_uint32_t remote_ep,
 			sm_uint32_t dst_cpu)
 {
-	return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
-			0, SM_SESSION_PACKET_CONNECT_ACK);
+	if (session->type == SP_SESSION_PACKET)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_PACKET_CONNECT_ACK);
+	else if (session->type == SP_SESSION_SCALAR)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_SCALAR_CONNECT_ACK);
+	else
+		return -EINVAL;
 }
 
 int sm_send_connect_done(struct sm_session *session, sm_uint32_t remote_ep,
 			sm_uint32_t dst_cpu)
 {
-	return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
-			0, SM_SESSION_PACKET_CONNECT_DONE);
+	if (session->type == SP_SESSION_PACKET)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_PACKET_CONNECT_DONE);
+	else if (session->type == SP_SESSION_SCALAR)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_SCALAR_CONNECT_DONE);
+	else
+		return -EINVAL;
 }
 
 int sm_send_session_active(struct sm_session *session, sm_uint32_t remote_ep,
@@ -541,17 +563,29 @@ int sm_send_session_active_noack(struct sm_session *session, sm_uint32_t remote_
 }
 
 int sm_send_close(struct sm_session *session, sm_uint32_t remote_ep,
-			sm_uint32_t dst_cpu)
+		sm_uint32_t dst_cpu)
 {
-	return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
-			0, SM_SESSION_PACKET_CLOSE);
+	if (session->type == SP_SESSION_PACKET)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_PACKET_CLOSE);
+	else if (session->type == SP_SESSION_SCALAR)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_SCALAR_CLOSE);
+	else
+		return -EINVAL;
 }
 
 int sm_send_close_ack(struct sm_session *session, sm_uint32_t remote_ep,
-			sm_uint32_t dst_cpu)
+		sm_uint32_t dst_cpu)
 {
-	return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
-			0, SM_SESSION_PACKET_CLOSE_ACK);
+	if (session->type == SP_SESSION_PACKET)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_PACKET_CLOSE_ACK);
+	else if (session->type == SP_SESSION_SCALAR)
+		return sm_send_control_msg(session, remote_ep, dst_cpu, 0,
+				0, SM_SESSION_SCALAR_CLOSE_ACK);
+	else
+		return -EINVAL;
 }
 
 int sm_send_error(struct sm_session *session, sm_uint32_t remote_ep,
@@ -604,6 +638,9 @@ sm_send_scalar(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 
 	session = sm_index_to_session(session_idx);
 
+	if (!session)
+		return -EINVAL;
+
 	message->msg.src_ep = session->local_ep;
 	message->msg.dst_ep = dst_ep;
 	message->msg.payload = scalar0;
@@ -611,16 +648,16 @@ sm_send_scalar(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 
 	switch (size) {
 	case 1:
-		message->msg.type = SM_SCALAR_READY_8;
+		message->msg.type = SM_MSG_TYPE(session->type, SM_SCALAR_8BIT);
 		break;
 	case 2:
-		message->msg.type = SM_SCALAR_READY_16;
+		message->msg.type = SM_MSG_TYPE(session->type, SM_SCALAR_16BIT);
 		break;
 	case 4:
-		message->msg.type = SM_SCALAR_READY_32;
+		message->msg.type = SM_MSG_TYPE(session->type, SM_SCALAR_32BIT);
 		break;
 	case 8:
-		message->msg.type = SM_SCALAR_READY_64;
+		message->msg.type = SM_MSG_TYPE(session->type, SM_SCALAR_64BIT);
 		break;
 	}
 
@@ -698,34 +735,41 @@ int sm_recv_scalar(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 	uint32_t len = 0;
 
 	session = sm_index_to_session(session_idx);
+	if (!session)
+		return 0;
 
 	coreb_msg(" %s session type %x localep%d\n",__func__, session->type, session->local_ep);
 	if (!list_empty(&session->rx_messages)) {
 		message = list_first_entry(&session->rx_messages,
 					struct sm_message, next);
+
 		msg = &message->msg;
 
-		coreb_msg(" msg type %x\n", msg->type);
+		coreb_msg("msg type%x src ep %x scalar0 %x scalar1 %x\n", msg->type, msg->src_ep, msg->payload, msg->length);
+
 		if (src_ep)
-			*src_ep = message->msg.src_ep;
+			*src_ep = msg->src_ep;
 		if (src_cpu)
 			*src_cpu = message->src;
 		if (scalar0)
 			*scalar0 = msg->payload;
 		if (scalar1)
 			*scalar1 = msg->length;
-
 		switch (msg->type) {
 		case SM_SCALAR_READY_8:
+		case SM_SESSION_SCALAR_READY_8:
 			len = 1;
 			break;
 		case SM_SCALAR_READY_16:
+		case SM_SESSION_SCALAR_READY_16:
 			len = 2;
 			break;
 		case SM_SCALAR_READY_32:
+		case SM_SESSION_SCALAR_READY_32:
 			len = 4;
 			break;
 		case SM_SCALAR_READY_64:
+		case SM_SESSION_SCALAR_READY_64:
 			len = 8;
 			break;
 		}
@@ -734,12 +778,14 @@ int sm_recv_scalar(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 			*size = len;
 
 		list_del(&message->next);
+		free_message(message);
 		session->n_avail--;
 		coreb_msg("%s() s0%x s1%x avail %d\n", __func__, *scalar0, *scalar1, session->n_avail);
 		ret = 1;
 
 
 	} else {
+		coreb_msg("no message\n");
 		ret = -EAGAIN;
 	}
 	coreb_msg(" %s msg\n",__func__);
@@ -877,16 +923,20 @@ matched1:
 		free_message(uncompleted);
 		break;
 	case SM_SESSION_PACKET_CONNECT_ACK:
+	case SM_SESSION_SCALAR_CONNECT_ACK:
 		session->remote_ep = msg->src_ep;
 		session->flags = SM_CONNECT;
 		break;
 	case SM_SESSION_PACKET_CONNECT:
+	case SM_SESSION_SCALAR_CONNECT:
 		session->remote_ep = msg->src_ep;
 		session->flags = SM_CONNECTING;
-		session->type = SP_SESSION_PACKET;
+		session->type = SM_MSG_PROTOCOL(msg->type);
+		coreb_msg("session type %x\n", session->type);
 		sm_send_connect_ack(session, msg->src_ep, cpu ^ 1);
 		break;
 	case SM_SESSION_PACKET_CONNECT_DONE:
+	case SM_SESSION_SCALAR_CONNECT_DONE:
 		session->flags = SM_CONNECT;
 		coreb_msg("connected %x %d\n", session->flags, session->remote_ep);
 		break;
