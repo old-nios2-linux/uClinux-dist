@@ -158,7 +158,7 @@ proc recover {} {
          # First three times, try to send a command.
          set timeout 1
          send "cd /bin\r"
-         report "!!!! hit ENTER"	
+         report "!!!! hit ENTER"
       } else {
          # After that doesn't work, try Control-C
          set timeout 1
@@ -178,7 +178,7 @@ proc recover {} {
                return 0
             }
 
-             -re $kernel_prompt {
+            -re $kernel_prompt {
                 return 0
             }
 
@@ -281,9 +281,6 @@ proc recover {} {
             send_user "$errorInfo\n"
         }
         if [ catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin} ] {
-            send_user "$errorInfo\n"
-        }
-        if [ catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin} ] {
             send_user "$errorInfo\n"
         }
         if [ catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin} ] {
@@ -450,9 +447,6 @@ proc force_reboot {} {
                 send_user "$errorInfo\n"
             }
             if [ catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin} ] {
-                send_user "$errorInfo\n"
-            }
-            if [ catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin} ] {
                 send_user "$errorInfo\n"
             }
             if [ catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin} ] {
@@ -928,14 +922,14 @@ proc run_LTP_test { filename command torun mode} {
        }
    }
 
-   if { $filename == "lchown02" } {
+   if { $filename == "lchown02" || $filename == "lchown02_16" } {
        if [ catch {exec rcp $LTP_TESTCASES_DIR/create_link root@$ipaddr:/bin} ] {
            send_user "rcp test file fail\n"
            send_user "$errorInfo\n"
        }
    }
 
-   if { $filename == "link01" || $filename == "open01A" } {
+   if { $filename == "link01" || $filename == "open01A" || $filename == "stat04" || $filename == "unlink01" } {
        if [ catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin} ] {
            send_user "rcp test file fail\n"
            send_user "$errorInfo\n"
@@ -981,6 +975,13 @@ proc run_LTP_test { filename command torun mode} {
            send_user "$errorInfo\n"
        }
        if [ catch {exec rcp $LTP_TESTCASES_DIR/readlink01 root@$ipaddr:/bin} ] {
+           send_user "rcp test file fail\n"
+           send_user "$errorInfo\n"
+       }
+   }
+
+   if { $filename == "readlink04" } {
+       if [ catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin} ] {
            send_user "rcp test file fail\n"
            send_user "$errorInfo\n"
        }
@@ -1163,7 +1164,7 @@ proc run_LTP_test { filename command torun mode} {
          }
 
          # Detect kernel painic message printed out
-         "Kernel panic" {	
+         "Kernel panic" {
             report "---crash"
             set result_flag $LTP_CRASH
             reset_board
@@ -1212,12 +1213,14 @@ proc run_LTP_test { filename command torun mode} {
    if { $filename == "execve02" || $filename == "execve04" } {
       send "rm -f /bin/test3\r"
    }
-   if { $filename == "lchown02" } {
+   if { $filename == "lchown02" || $filename == "lchown02_16" } {
       send "rm -f /bin/create_link\r"
    }
-   if { $filename == "link01" || $filename == "open01A" } {
+   if { $filename == "link01" || $filename == "open01A" || $filename == "stat04" || $filename == "unlink01" } {
       send "rm -f /bin/symlink01\r"
-      send "rm -f /bin/open01\r"
+   }
+   if { $filename == "readlink04" } {
+      send "rm -f /bin/creat_slink\r"
    }
    if { $filename == "lstat01A" } {
       send "rm -f /bin/symlink01\r"
@@ -1739,7 +1742,7 @@ set result_matrix {
        { mkdir05A     	     {symlink01 -T mkdir05}            	 notrun		UCLINUX }
        { mkdir08     	     {mkdir08}                     	 notrun		UCLINUX }
        { mkdir09     	     {mkdir09}                     	 notrun		UCLINUX }
-       { mkdirat01     	     {mkdir01}                     	 notrun		UCLINUX }
+       { mkdirat01     	     {mkdirat01}                     	 notrun		UCLINUX }
        { mknod01     	     {mknod01}                     	 notrun		UCLINUX }
        { mknod02     	     {mknod02}                     	 notrun		UCLINUX }
        { mknod03     	     {mknod03}                     	 notrun		UCLINUX }
@@ -2133,7 +2136,7 @@ set result_matrix {
        { sigaction01         {sigaction01}                     	 notrun		UCLINUX }
        { sigaction02         {sigaction02}                     	 notrun		UCLINUX }
        { sigaltstack01       {sigaltstack01}                     notrun		UCLINUX }
-       { sigaltstack02       {sigaltstack03}                     notrun		UCLINUX }
+       { sigaltstack02       {sigaltstack02}                     notrun		UCLINUX }
        { sighold02     	     {sighold02}                     	 notrun		UCLINUX }
        { signal01     	     {signal01}                     	 notrun		UCLINUX }
        { signal02     	     {signal02}                     	 notrun		UCLINUX }
@@ -2734,9 +2737,6 @@ if [ catch {exec rcp $LTP_SCRIPT_DIR/config/group root@$ipaddr:/etc} ] {
 }
 step "copy /etc/group"
 if [ catch {exec rcp $LTP_TESTCASES_DIR/symlink01 root@$ipaddr:/bin} ] {
-    send_user "$errorInfo\n"
-}
-if [ catch {exec rcp $LTP_TESTCASES_DIR/creat_slink root@$ipaddr:/bin} ] {
     send_user "$errorInfo\n"
 }
 if [ catch {exec rcp $LTP_TESTCASES_DIR/test1 root@$ipaddr:/bin} ] {
