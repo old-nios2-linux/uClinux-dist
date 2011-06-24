@@ -55,9 +55,9 @@ am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
 am__installdirs = "$(DESTDIR)$(libdir)"
 libLTLIBRARIES_INSTALL = $(INSTALL)
 LTLIBRARIES = $(lib_LTLIBRARIES)
-libmcapi_la_LIBADD =
-am_libmcapi_la_OBJECTS = mcapi.lo mcapi_trans_stub.lo
-libmcapi_la_OBJECTS = $(am_libmcapi_la_OBJECTS)
+libmcapi_coreb_la_LIBADD =
+am_libmcapi_coreb_la_OBJECTS = mcapi.lo mcapi_trans_stub.lo
+libmcapi_coreb_la_OBJECTS = $(am_libmcapi_coreb_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -70,8 +70,8 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libmcapi_la_SOURCES)
-DIST_SOURCES = $(libmcapi_la_SOURCES)
+SOURCES = $(libmcapi_coreb_la_SOURCES)
+DIST_SOURCES = $(libmcapi_coreb_la_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -94,7 +94,7 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
-CFLAGS = -Wall -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -DCONFIG_BF561
+CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
@@ -194,10 +194,11 @@ target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign
+
 # INCLUDES = -I$(top_srcdir)/include -I$(top_srcdir)/../../../../linux-2.6.x/include -I$(top_srcdir)/../../../../linux-2.6.x/drivers/staging/icc/include/ -I$(top_srcdir)/../../../../linux-2.6.x/arch/blackfin/mach-bf561/include/
 INCLUDES = -I$(top_srcdir)/include -I$(top_srcdir)/../../../../../linux-2.6.x/drivers/staging/icc/include/
-lib_LTLIBRARIES = libmcapi.la
-libmcapi_la_SOURCES = mcapi.c mcapi_trans_stub.c
+lib_LTLIBRARIES = libmcapi_coreb.la
+libmcapi_coreb_la_SOURCES = mcapi.c mcapi_trans_stub.c
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -280,8 +281,8 @@ clean-libLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libmcapi.la: $(libmcapi_la_OBJECTS) $(libmcapi_la_DEPENDENCIES) 
-	$(LINK) -rpath $(libdir) $(libmcapi_la_OBJECTS) $(libmcapi_la_LIBADD) $(LIBS)
+libmcapi_coreb.la: $(libmcapi_coreb_la_OBJECTS) $(libmcapi_coreb_la_DEPENDENCIES) 
+	$(LINK) -rpath $(libdir) $(libmcapi_coreb_la_OBJECTS) $(libmcapi_coreb_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
