@@ -6,12 +6,13 @@ LD := bfin-elf-ld
 PWD:= $(shell pwd)
 KERNELDIR := ${PWD}/../../../../../linux-2.6.x
 ICC_INCLUDE := ${PWD}/../../include
-MCAPI_TEST_INCLUDE := ${PWD}/../../../../../lib/libmcapi/include/
+MCAPI_INCLUDE := ${PWD}/../../../../../staging/usr/include/mcapi-1.0_coreb/
+MCAPI_TEST_INCLUDE := ${PWD}/../../../../../staging/usr/include/mcapi-1.0/
 ICC_CORE := ../../icc_core/icc
 TASK_LOAD_BASE := 0x3c00000
 LIBMCAPI_COREB := ${PWD}/../../../../../staging/usr/lib/libmcapi_coreb.a
 
-CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I../../libmcapi_coreb -I../../libmcapi_coreb/include -I${ICC_INCLUDE} -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/drivers/staging/icc/include -I${MCAPI_TEST_INCLUDE} -DCONFIG_BF561 -D__KERNEL__
+CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I${ICC_INCLUDE} -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/drivers/staging/icc/include -I{MCAPI_INCLUDE} -I${MCAPI_TEST_INCLUDE} -DCONFIG_BF561 -D__KERNEL__
 LDFLAGS  = -L${ICC_INCLUDE}
 ASFLAGS  = $(CFLAGS)
 all: task1 task2 scalar mcapi_msg1 mcapi_pkt1 mcapi_scl1
