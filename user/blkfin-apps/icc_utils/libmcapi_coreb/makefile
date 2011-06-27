@@ -13,6 +13,6 @@ CONFIGURE_OPTS := \
 	--enable-fast-install
 
 CC := bfin-elf-gcc -mcpu=bf561
-CFLAGS := -Wall -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -DCONFIG_BF561
+CFLAGS := -Wall -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -DCONFIG_BF561 -I$(ROOTDIR)/linux-2.6.x/drivers/staging/icc/include -I$(ROOTDIR)/linux-2.6.x/arch/blackfin/mach-bf561/include/mach
 LDFLAGS :=
 include $(ROOTDIR)/tools/autotools.mk
