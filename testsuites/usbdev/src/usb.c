@@ -356,7 +356,7 @@ static int autoconfig ()
 		EP_STATUS_NAME = "ep3in-int";
 
 	/* Something based on Mentor USB Highspeed Dual-Role Controller */
-	} else if (stat (DEVNAME = "musb_hdrc", &statb) == 0) {
+	} else if (stat (DEVNAME = "musb-hdrc", &statb) == 0) {
 		HIGHSPEED = 1;
 		device_desc.bcdDevice = __constant_cpu_to_le16 (0x0107),
 
