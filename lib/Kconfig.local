@@ -479,3 +479,11 @@ config LIB_LIBVORBIS
 	  (8kHz-48.0kHz, 16+ bit, polyphonic) audio and music at fixed
 	  and variable bitrates from 16 to 128 kbps/channel. 
 	  http://www.xiph.org/vorbis/
+config LIB_LIBMCAPI
+	bool "Build libmcapi"
+	help
+	 To better address the issue of proprietary Inter-Processor Communication (IPC),
+	 the Multicore Association (MCA) created an API-based standard called the Multicore
+	 Communication API (MCAPI). MCAPI is used in AMP configurations that require 
+	 communication and synchronization between multiple operating system instances.
+	 http://www.multicore-association.org
