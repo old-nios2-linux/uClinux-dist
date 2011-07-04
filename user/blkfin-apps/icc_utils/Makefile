@@ -15,10 +15,16 @@ icc_example: libmcapi
 	$(MAKE) -C example/task
 	$(MAKE) -C example/test_app
 
-romfs: icc_core/icc icc_loader/icc_loader example/task/task1 example/test_app/packet_test
+INSTALL_TASK_SRC := $(notdir $(wildcard example/task/*.c))
+INSTALL_TASK := $(patsubst %.c,%,$(INSTALL_TASK_SRC))
+
+romfs: icc_core/icc icc_loader/icc_loader icc_example
 	$(ROMFSINST) -d icc_core/icc /bin/icc
 	$(ROMFSINST) -d icc_loader/icc_loader /bin/icc_loader
-	$(ROMFSINST) -d example/task/task1 /bin/task1
+	@echo installing $(INSTALL_TASK)
+	@for x in $(INSTALL_TASK); do \
+		test -f example/task/$$x && $(ROMFSINST) -d example/task/$$x /usr/bin; \
+	done
 	$(ROMFSINST) -d example/test_app/packet_test /bin/packet_test
 
 clean:
