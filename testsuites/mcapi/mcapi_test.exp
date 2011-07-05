@@ -1,0 +1,128 @@
+#!/usr/bin/expect
+
+source ../kernel_config.exp
+source ../board_info.exp
+log_file [log_file_name "$argv0"]
+send_user "Starting $argv0\n"
+set TITLE [title "$argv0"]
+
+step "Start kermit."
+source ../spawn_kermit.exp
+
+step "Reboot the kernel."
+set bootargs  $bootargs_param11
+source ../reboot_kernel.exp
+
+step "Starting test"
+set timeout 8
+
+set case_num 0
+
+incr case_num
+
+send -s "cd /bin\r"
+while 1 {
+   expect {
+      "root:/bin>" {
+            break
+      }
+
+      timeout {
+         break
+         }
+     }
+}
+
+expect "root:/bin>"
+send -s "./icc_loader -l ./icc \r"
+while 1 {
+   expect {
+     -re "sm_debug.*COREB.*received 1.*sm_debug.*COREB.*received 2" {
+                case_pass $case_num
+                break
+      }
+
+      timeout {
+                case_fail $case_num
+                exit
+      }
+      }
+}
+send -s "\r"
+expect {
+       -re  "root:/bin>" {
+                case_pass $case_num
+       }
+
+       timeout {
+                case_fail $case_num
+                exit
+       }
+}
+
+incr case_num
+send -s "./icc_loader -f -e ./mcapi_msg1 \r"
+while 1 {
+   expect {
+     -re "sm_debug:sm_find_session.*sm_send_packet.*COREB: sm_handle_control_message.*COREB: sm_send_message_internal.*COREB: finish sm_handle_control_message.*COREB: before run task" {
+               case_pass $case_num
+               break
+      }
+
+      timeout {
+                case_fail $case_num
+                exit
+      }
+      }
+}
+
+send -s "\r"
+expect {
+       -re  "root:/bin>" {
+                case_pass $case_num
+       }
+
+       timeout {
+                case_fail $case_num
+                exit
+       }
+}
+
+set timeout 60
+incr case_num
+send -s "msg1  \r"
+while 1 {
+   expect {
+     -re "endpoint=.* has sent: .*1Hello MCAPI.*endpoint=.* has received: .*1Hello MCAPI" {
+
+         case_pass $case_num
+         break
+      }
+
+      timeout {
+         case_fail $case_num
+         exit
+      }
+      }
+}
+send -s "\r"
+expect {
+       -re  "root:/bin>" {
+                case_pass $case_num
+       }
+
+       timeout {
+                case_fail $case_num
+                exit
+       }
+}
+
+send_log "\n"
+send_log "\n$TITLE ............\[PASS\]\n"
+
+send_user "Ending $argv0\n"
+log_file
+
+
+
+
