@@ -42,6 +42,11 @@ while 1 {
                 break
       }
 
+     -re "Hardware Trace" {
+         case_fail $case_num
+         break
+      }
+
       timeout {
                 case_fail $case_num
                 exit
@@ -60,13 +65,19 @@ expect {
        }
 }
 
+set timeout 80
 incr case_num
 send -s "./icc_loader -f -e ./task1 \r"
 while 1 {
    expect {
-     -re "sm_debug:sm_find_session.*sm_send_packet.*COREB: sm_handle_control_message.*COREB: sm_send_message_internal.*COREB: finish sm_handle_control_message.*COREB: task loop" {
+     -re "sm_find_session.*COREB: sm_handle_control_message.*COREB: sm_send_message_internal.*COREB: finish sm_handle_control_message.*COREB: task loop" {
                case_pass $case_num
                break
+      }
+
+     -re "Hardware Trace" {
+         case_fail $case_num
+         break
       }
 
       timeout {
@@ -88,15 +99,21 @@ expect {
        }
 }
 
+set timeout 80
 incr case_num
 send -s "./packet_test -s 123  \r"
 while 1 {
    expect {
-     -re "sm_find_session.*COREB: sm_handle_control_message type.*COREB: sm_recv_packet() 123.*COREB: processing msg 123.*COREB: free message.*COREB: task loop" {
-
+     -re "COREB: sm_recv_packet.* 123.*COREB: processing msg 123.*COREB: free message.*COREB: task loop" {
          case_pass $case_num
          break
       }
+
+     -re "Hardware Trace" {
+         case_fail $case_num
+         break
+      }
+
 
       timeout {
          case_fail $case_num

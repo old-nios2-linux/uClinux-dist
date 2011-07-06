@@ -31,6 +31,9 @@ while 1 {
             send "y\r"
         }
 
+        -re "Build libmcapi.*LIB_LIBMCAPI.*\\\[.*]" {
+            send "Y\r"
+        }
 
         -re  "\\\(.*\\\) \\\[.*]" {
             sleep .01
