@@ -23,7 +23,7 @@ romfs: icc_core/icc icc_loader/icc_loader icc_example
 	$(ROMFSINST) -d icc_loader/icc_loader /bin/icc_loader
 	@echo installing $(INSTALL_TASK)
 	@for x in $(INSTALL_TASK); do \
-		test -f example/task/$$x && $(ROMFSINST) -S -d example/task/$$x /bin; \
+		test -f example/task/$$x && $(ROMFSINST) -S -d example/task/$$x /bin/$$x; \
 	done
 	$(ROMFSINST) -d example/test_app/packet_test /bin/packet_test
 
