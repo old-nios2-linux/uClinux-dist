@@ -75,12 +75,12 @@ while 1 {
             }
         }
 
-        -re "Uncached DMA region.*Enable 2M DMA region.*DMA_UNCACHED_2M.*\[cC]hoice\\\[.*]:" {
-            send "2\r"
+        -re "Blackfin Generic PPI Driver.*BFIN_PPI.*\\\[.*]" {
+            send "Y\r"
         }
 
-        -re "Kernel load address for booting.*BOOT_LOAD.*\\\[.*]" {
-            send "0x100000\r"
+        -re "Uncached DMA region.*Enable 4M DMA region.*DMA_UNCACHED_4M.*\[cC]hoice\\\[.*]:" {
+            send "1\r"
         }
 
         -re "Multimedia support.*MEDIA_SUPPORT.*\\\[.*]" {
@@ -99,19 +99,27 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Blackfin Camera driver.*VIDEO_BLACKFIN_CAM.*\\\[.*]" {
+        -re "ST VS6624 sensor support.*VIDEO_VS6624.*\\\[.*]" {
             if { $driver == "VS6624" } {
                 send "M\r"
             } else {
-                send "Y\r"
+                send "N\r"
             }
         }
 
-        -re "Target Sensor.*VS6624.*ADV7183B.*\[cC]hoice\\\[.*]:" {
-            if { $driver == "VS6624" } {
-                send "3\r"
+        -re "Analog Devices ADV7183 decoder.*VIDEO_ADV7183.*\\\[.*]" {
+            if { $driver == "ADV7183" } {
+                send "Y\r"
             } else {
-                send "5\r"
+                send "N\r"
+            }
+        }
+
+        -re "Blackfin Video Capture Driver.*VIDEO_BLACKFIN_CAPTURE.*\\\[.*]" {
+            if { $driver == "ADV7183" } {
+                send "Y\r"
+            } else {
+                send "M\r"
             }
         }
 
