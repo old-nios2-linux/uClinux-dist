@@ -36,7 +36,6 @@ extern "C" {
 #endif /* __cplusplus */
 
 #include <mcapi.h>
-#include <mcapi_trans.h>
 #include <string.h> /* for strncpy */
 
 /* FIXME: (errata B5) anyone can get an endpoint handle and call receive on it.  should
