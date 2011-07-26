@@ -6,13 +6,14 @@
 */
 
 #include <mcapi.h>
-#include <mcapi_datatypes.h>
 #include <mcapi_test.h>
 #include <stdio.h>
 #include <stdlib.h> /* for malloc */
 #include <string.h>
 
 #define NUM_SIZES 4
+
+#define DOMAIN 0
 
 #define WRONG wrong(__LINE__);
 void wrong(unsigned line)
@@ -72,8 +73,7 @@ void recv_sclchan(mcapi_endpoint_t re,mcapi_status_t status,int exp_status)
 	int rc;
 	unsigned long long exp_data = 0x1122334455667788ULL;
 
-	mcapi_open_sclchan_recv_i(&r1 /*recv_handle*/,re, &request, &status);
-	if (status != MCAPI_ENOT_ENDP) { WRONG }
+	mcapi_sclchan_recv_open_i(&r1 /*recv_handle*/,re, &request, &status);
 	rc = recv(r1, 64, status, exp_status, exp_data);
 	if (rc == MCAPI_FALSE)
 		coreb_msg("scl recv wrong data\n");
@@ -85,11 +85,12 @@ void icc_task_init(int argc, char *argv[])
 {
 	mcapi_status_t status;
 	mcapi_request_t request;
+	mcapi_param_t parms;
 	mcapi_endpoint_t ep1,ep2;
 
 	/* cases:
-	1: both named endpoints (1,2)
-	*/
+1: both named endpoints (1,2)
+*/
 	mcapi_sclchan_send_hndl_t s1;
 	mcapi_sclchan_recv_hndl_t r1;
 	mcapi_uint_t avail;
@@ -97,22 +98,21 @@ void icc_task_init(int argc, char *argv[])
 	int i;
 	int sizes[NUM_SIZES] = {8,16,32,64};
 	size_t size;
-	mcapi_version_t version;
+	mcapi_info_t version;
 	mcapi_boolean_t rc = MCAPI_FALSE;
 
 	/* create a node */
-	mcapi_initialize(SLAVE_NODE_NUM,&version,&status);
+	mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
 
 	/* create endpoints */
-	ep1 = mcapi_create_endpoint (SLAVE_PORT_NUM1,&status);
+	ep1 = mcapi_endpoint_create(SLAVE_PORT_NUM1,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
 
 
 	while (1) {
 		if (icc_wait()) {
 			recv_sclchan(ep1,status,MCAPI_SUCCESS);
-			break;
 		}
 	}
 

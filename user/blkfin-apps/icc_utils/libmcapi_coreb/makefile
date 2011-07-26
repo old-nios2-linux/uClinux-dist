@@ -1,4 +1,4 @@
-VER = libmcapi-1.0
+VER = libmcapi-2.0
 CONFIGURE_BUILD := $(shell sh $(ROOTDIR)/tools/config.guess)
 CONFIGURE_OPTS := \
 	--host=bfin-elf \

@@ -1,4 +1,4 @@
-CC ?= bfin-uclinux-gcc
+CC := bfin-uclinux-gcc
 
 # we have to clobber a bunch of flags as they are normally geared towards
 # running under linux, not a bare metal environment like core b
@@ -13,9 +13,13 @@ KERNELDIR := ${PWD}/../../../../../linux-2.6.x
 all: scalar_test packet_test session_packet_test
 
 packet_test: packet.o
+	echo $(CC)
 	$(CC) $(CFLAGS) $< -o $@ > $@.map
 
 scalar_test: scalar.o
+	$(CC) $(CFLAGS) $< -o $@ > $@.map
+
+mcapi_cmd_test: mcapi_cmd.o
 	$(CC) $(CFLAGS) $< -o $@ > $@.map
 
 packet_wrap_test: wrap_test.o icc_wrap.o
@@ -23,6 +27,7 @@ packet_wrap_test: wrap_test.o icc_wrap.o
 
 session_packet_test: session_packet.o
 	$(CC) $(CFLAGS) $< -o $@ > $@.map
+
 clean:
 	rm -rf *.o *.map *.gdb packet_test session_packet_test
 

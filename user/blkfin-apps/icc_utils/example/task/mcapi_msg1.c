@@ -4,7 +4,6 @@
 */
 
 #include <mcapi.h>
-#include <mcapi_datatypes.h>
 #include <mcapi_test.h>
 #include <stdio.h>
 #include <stdlib.h> /* for malloc */
@@ -13,6 +12,8 @@
 #define BUFF_SIZE 64
 
 #define WRONG wrong(__LINE__);
+
+#define DOMAIN 0
 
 
 char buffer[BUFF_SIZE];
@@ -25,10 +26,6 @@ void send (mcapi_endpoint_t send, mcapi_endpoint_t recv,char* msg,mcapi_status_t
   int size = strlen(msg);
   int priority = 1;
 mcapi_request_t request;
-
-  if (exp_status == MCAPI_EMESS_LIMIT) {
-    size = MAX_MSG_SIZE+1;
-  }
 
   mcapi_msg_send_i(send,recv,msg,size,priority,&request,&status);
   if (status != exp_status) { WRONG}
@@ -48,7 +45,7 @@ mcapi_endpoint_t send_back;
     coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,buffer);
   }
 
- send_back = mcapi_get_endpoint(MASTER_NODE_NUM, MASTER_PORT_NUM1, &status);
+ send_back = mcapi_endpoint_get(DOMAIN,MASTER_NODE_NUM, MASTER_PORT_NUM1, MCA_INFINITE, &status);
 
   coreb_msg("endpoint=%i sendback: buf %x\n",(int)send_back, (unsigned int)buffer);
   mcapi_msg_send_i(recv,send_back,buffer,BUFF_SIZE,1,&request2,&status);
@@ -61,19 +58,21 @@ mcapi_endpoint_t send_back;
 
 void icc_task_init(int argc, char *argv[]) {
   mcapi_status_t status;
-  mcapi_version_t version;
+  mcapi_info_t version;
+  mcapi_param_t parms;
   mcapi_endpoint_t ep1,ep2;
   int i;
   mcapi_uint_t avail;
 
  coreb_msg("[%s] %d\n", __func__, __LINE__);
   /* create a node */
-  mcapi_initialize(SLAVE_NODE_NUM,&version,&status);
+  mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
+
   if (status != MCAPI_SUCCESS) { WRONG }
  coreb_msg("[%s] %d\n", __func__, __LINE__);
 
   /* create endpoints */
-  ep1 = mcapi_create_endpoint (SLAVE_PORT_NUM1,&status);
+  ep1 = mcapi_endpoint_create(SLAVE_PORT_NUM1,&status);
   if (status != MCAPI_SUCCESS) { WRONG }
   coreb_msg("ep1 %x   \n", ep1);
   /* send and recv messages on the endpoints */
@@ -85,6 +84,7 @@ while(1) {
 if (icc_wait())
  recv_loopback(ep1,status,MCAPI_SUCCESS);
 
+  coreb_msg("mcapi loop\n");
 }
 
   mcapi_finalize(&status);
