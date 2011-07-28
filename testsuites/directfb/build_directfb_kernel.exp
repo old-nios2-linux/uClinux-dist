@@ -69,10 +69,6 @@ while 1 {
             }
         }
 
-        -re "Use Landscape 320x240 instead of Portrait 240x320.*FB_BFIN_LANDSCAPE.*\\\[.*]" {
-            send "y\r"
-        }
-
         -re "SHARP LQ043 TFT LCD.*BF548 EZKIT.*\\\[.*]" {
             if { $board_type == "BF548-EZKIT" } {
                 send "Y\r"
@@ -99,7 +95,7 @@ while 1 {
 
 #Virtual terminal & frame buffer
 #Set SW5.1-SW5.3 to off, or no display on screen.
-        -re "I2C support.*I2C.*\\\[.*]" {
+        -re "I2C support \\\(I2C\\\) \\\[.*]" {
             send "Y\r"
         }
 
@@ -126,7 +122,7 @@ while 1 {
 
 #USB mouse
 #Set SW6.4 to off, to disconnect Asynchronous Memory banks 3 from the NOR Flash on the STAMP board.
-        -re "CFI Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
+        -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
             #CONFIG_MTD_PHYSMAP claims the entire Async. Memory Space
             #need to entirely disable it while using various U-Connector boards
             send "N\r"
@@ -167,9 +163,9 @@ while 1 {
 
         -re "SL811HS HCD support.*USB_SL811_HCD.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
-                send "y\r"
+                send "Y\r"
             } else {
-                send "n\r"
+                send "N\r"
             }
         }
 
@@ -229,7 +225,7 @@ while 1 {
         }
 
         -re "Event interface.*INPUT_EVDEV.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Keyboards.*INPUT_KEYBOARD.*\\\[.*]" {
