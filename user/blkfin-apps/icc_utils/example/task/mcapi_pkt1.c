@@ -16,7 +16,7 @@
 #define DOMAIN 0
 
 
-char buffer[BUFF_SIZE];
+char buffer[BUFF_SIZE] = "mcapi_pkt response";
 
 void wrong(unsigned line)
 {
@@ -41,12 +41,36 @@ void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
 	}
 }
 
+void send_pktchan(mcapi_endpoint_t send,mcapi_status_t status,int exp_status)
+{
+	mcapi_request_t request1;
+	mcapi_request_t request2;
+	mcapi_endpoint_t send_back;
+	mcapi_pktchan_send_hndl_t s1;
+	void *pbuffer = NULL;
+	size_t send_size;
+
+	/*************************** open the channels *********************/
+
+	coreb_msg("vvvvopen pktchan send\n");
+	mcapi_pktchan_send_open_i(&s1,send, &request1, &status);
+	coreb_msg("open send chan status %x   \n", status);
+
+	mcapi_pktchan_send_i(s1,buffer,BUFF_SIZE,&request1,&status);
+	if (status != exp_status) { WRONG}
+	if (status == MCAPI_SUCCESS) {
+		coreb_msg("111111111endpoint=%i has sent: [%s]\n",(int)send,buffer);
+		//              mcapi_pktchan_send_close_i(s1,&request1, &status);
+	}
+}
+
+
 void icc_task_init(int argc, char *argv[])
 {
   	mcapi_status_t status;
   	mcapi_info_t version;
   	mcapi_param_t parms;
-	mcapi_endpoint_t ep1,ep2;
+	mcapi_endpoint_t ep1,ep2,ep3;
 	int i;
 	mcapi_uint_t avail;
 	mcapi_request_t request;
@@ -60,12 +84,24 @@ void icc_task_init(int argc, char *argv[])
 	/* create endpoints */
   	ep1 = mcapi_endpoint_create(SLAVE_PORT_NUM1,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
-	coreb_msg("mcapi pktchan test ep1 %x   \n", ep1);
+	coreb_msg("mcapi pktchan test ep1 %x\n", ep1);
+
+	ep2 = mcapi_endpoint_create(SLAVE_PORT_NUM2,&status);
+	if (status != MCAPI_SUCCESS) { WRONG }
+	coreb_msg("mcapi pktchan test ep2 %x\n", ep2);
+
+	ep3 = mcapi_endpoint_get (DOMAIN,MASTER_NODE_NUM,MASTER_PORT_NUM2,MCA_INFINITE,&status);
+	if (status != MCAPI_SUCCESS) { WRONG }
+
+	coreb_msg("mcapi pktchan test ep3 %x\n", ep3);
 
 	while (1) {
 		if (icc_wait()) {
 			recv_pktchan(ep1,status,MCAPI_SUCCESS);
-			break;
+
+			mcapi_pktchan_connect_i(ep2,ep3,&request,&status);
+
+			send_pktchan(ep2,status,MCAPI_SUCCESS);
 		}
 	}
 
