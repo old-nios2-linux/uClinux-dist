@@ -7,7 +7,7 @@ PWD:= $(shell pwd)
 KERNELDIR := ${PWD}/../../../../linux-2.6.x
 ICC_INCLUDE := ${PWD}/../include
 
-CFLAGS  := -mcpu=bf561 -mlong-calls -mmulticore -mcoreb -L${ICC_INCLUDE} -I${ICC_INCLUDE} -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/drivers/staging/icc/include -DCONFIG_BF561 -D__KERNEL__
+CFLAGS  := -mcpu=bf561 -mlong-calls -mmulticore -mcoreb -L${ICC_INCLUDE} -I${ICC_INCLUDE} -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/arch/blackfin/include/generated  -I${KERNELDIR}/drivers/staging/icc/include -DCONFIG_BF561 -D__KERNEL__
 LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 all: icc
