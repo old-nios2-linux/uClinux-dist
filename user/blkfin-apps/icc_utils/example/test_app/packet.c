@@ -89,7 +89,7 @@ static void send_test(int fd, const char *optarg)
 
 	ioctl(fd, CMD_SM_SEND, &pkt);
 
-	memset(buf, 0, 64);
+	memset(payload, 0, 64);
 	ioctl(fd, CMD_SM_RECV, &pkt);
 
 	l3h = (struct l3_proto_head *)pkt.buf;
