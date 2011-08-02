@@ -2,62 +2,81 @@
 
 echo "$0:       Start rcp.sh at `date`"
 
-mpu_dir=$PWD
-ltp_ver=ltp-full-20081130
-ltp_src_dir=$mpu_dir/$ltp_ver
-ltp_testcases_dir=$ltp_src_dir/testcases/bin
+CWD=`pwd`
 cvs_server_addr=10.99.29.20
+LTP_PATCH=ltp.patch
+LTP_SUB_DIR=ltp-full-20101031
 
 
-#Check out ltp source from svn server
-if [ -d $ltp_src_dir ]
+if [ -d $LTP_SUB_DIR ]
 then
-    rm -fr $ltp_src_dir
+    rm -rf $LTP_SUB_DIR
+    echo "$0:	Clean directory"
 fi
-echo "$0:       Checking out $ltp_ver from SVN"
-svn -q co svn://$cvs_server_addr/ltp/trunk/$ltp_ver
+
+
+echo "$0:	Checking out $LTP_SUB_DIR"
+svn -q co svn://$cvs_server_addr/ltp/trunk/$LTP_SUB_DIR
 if [ $? -ne 0 ]
 then
-    echo "$0:       Error, SVN checkout failed"
+    echo "$0:	Error, SVN checkout failed"
     exit 1
 fi
 
 
-#Apply patch of mpu related test cases in ltp source dir
-echo "$0:       Apply patch to ltp source"
-patch -d $ltp_src_dir -p0 < ltp_Makefile.patch
+# Go to working directory
+echo "$0:	Go to working directory"
+cd $LTP_SUB_DIR
+
+
+# configure ltp
+echo "$0:	Configure ..."
+./configure --prefix=$CWD/$LTP_SUB_DIR --host=bfin-uclinux --build=i686-pc-linux-gnu > /dev/null 2>&1
 if [ $? -ne 0 ]
 then
-    echo "$0:       Error, apply ltp patch failed"
+    echo "$0:	Error, configure failed"
     exit 1
 fi
 
 
-#Build ltp testsuites and install
-echo "$0:       Build ltp source"
-make -C $ltp_src_dir -s uclinux > /dev/null 2>&1
+# Patch for Makefiles
+echo "$0:	Apply patch"
+patch -p0 < ../$LTP_PATCH
 if [ $? -ne 0 ]
 then
-    echo "$0:       Error, make failed" 
+    echo "$0:	Error, apply patch failed"
     exit 1
 fi
 
-echo "$0:       Install ltp test cases"
-make -C $ltp_src_dir -s uclinux_install > /dev/null 2>&1
+
+# Build ltp testsuites
+echo "$0:	Make ..."
+make UCLINUX=1 > /dev/null 2>&1
 if [ $? -ne 0 ]
 then
-    echo "$0:       Error, make install failed" 
+    echo "$0:	Error, make failed"
     exit 1
 fi
-echo "$0:       LTP build done"
 
+
+echo "$0:	Make install ..."
+make UCLINUX=1 install > /dev/null 2>&1
+if [ $? -ne 0 ]
+then
+    echo "$0:	Error, make install failed"
+    exit 1
+fi
+echo "$0:	LTP build done"
+
+
+cd $CWD
 
 #Copy test cases to mpu local folder
 echo "$0:       Copy mpu test cases to board"
 rm -fr testcase
 mkdir -p testcase
 
-cp $ltp_testcases_dir/mmap1 $ltp_testcases_dir/mmap0[2-8] testcase
+cp $LTP_SUB_DIR/testcases/bin/mmap1 $LTP_SUB_DIR/testcases/bin/mmap0[2-8] testcase
 if [ $? != 0 ] ; then
     echo "copy mpu test cases failed"
     exit 1
@@ -71,4 +90,5 @@ fi
 
 echo "$0:       Finish rcp.sh at `date`"
 echo "rcp pass"
+
 exit 0
