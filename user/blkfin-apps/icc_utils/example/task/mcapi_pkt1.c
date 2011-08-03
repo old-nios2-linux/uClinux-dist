@@ -20,6 +20,7 @@ char buffer[BUFF_SIZE] = "mcapi_pkt response";
 
 void wrong(unsigned line)
 {
+	coreb_msg("WRONG: line==%i \n",line);
 }
 
 void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
@@ -38,6 +39,7 @@ void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
 	if (status != exp_status) { WRONG}
 	if (status == MCAPI_SUCCESS) {
 		coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,pbuffer);
+		mcapi_pktchan_recv_close_i(r1,&request1, &status);
 	}
 }
 
@@ -52,15 +54,15 @@ void send_pktchan(mcapi_endpoint_t send,mcapi_status_t status,int exp_status)
 
 	/*************************** open the channels *********************/
 
-	coreb_msg("vvvvopen pktchan send\n");
+	coreb_msg("open pktchan send\n");
 	mcapi_pktchan_send_open_i(&s1,send, &request1, &status);
 	coreb_msg("open send chan status %x   \n", status);
 
 	mcapi_pktchan_send_i(s1,buffer,BUFF_SIZE,&request1,&status);
 	if (status != exp_status) { WRONG}
 	if (status == MCAPI_SUCCESS) {
-		coreb_msg("111111111endpoint=%i has sent: [%s]\n",(int)send,buffer);
-		//              mcapi_pktchan_send_close_i(s1,&request1, &status);
+		coreb_msg("endpoint=%i has sent: [%s]\n",(int)send,buffer);
+		mcapi_pktchan_send_close_i(s1,&request1, &status);
 	}
 }
 
