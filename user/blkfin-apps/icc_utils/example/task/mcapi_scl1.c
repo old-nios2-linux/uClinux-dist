@@ -18,12 +18,10 @@
 #define WRONG wrong(__LINE__);
 void wrong(unsigned line)
 {
-	coreb_msg("WRONG: line==%i \n",line);
 }
 
 mcapi_boolean_t send (mcapi_sclchan_send_hndl_t send_handle, mcapi_endpoint_t recv,unsigned long long data,uint32_t size,mcapi_status_t status,int exp_status) {
   mcapi_boolean_t rc = MCAPI_FALSE;
-  uint64_t size_mask; 
   switch (size) {
   case (8): mcapi_sclchan_send_uint8(send_handle,data,&status); break;
   case (16): mcapi_sclchan_send_uint16(send_handle,data,&status); break;
@@ -32,9 +30,7 @@ mcapi_boolean_t send (mcapi_sclchan_send_hndl_t send_handle, mcapi_endpoint_t re
   default: coreb_msg(stderr,"ERROR: bad data size in call to send\n");
   };
   if (status == MCAPI_SUCCESS) {
-    coreb_msg("endpoint=%i has already sent %i byte(s): [%llu]\n",(int)send_handle,(int)size/8,data);
-  }else {
-    coreb_msg("endpoint=%i hasn't been sent %i byte(s): [%llu]\n",(int)send_handle,(int)size/8,data);
+    coreb_msg("endpoint=%i has sent %i byte(s): [%llu]\n",(int)send_handle,(int)size/8,data);
   }
   if (status == exp_status) {
     rc = MCAPI_TRUE;
@@ -70,7 +66,7 @@ mcapi_boolean_t recv (mcapi_sclchan_recv_hndl_t recv_handle,uint32_t size,mcapi_
   return rc;
 }
 
-void recv_sclchan(mcapi_endpoint_t re,uint32_t size,mcapi_status_t status,int exp_status)
+void recv_sclchan(mcapi_endpoint_t re,int size,mcapi_status_t status,int exp_status)
 {
 	mcapi_sclchan_recv_hndl_t r1;
 	mcapi_request_t request;
@@ -78,28 +74,10 @@ void recv_sclchan(mcapi_endpoint_t re,uint32_t size,mcapi_status_t status,int ex
 	unsigned long long exp_data = 0x1122334455667788ULL;
 
 	mcapi_sclchan_recv_open_i(&r1 /*recv_handle*/,re, &request, &status);
-	rc = recv(r1, 64, status, exp_status, exp_data);
+	rc = recv(r1, size, status, exp_status, exp_data);
 	if (rc == MCAPI_FALSE)
 		coreb_msg("scl recv wrong data\n");
 	mcapi_sclchan_recv_close_i(r1,&request,&status); 
-
-}
-
-void send_sclchan(mcapi_endpoint_t re,uint32_t size,mcapi_status_t status,int exp_status)
-{
-	  mcapi_sclchan_send_hndl_t s1;
-	  mcapi_request_t request;
-	  int rc;
-	  unsigned long long data = 0x1122334455667788ULL;
-	
-	  mcapi_sclchan_send_open_i(&s1 /*send_handle*/,re, &request, &status);
-     	  coreb_msg("before sending data\n");
-	  if (status != exp_status) { WRONG }
-	  rc = send(s1,re, data, size, status, exp_status );
-     	  coreb_msg("after sending data\n");
-	  if (rc == MCAPI_FALSE)
-          coreb_msg("scl send wrong data\n");
-	  mcapi_sclchan_send_close_i(s1,&request,&status);
 
 }
 
@@ -116,13 +94,13 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_sclchan_send_hndl_t s1;
 	mcapi_sclchan_recv_hndl_t r1;
 	mcapi_uint_t avail;
-	int s=0;
-	int i;
-//	int sizes[NUM_SIZES] = {8,16,32,64};
-	int sizes[NUM_SIZES] = {64,64,64,64};
+	int s;
+	int i = 0;
+	int sizes[NUM_SIZES] = {8,16,32,64};
 	size_t size;
 	mcapi_info_t version;
 	mcapi_boolean_t rc = MCAPI_FALSE;
+	uint64_t test_pattern = 0x1122334455667788ULL;
 
 	/* create a node */
 	mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
@@ -131,31 +109,30 @@ void icc_task_init(int argc, char *argv[])
 	/* create endpoints */
 	ep1 = mcapi_endpoint_create(SLAVE_PORT_NUM1,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
+	coreb_msg("mcapi sclchan test ep1 %x\n", ep1);
 
-	ep2 = mcapi_endpoint_create (SLAVE_PORT_NUM2,&status);
+	ep2 = mcapi_endpoint_create(SLAVE_PORT_NUM2,&status);
+	if (status != MCAPI_SUCCESS) { WRONG }
+	coreb_msg("mcapi sclchan test ep2 %x\n", ep2);
+
+	ep3 = mcapi_endpoint_get (DOMAIN,MASTER_NODE_NUM,MASTER_PORT_NUM2,MCA_INFINITE,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
 
-	ep3 = mcapi_endpoint_get(DOMAIN,MASTER_NODE_NUM, MASTER_PORT_NUM2,MCA_INFINITE, &status);
-	if (status != MCAPI_SUCCESS) { WRONG }
+	coreb_msg("mcapi sclchan test ep3 %x\n", ep3);
 
-
-//	/*************************** connect the channels *********************/
-//	mcapi_sclchan_connect_i(ep2,ep3,&request, &status);
-//	if (status != MCAPI_SUCCESS) { WRONG }
 
 	while (1) {
 		if (icc_wait()) {
-                        coreb_msg("This the %i message received \n",s);
-			recv_sclchan(ep1,sizes[s],status,MCAPI_SUCCESS);
-	
-			/*************************** connect the channels *********************/
-			mcapi_sclchan_connect_i(ep2,ep3,&request, &status);
-			if (status != MCAPI_SUCCESS) { WRONG }
+			recv_sclchan(ep1, sizes[i++],status,MCAPI_SUCCESS);
+			if (i == NUM_SIZES) {
+				mcapi_sclchan_connect_i(ep2,ep3,&request,&status);
 
-			send_sclchan(ep2,sizes[s],status,MCAPI_SUCCESS);
-			s=s+1;
-			if (s == 3)
-			break;
+				mcapi_sclchan_send_open_i(&s1,ep2, &request, &status);
+
+				send(s1,ep3,test_pattern,64,status,MCAPI_SUCCESS);
+
+				break;
+			}
 		}
 	}
 
