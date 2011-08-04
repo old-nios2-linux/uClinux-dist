@@ -1056,20 +1056,22 @@ void icc_run_task(void)
 	coreb_idle();
 }
 
-int sm_get_session_status(uint32_t session_idx, uint32_t *avail, uint32_t *uncomplete, uint32_t *status)
+int sm_get_session_status(uint32_t session_idx, struct sm_session_status *status)
 {
-	int ret = 0;
 	struct sm_session *session = sm_index_to_session(session_idx);
 	if (!session)
 		return -EINVAL;
-
-	if (avail)
-		*avail = session->n_avail;
-	if (uncomplete)
-		*uncomplete = session->n_uncompleted;
-	if (status)
-		*status = session->flags;
-	return ret;
+	if (!status)
+		return -EINVAL;
+	memset(status, 0, sizeof(*status));
+	status->n_avail = session->n_avail;
+	status->n_uncompleted = session->n_uncompleted;
+	status->local_ep = session->local_ep;
+	status->remote_ep = session->remote_ep;
+	status->type = session->type;
+	status->pid = session->pid;
+	status->flags = session->flags;
+	return 0;
 }
 
 
@@ -1139,9 +1141,8 @@ uint32_t msg_handle(void)
 	struct sm_msg *msg;
 	struct sm_session *session;
 	int pending;
-	struct sm_session_status sstatus;
 	sm_uint32_t index;
-	uint32_t avail = 0;
+	struct sm_session_status status;
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
 	if (icc_handle_scalar_cmd(msg)) {
@@ -1167,9 +1168,10 @@ uint32_t msg_handle(void)
 	if (session) {
 		if (session->proto_ops->recvmsg) {
 			session->proto_ops->recvmsg(msg, session);
-			sm_get_session_status(index, &avail, NULL, NULL);
-			if (avail)
-				coreb_msg("index %d avail %d\n", index, avail);
+			memset(&status, 0, sizeof(status));
+			sm_get_session_status(index, &status);
+			if (status.n_avail)
+				coreb_msg("index %d avail %d\n", index, status.n_avail);
 		} else
 			coreb_msg("unsupported protocol\n");
 
@@ -1177,6 +1179,6 @@ uint32_t msg_handle(void)
 		coreb_msg("discard msg type\n", msg->type);
 		sm_message_dequeue(cpu, msg);
 	}
-	return avail;
+	return status.n_avail;
 }
 

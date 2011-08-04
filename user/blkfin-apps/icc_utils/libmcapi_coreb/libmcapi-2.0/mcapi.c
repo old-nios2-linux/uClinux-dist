@@ -1968,10 +1968,13 @@ void mcapi_sclchan_send_open_i(
     *mcapi_status = MCAPI_ERR_PARAMETER;
   } else {
     if (! mcapi_trans_valid_endpoint(send_endpoint) ) {
+	coreb_msg("  %s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_ENDP_INVALID;
     } else if  (mcapi_trans_channel_type (send_endpoint) == MCAPI_PKT_CHAN){
+	coreb_msg("  %s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_CHAN_TYPE;
     } else if (! mcapi_trans_send_endpoint (send_endpoint)) {
+	coreb_msg("  %s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_CHAN_DIRECTION;
     }
     mcapi_trans_sclchan_send_open_i(send_handle,send_endpoint,request,mcapi_status); 
@@ -2017,6 +2020,7 @@ void mcapi_sclchan_send_uint64(
   /* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
   *mcapi_status = MCAPI_SUCCESS; 
   if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
+	coreb_msg("  %s %d\n", __func__, __LINE__);
     *mcapi_status = MCAPI_ERR_CHAN_INVALID;
   }  else if (!mcapi_trans_sclchan_send (send_handle,dataword,8)) {
     *mcapi_status = MCAPI_ERR_MEM_LIMIT;  /* MR: added this  */

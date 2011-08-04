@@ -481,8 +481,6 @@ channel_type mcapi_trans_channel_type (mcapi_endpoint_t endpoint)
 	if (index >= MCAPI_MAX_ENDPOINTS) {
 		return MCAPI_FALSE;
 	}
-
-	coreb_msg("%s %d status %d\n", __func__, index, c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.channel_type);
 	return c_db->domains[0].nodes[n].node_d.endpoints[index].recv_queue.channel_type;
 }
 
@@ -495,7 +493,7 @@ mcapi_boolean_t mcapi_trans_channel_connected  (mcapi_endpoint_t endpoint)
 	int index;
 	int ret;
 	uint32_t domain_index = 0;
-	mcapi_uint_t status = 0;
+	struct sm_session_status status;
 
 	mcapi_trans_decode_handle_internal(endpoint,&d,&n,&e);
 
@@ -509,15 +507,18 @@ mcapi_boolean_t mcapi_trans_channel_connected  (mcapi_endpoint_t endpoint)
 	if (rc)
 		return rc;
 	else {
-		ret = sm_get_session_status(index, NULL, NULL, &status);
+		ret = sm_get_session_status(index, &status);
 		if (ret)
 			return MCAPI_FALSE;
-		mcapi_dprintf(1, "%s status = %d\n", __func__, status);
 
-		c_db->domains[domain_index].nodes[0].node_d.endpoints[index].connected = status;
-		if (status == 1)
+		if (status.flags == MCAPI_TRUE) {
+			/* update ep status */
+			c_db->domains[0].nodes[0].node_d.endpoints[index].connected = MCAPI_TRUE;
+			c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt = status.remote_ep;
+
+			coreb_msg("%s %d %d remote%d\n", __func__, __LINE__, status.flags, status.remote_ep);
 			return MCAPI_TRUE;
-		else
+		} else
 			return MCAPI_FALSE;
 	}
 }
@@ -599,7 +600,7 @@ mcapi_boolean_t mcapi_trans_connected(mcapi_endpoint_t endpoint)
 	int rc;
 	int ret;
 	uint32_t domain_index = 0;
-	mcapi_uint_t status = 0;
+	struct sm_session_status status;
 
 	mcapi_trans_decode_handle_internal(endpoint,&d,&n,&e);
 
@@ -613,16 +614,18 @@ mcapi_boolean_t mcapi_trans_connected(mcapi_endpoint_t endpoint)
 	if (rc)
 		return rc;
 	else {
-		coreb_msg("%s %d\n", __func__, __LINE__);
-		ret = sm_get_session_status(index, NULL, NULL, &status);
+		ret = sm_get_session_status(index, &status);
 		if (ret)
 			return MCAPI_FALSE;
 
-		coreb_msg("%s %d %d\n", __func__, __LINE__, status);
-		mcapi_dprintf(1, "%s status = %d\n", __func__, status);
-		if (status == 1)
+		coreb_msg("%s %d %d remote%d\n", __func__, __LINE__, status.flags, status.remote_ep);
+		if (status.flags == MCAPI_TRUE) {
+			/* update ep status */
+			c_db->domains[0].nodes[0].node_d.endpoints[index].connected = MCAPI_TRUE;
+			c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt = status.remote_ep;
+
 			return MCAPI_TRUE;
-		else
+		} else
 			return MCAPI_FALSE;
 	}
 }
@@ -1008,7 +1011,7 @@ mcapi_uint_t mcapi_trans_msg_available( mcapi_endpoint_t receive_endpoint)
 	uint16_t rd,rn,re;
 	int index;
 	int ret;
-	mcapi_uint_t avail = 0;
+	struct sm_session_status status;
 	mcapi_trans_decode_handle_internal(receive_endpoint,&rd,&rn,&re);
 	index = mcapi_trans_get_port_index(rn, re);
 
@@ -1016,11 +1019,11 @@ mcapi_uint_t mcapi_trans_msg_available( mcapi_endpoint_t receive_endpoint)
 		return -EINVAL;
 	}
 
-	ret = sm_get_session_status(index, &avail, NULL, NULL);
+	ret = sm_get_session_status(index, &status);
 	if (ret)
 		return ret;
-	mcapi_dprintf(1, "%s avail = %d\n", __func__, avail);
-	return avail;
+	mcapi_dprintf(1, "%s avail = %d\n", __func__, status.n_avail);
+	return status.n_avail;
 }
 
 
@@ -1108,6 +1111,7 @@ void mcapi_trans_pktchan_send_open_i( mcapi_pktchan_send_hndl_t* send_handle, mc
 		/* has the channel been connected yet? */
 		if ( c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.channel_type == MCAPI_PKT_CHAN) {
 			completed = MCAPI_TRUE;
+			*mcapi_status = MCAPI_TRUE;
 		}
 
 	}
@@ -1291,7 +1295,6 @@ void mcapi_trans_sclchan_connect_i( mcapi_endpoint_t  send_endpoint, mcapi_endpo
 	mcapi_uint_t status = 0;
 	mcapi_trans_decode_handle_internal(send_endpoint,&sd,&sn,&se);
 	mcapi_trans_decode_handle_internal(receive_endpoint,&rd,&rn,&re);
-	mcapi_dprintf(1, "%s se %d re %d rn= %d\n", __func__, se, re, rn);
 	index = mcapi_trans_get_port_index(sn, se);
 	if (index >= MCAPI_MAX_ENDPOINTS) {
 		*mcapi_status = MCAPI_FALSE;
@@ -1302,6 +1305,7 @@ void mcapi_trans_sclchan_connect_i( mcapi_endpoint_t  send_endpoint, mcapi_endpo
 		*mcapi_status = MCAPI_FALSE;
 	*mcapi_status = MCAPI_TRUE;
 	/* update the send endpoint */
+	coreb_msg("%s index %d ep%d\n", __func__, index, receive_endpoint);
 	c_db->domains[0].nodes[0].node_d.endpoints[index].connected = MCAPI_TRUE;
 	c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt = receive_endpoint;
 	c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.channel_type = MCAPI_SCL_CHAN;
@@ -1354,6 +1358,7 @@ void mcapi_trans_sclchan_send_open_i( mcapi_sclchan_send_hndl_t* send_handle, mc
 		return;
 	}
 
+	coreb_msg("  %s %d\n",__func__, __LINE__);
 	if (!completed) {
 
 		/* mark the endpoint as open */
@@ -1365,6 +1370,7 @@ void mcapi_trans_sclchan_send_open_i( mcapi_sclchan_send_hndl_t* send_handle, mc
 		/* has the channel been connected yet? */
 		if ( c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.channel_type == MCAPI_SCL_CHAN) {
 			completed = MCAPI_TRUE;
+			*mcapi_status = MCAPI_TRUE;
 		}
 
 	}
@@ -1432,15 +1438,18 @@ mcapi_boolean_t mcapi_trans_sclchan_send( mcapi_sclchan_send_hndl_t send_handle,
 	int index;
 	int rc = MCAPI_FALSE;
 
-	mcapi_dprintf(2,"  mcapi_trans_sclchan_send send_handle=%x\n",send_handle);
 
 	mcapi_trans_decode_handle_internal(send_handle,&sd,&sn,&se);
+
+	coreb_msg("mcapi_trans_sclchan_send %d %d %d %d\n",sd, sn, se, c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt);
 	index = mcapi_trans_get_port_index(sn, se);
 	if (index >= MCAPI_MAX_ENDPOINTS) {
 		return MCAPI_FALSE;
 	}
 
-	mcapi_trans_decode_handle_internal(c_db->domains[0].nodes[sn].node_d.endpoints[index].recv_queue.recv_endpt,&rd,&rn,&re);
+	mcapi_trans_decode_handle_internal(c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt,&rd,&rn,&re);
+
+	coreb_msg("send_handle=%x index%d size %d %d %d %d\n",send_handle, index, size,rd,rn,re);
 
 	switch (size) {
 	case 1:
@@ -1493,9 +1502,13 @@ mcapi_boolean_t mcapi_trans_sclchan_recv( mcapi_sclchan_recv_hndl_t receive_hand
 	case 1:
 	case 2:
 	case 4:
-		*data = scalar0;
+		*data = (uint64_t)scalar0;
+		break;
 	case 8:
 		*data = ((uint64_t)scalar0) << 32 | scalar1;
+		break;
+	default:
+		return MCAPI_FALSE;
 	}
 
 	coreb_msg("[%llx] size %d received_size %d\n", *data, size, received_size);
@@ -1516,7 +1529,7 @@ mcapi_boolean_t mcapi_trans_test_i( mcapi_request_t* request, size_t* size,mcapi
 	int ret;
 	mcapi_uint_t avail = 0;
 	mcapi_uint_t uncomplete = 0;
-	mcapi_uint_t status = 0;
+	struct sm_session_status status;
 
 #if 0
 	if (request->valid == MCAPI_FALSE) {
@@ -1537,16 +1550,16 @@ mcapi_boolean_t mcapi_trans_test_i( mcapi_request_t* request, size_t* size,mcapi
 			return MCAPI_FALSE;
 		}
 
-		ret = sm_get_session_status(index, &avail, &uncomplete, &status);
+		ret = sm_get_session_status(index, &status);
 		if (ret)
 			return ret;
 
 		switch (request->type) {
 			case (RECV) :
-				if (avail)
+				if (status.n_avail)
 					rc = MCAPI_TRUE;
 			case (SEND) :
-				if (!uncomplete)
+				if (!status.n_uncompleted)
 					rc = MCAPI_TRUE;
 			case (GET_ENDPT) :
 			default:
