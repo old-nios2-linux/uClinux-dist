@@ -115,7 +115,7 @@ if { $argc >= 2} {
 }
   send_log "\n#### cpu is $cpu\n"
 
-set revision       0.0
+set revision       "default"
 set binary_format  flat
 set allocator      slab\(p2\)
 set icache         on
