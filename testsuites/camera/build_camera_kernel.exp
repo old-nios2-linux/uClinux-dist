@@ -75,10 +75,6 @@ while 1 {
             }
         }
 
-        -re "Blackfin Generic PPI Driver.*BFIN_PPI.*\\\[.*]" {
-            send "Y\r"
-        }
-
         -re "Uncached DMA region.*Enable 4M DMA region.*DMA_UNCACHED_4M.*\[cC]hoice\\\[.*]:" {
             send "1\r"
         }
@@ -116,14 +112,6 @@ while 1 {
         }
 
         -re "Blackfin Video Capture Driver.*VIDEO_BLACKFIN_CAPTURE.*\\\[.*]" {
-            if { $driver == "ADV7183" } {
-                send "Y\r"
-            } else {
-                send "M\r"
-            }
-        }
-
-        -re "Blackfin PPI Driver.*VIDEO_BLACKFIN_PPI.*\\\[.*]" {
             if { $driver == "ADV7183" } {
                 send "Y\r"
             } else {

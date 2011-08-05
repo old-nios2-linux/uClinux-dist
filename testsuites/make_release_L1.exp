@@ -107,8 +107,8 @@ while 1 {
         }
 
         -re "Use L1 memory for rx/tx packets.*BFIN_MAC_USE_L1.*\\\[.*]" {
-            if { $file_name == "./build_g729_kernel.exp" } {
-                send "n\r"
+            if { $file_name == "./build_g729_kernel.exp" || $file_name == "./build_camera_kernel.exp" } {
+                send "N\r"
             } else {
                 send "\r"
             }
