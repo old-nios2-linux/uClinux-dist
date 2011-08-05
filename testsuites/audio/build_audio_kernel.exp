@@ -33,15 +33,6 @@ if { $audio_dev == "audio_ad73322" } {
     }
 }
 
-if { $audio_dev == "audio_ad1938" } {
-    step "Change settings for ad1938 driver."
-    cd $uclinux_path/linux-2.6.x
-    if [ catch {exec patch -p0 < $uclinux_path/testsuites/audio/ad1938.patch} ] {
-        send_user "$errorInfo\n"
-        exit
-    }
-}
-
 cd $uclinux_path/testsuites
 step "Make config"
 source make_default_config.exp
