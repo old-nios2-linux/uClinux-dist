@@ -133,7 +133,7 @@ generic_inc="$ksrc/include/asm-generic"
 
 # easy: output is exactly what we want
 ebegin "errno list"
-sh ./errnoent.sh "$ksrc/include/linux"/*errno*.h "$ksrc/include/asm-generic"/*errno*.h "$arch_inc"/*errno*.h | cpp_filter > errnoent.h
+sh ./errnoent.sh "$ksrc/include/linux"/*errno*.h "$ksrc/include/asm-generic"/*errno*.h "$ksrc/arch/$karch/include/generated/asm"/*errno*.h | cpp_filter > errnoent.h
 cat $(get_header errnoent.h) | cpp_filter > errnoent.h.old
 cmp -s errnoent.h errnoent.h.old
 eend $? errnoent.h errnoent.h.old
