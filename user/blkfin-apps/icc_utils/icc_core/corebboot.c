@@ -76,7 +76,7 @@ void udelay(sm_uint32_t count)
 
 void delay(sm_uint32_t count)
 {
-	sm_uint32_t ncount = 1000 * count;
+	sm_uint32_t ncount = 500 * count;
 	while(ncount--)
 		udelay(10000);
 }
@@ -137,21 +137,22 @@ void platform_clear_ipi(unsigned int cpu, int irq)
 
 #define DEBUG
 #ifdef DEBUG
+# define MSG_LINE 128
 void coreb_msg(char *fmt, ...)
 {
 	va_list args;
 	int i;
-	char buf[64] = "COREB: ";
+	char buf[MSG_LINE] = "COREB: ";
 	struct sm_message_queue *queue = (struct sm_message_queue *)MSGQ_START_ADDR;
 	struct sm_msg *msg = &queue->messages[0];
 	sm_atomic_t sent, received;
 	sent = sm_atomic_read(&queue->sent);
 	received = sm_atomic_read(&queue->received);
-	void *p = (void *)DEBUG_MSG_BUF_ADDR + (sent % SM_MSGQ_LEN) * 64;
+	void *p = (void *)DEBUG_MSG_BUF_ADDR + (sent % SM_MSGQ_LEN) * MSG_LINE;
 	va_start(args, fmt);
 	i = vsprintf(buf + 7, fmt, args);
 	va_end(args);
-	memset(p, 0, 64);
+	memset(p, 0, MSG_LINE);
 	SSYNC();
 	strcpy(p, buf);
 	while((sent - received) >= (SM_MSGQ_LEN - 1)) {
