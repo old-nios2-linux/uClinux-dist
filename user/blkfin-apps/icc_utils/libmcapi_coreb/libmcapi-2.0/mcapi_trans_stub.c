@@ -1438,15 +1438,13 @@ mcapi_boolean_t mcapi_trans_sclchan_send( mcapi_sclchan_send_hndl_t send_handle,
 	int index;
 	int rc = MCAPI_FALSE;
 
-
 	mcapi_trans_decode_handle_internal(send_handle,&sd,&sn,&se);
-
-	coreb_msg("mcapi_trans_sclchan_send %d %d %d %d\n",sd, sn, se, c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt);
 	index = mcapi_trans_get_port_index(sn, se);
 	if (index >= MCAPI_MAX_ENDPOINTS) {
 		return MCAPI_FALSE;
 	}
 
+	coreb_msg("mcapi_trans_sclchan_send %d %d %d %d\n",sd, sn, se, c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt);
 	mcapi_trans_decode_handle_internal(c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt,&rd,&rn,&re);
 
 	coreb_msg("send_handle=%x index%d size %d %d %d %d\n",send_handle, index, size,rd,rn,re);

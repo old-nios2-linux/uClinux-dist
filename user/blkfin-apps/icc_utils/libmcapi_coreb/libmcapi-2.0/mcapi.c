@@ -2065,21 +2065,22 @@ void mcapi_sclchan_send_uint32(
  	MCAPI_IN mcapi_uint32_t dataword, 
  	MCAPI_OUT mcapi_status_t* mcapi_status)
 {
-  /* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
-  if (! mcapi_trans_valid_status_param(mcapi_status)) {
-    if (mcapi_status != MCAPI_NULL) {
-      *mcapi_status = MCAPI_ERR_PARAMETER;
-    }
-  } else {
-    *mcapi_status = MCAPI_SUCCESS; 
-    if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
-      *mcapi_status = MCAPI_ERR_CHAN_INVALID;
-    }  else if (!mcapi_trans_sclchan_send (send_handle,dataword,4)) {
-      *mcapi_status = MCAPI_ERR_MEM_LIMIT;
-    } 
-  }
+	uint64_t tmp = (uint64_t)dataword;
+	/* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
+	if (! mcapi_trans_valid_status_param(mcapi_status)) {
+		if (mcapi_status != MCAPI_NULL) {
+			*mcapi_status = MCAPI_ERR_PARAMETER;
+		}
+	} else {
+		*mcapi_status = MCAPI_SUCCESS; 
+		if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
+			*mcapi_status = MCAPI_ERR_CHAN_INVALID;
+		}  else if (!mcapi_trans_sclchan_send (send_handle,tmp,4)) {
+			*mcapi_status = MCAPI_ERR_MEM_LIMIT;
+		} 
+	}
 }
- 
+
 
 /************************************************************************
 mcapi_sclchan_send_uint16 - sends a (connected) 16-bit scalar on a channel.
@@ -2112,17 +2113,19 @@ MCAPI_ERR_PARAMETER
 ***********************************************************************/
 
 void mcapi_sclchan_send_uint16(
- 	MCAPI_IN mcapi_sclchan_send_hndl_t send_handle,  
- 	MCAPI_IN mcapi_uint16_t dataword, 
- 	MCAPI_OUT mcapi_status_t* mcapi_status)
+		MCAPI_IN mcapi_sclchan_send_hndl_t send_handle,  
+		MCAPI_IN mcapi_uint16_t dataword, 
+		MCAPI_OUT mcapi_status_t* mcapi_status)
 { 
-  /* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
-  *mcapi_status = MCAPI_SUCCESS;
-  if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
-    *mcapi_status = MCAPI_ERR_CHAN_INVALID;
-  }  else if (!mcapi_trans_sclchan_send (send_handle,dataword,2)) {
-    *mcapi_status = MCAPI_ERR_MEM_LIMIT; 
-  }
+	uint64_t tmp = (uint64_t)dataword;
+	/* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
+	/* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
+	*mcapi_status = MCAPI_SUCCESS;
+	if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
+		*mcapi_status = MCAPI_ERR_CHAN_INVALID;
+	}  else if (!mcapi_trans_sclchan_send (send_handle,tmp,2)) {
+		*mcapi_status = MCAPI_ERR_MEM_LIMIT; 
+	}
 }
 
 
@@ -2160,13 +2163,15 @@ void mcapi_sclchan_send_uint8(
  	MCAPI_IN mcapi_uint8_t dataword, 
         MCAPI_OUT mcapi_status_t* mcapi_status)
 {
-  /* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
-  *mcapi_status = MCAPI_SUCCESS;
-  if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
-    *mcapi_status = MCAPI_ERR_CHAN_INVALID;
-  }  else if (!mcapi_trans_sclchan_send (send_handle,dataword,1)) {
-    *mcapi_status = MCAPI_ERR_MEM_LIMIT;    
-  }
+	uint64_t tmp = (uint64_t)dataword;
+	coreb_msg("%llx tmp\n", tmp);
+	/* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
+	*mcapi_status = MCAPI_SUCCESS;
+	if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
+		*mcapi_status = MCAPI_ERR_CHAN_INVALID;
+	}  else if (!mcapi_trans_sclchan_send (send_handle,tmp,1)) {
+		*mcapi_status = MCAPI_ERR_MEM_LIMIT;    
+	}
 }
 
 
@@ -2262,7 +2267,7 @@ mcapi_uint32_t mcapi_sclchan_recv_uint32(
   } else if (! mcapi_trans_sclchan_recv (receive_handle,&dataword,exp_size)) {
     *mcapi_status = MCAPI_ERR_SCL_SIZE;
   } 
-  return dataword;
+  return (uint32_t)dataword;
 }
 
 
@@ -2312,7 +2317,7 @@ mcapi_uint16_t mcapi_sclchan_recv_uint16(
   } else if (! mcapi_trans_sclchan_recv (receive_handle,&dataword,exp_size)) {  
     *mcapi_status = MCAPI_ERR_SCL_SIZE;
   } 
-  return dataword;
+  return (uint16_t)dataword;
 }
 
 
@@ -2361,7 +2366,7 @@ mcapi_uint8_t mcapi_sclchan_recv_uint8(
   } else if (! mcapi_trans_sclchan_recv (receive_handle,&dataword,exp_size)) {
     *mcapi_status = MCAPI_ERR_SCL_SIZE;
   }
-  return dataword;
+  return (uint8_t)dataword;
 }
 
 

@@ -129,7 +129,7 @@ void icc_task_init(int argc, char *argv[])
 
 				mcapi_sclchan_send_open_i(&s1,ep2, &request, &status);
 
-				send(s1,ep3,test_pattern,64,status,MCAPI_SUCCESS);
+				send(s1,ep3,test_pattern,8,status,MCAPI_SUCCESS);
 
 				break;
 			}
