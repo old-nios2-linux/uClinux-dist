@@ -138,6 +138,7 @@ config USER_BF561_COREBLD
 	bool "BF561 Core B support tools"
 config USER_BF561_ICC
 	bool "BF561 ICC utils"
+	default N
 config USER_DSP_BRIDGE
 	bool "dsp_bridge for bf561"
 	help
