@@ -246,7 +246,7 @@ unsigned int elf_sym_addr(void *buf, const char *symname)
 	/* make sure we have a valid ELF */
 	if (!IS_ELF(ehdr->e_ident) || ehdr->e_machine != EM_BLACKFIN) {
 		fprintf(stderr, "file is not a Blackfin ELF file\n");
-		return 1;
+		return -ENOENT;
 	}
 
 	ElfW(Shdr) *shdr = (ElfW(Shdr) *)(buf + ehdr->e_shoff);
@@ -265,7 +265,7 @@ unsigned int elf_sym_addr(void *buf, const char *symname)
 		}
 	}
 
-	return 0;
+	return -EINVAL;
 }
 
 
@@ -404,7 +404,7 @@ int main(int argc, char *argv[])
 {
 	int i;
 	struct stat stat;
-	void *buf;
+	void *buf = NULL;
 	int fd = open_icc();
 	unsigned int task_init_addr, task_exit_addr;
 	struct sm_packet pkt;
@@ -416,16 +416,24 @@ int main(int argc, char *argv[])
 			break;
 		case 'l':
 			buf = map_elf(optarg, &stat);
+			if (!buf)
+				return EXIT_FAILURE;
 			elf_load(buf);
 			unmap_elf(buf, &stat);
 			start_coreb();
 			break;
 		case 'e':
 			buf = map_elf(optarg, &stat);
+			if (!buf)
+				return EXIT_FAILURE;
 			elf_load(buf);
 			task_init_addr = elf_sym_addr(buf, ICC_TASKINIT_FUNC);
+			if (task_init_addr < 0)
+				return EXIT_FAILURE;
 			fprintf(stderr, "task_init_addr %x\n", task_init_addr);
 			task_exit_addr = elf_sym_addr(buf, ICC_TASKEXIT_FUNC);
+			if (task_exit_addr < 0)
+				return EXIT_FAILURE;
 			exec_task(fd, task_init_addr, task_exit_addr);
 			unmap_elf(buf, &stat);
 			break;
