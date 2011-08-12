@@ -13,15 +13,6 @@ set audio_dev [lindex $argv 1]
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
-if { $audio_dev == "audio_ad1938" } {
-    step "Change settings for ad1938 driver."
-    cd $uclinux_path/linux-2.6.x
-    if [ catch {exec patch -p0 < $uclinux_path/testsuites/audio/ad1938.patch} ] {
-        send_user "$errorInfo\n"
-        exit
-    }
-}
-
 cd $uclinux_path/testsuites
 step "Make clean."
 if { [source make_clean.exp] != 0 } {
@@ -140,15 +131,11 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"

@@ -24,15 +24,6 @@ if { [source make_clean.exp] != 0 } {
     exit
 }
 
-if { $audio_dev == "audio_ad1938" } {
-    step "Change settings for ad1938 driver."
-    cd $uclinux_path/linux-2.6.x
-    if [ catch {exec patch -p0 < $uclinux_path/testsuites/audio/ad1938.patch} ] {
-        send_user "$errorInfo\n"
-        exit
-    }
-}
-
 cd $uclinux_path/testsuites
 step "Make default config."
 source  make_default_config.exp
@@ -187,17 +178,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make kernel"
-
 source   make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux image"
-
 source   copy_image.exp
 
 send_user "Ending $argv0\n"
-
 log_file
