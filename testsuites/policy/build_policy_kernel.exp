@@ -167,6 +167,10 @@ while 1 {
             }
         }
 
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            send "N\r"
+        }
+
         -re "Platform Glue Layer.*\\\[.*]" {
             send "Y\r"
         }
