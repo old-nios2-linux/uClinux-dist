@@ -11,6 +11,7 @@
 #include <stdlib.h> /* for malloc */
 #include <string.h>
 
+
 #define NUM_SIZES 4
 
 #define DOMAIN 0
@@ -30,7 +31,7 @@ mcapi_boolean_t send (mcapi_sclchan_send_hndl_t send_handle, mcapi_endpoint_t re
   default: coreb_msg(stderr,"ERROR: bad data size in call to send\n");
   };
   if (status == MCAPI_SUCCESS) {
-    coreb_msg("endpoint=%i has sent %i byte(s): [%llu]\n",(int)send_handle,(int)size/8,data);
+    coreb_msg("CoreB endpoint=%i has sent %i byte(s): [%llx]\n",(int)send_handle,(int)size/8,data);
   }
   if (status == exp_status) {
     rc = MCAPI_TRUE;
@@ -50,7 +51,7 @@ mcapi_boolean_t recv (mcapi_sclchan_recv_hndl_t recv_handle,uint32_t size,mcapi_
   default: coreb_msg("ERROR: bad data size in call to send\n");
   };
  
-    coreb_msg("recv scalar[%llx] exp[%llx] %d %d\n",data, exp_data, status, exp_status);
+    coreb_msg("CoreB has recv scalar[%llx] exp[%llx] %d %d\n",data, exp_data, status, exp_status);
   exp_data = exp_data & size_mask;
    
   if (status == exp_status) {
@@ -124,20 +125,28 @@ void icc_task_init(int argc, char *argv[])
 	while (1) {
 		if (icc_wait()) {
 			recv_sclchan(ep1, sizes[i++],status,MCAPI_SUCCESS);
-			if (i == NUM_SIZES) {
-				mcapi_sclchan_connect_i(ep2,ep3,&request,&status);
-
-				mcapi_sclchan_send_open_i(&s1,ep2, &request, &status);
-
-				send(s1,ep3,test_pattern,8,status,MCAPI_SUCCESS);
-
-				break;
-			}
+			if ( i == NUM_SIZES )
+			break;
 		}
 	}
 
+	i = 0;
+	mcapi_sclchan_connect_i(ep2,ep3,&request,&status);
+	coreb_msg("CoreB connect %x\n", ep2);
+	mcapi_sclchan_send_open_i(&s1,ep2, &request, &status);
+	coreb_msg("CoreB scalar send open %x\n", ep2);
+
+	while (1) {
+			send(s1,ep3,test_pattern,sizes[i++],status,MCAPI_SUCCESS);
+
+			if ( i == NUM_SIZES )
+			break;
+	}
+
+	mcapi_sclchan_send_close_i(s1,&request,&status);
+
 	mcapi_finalize(&status);
 
-	coreb_msg("   Test PASSED\n");
+	coreb_msg("CoreB Test PASSED\n");
 	return;
 }
