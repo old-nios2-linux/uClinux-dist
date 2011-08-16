@@ -10,14 +10,13 @@
 #include <string.h>
 
 #define BUFF_SIZE 64
-
-#define WRONG wrong(__LINE__);
+#define NUM_SIZES 100
 
 #define DOMAIN 0
 
-
 char buffer[BUFF_SIZE] = "mcapi_pkt response";
 
+#define WRONG wrong(__LINE__);
 void wrong(unsigned line)
 {
 	coreb_msg("WRONG: line==%i \n",line);
@@ -97,15 +96,29 @@ void icc_task_init(int argc, char *argv[])
 
 	coreb_msg("mcapi pktchan test ep3 %x\n", ep3);
 
+	i = 0;
 	while (1) {
 		if (icc_wait()) {
 			recv_pktchan(ep1,status,MCAPI_SUCCESS);
+			if (status != MCAPI_SUCCESS) { WRONG }
 
 			mcapi_pktchan_connect_i(ep2,ep3,&request,&status);
 
 			send_pktchan(ep2,status,MCAPI_SUCCESS);
+			if (status != MCAPI_SUCCESS) { WRONG }
+
+			coreb_msg("\nCoreB: mcapi pktchan test. The %i time send back ok. \n", i);
+
+			if ( i == NUM_SIZES )
+			break;
+ 			
+			i++;
 		}
 	}
+
+	mcapi_endpoint_delete(ep1,&status);
+	mcapi_endpoint_delete(ep2,&status);
+	mcapi_endpoint_delete(ep3,&status);
 
 	mcapi_finalize(&status);
 	coreb_msg("   Test PASSED\n");

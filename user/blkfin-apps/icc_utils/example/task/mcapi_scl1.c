@@ -19,6 +19,7 @@
 #define WRONG wrong(__LINE__);
 void wrong(unsigned line)
 {
+coreb_msg("CoreB Test FAILED at line %i .\n", line);
 }
 
 mcapi_boolean_t send (mcapi_sclchan_send_hndl_t send_handle, mcapi_endpoint_t recv,unsigned long long data,uint32_t size,mcapi_status_t status,int exp_status) {
@@ -67,21 +68,6 @@ mcapi_boolean_t recv (mcapi_sclchan_recv_hndl_t recv_handle,uint32_t size,mcapi_
   return rc;
 }
 
-void recv_sclchan(mcapi_endpoint_t re,int size,mcapi_status_t status,int exp_status)
-{
-	mcapi_sclchan_recv_hndl_t r1;
-	mcapi_request_t request;
-	int rc;
-	unsigned long long exp_data = 0x1122334455667788ULL;
-
-	mcapi_sclchan_recv_open_i(&r1 /*recv_handle*/,re, &request, &status);
-	rc = recv(r1, size, status, exp_status, exp_data);
-	if (rc == MCAPI_FALSE)
-		coreb_msg("scl recv wrong data\n");
-	mcapi_sclchan_recv_close_i(r1,&request,&status); 
-
-}
-
 void icc_task_init(int argc, char *argv[])
 {
 	mcapi_status_t status;
@@ -102,6 +88,8 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_info_t version;
 	mcapi_boolean_t rc = MCAPI_FALSE;
 	uint64_t test_pattern = 0x1122334455667788ULL;
+	unsigned long long exp_data = 0x1122334455667788ULL;
+
 
 	/* create a node */
 	mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
@@ -121,15 +109,28 @@ void icc_task_init(int argc, char *argv[])
 
 	coreb_msg("mcapi sclchan test ep3 %x\n", ep3);
 
+	/****CoreB to receive open scalar chan ***********/
+
+	mcapi_sclchan_recv_open_i(&r1 /*recv_handle*/,ep1, &request, &status);
 
 	while (1) {
 		if (icc_wait()) {
-			recv_sclchan(ep1, sizes[i++],status,MCAPI_SUCCESS);
+			rc = recv(r1, sizes[i++], status, MCAPI_SUCCESS, exp_data);
+			if (rc == MCAPI_FALSE)
+			{	coreb_msg("scl recv wrong data\n");
+				wrong;
+			}		
 			if ( i == NUM_SIZES )
 			break;
 		}
 	}
 
+	mcapi_sclchan_recv_close_i(r1,&request,&status);
+
+	/****CoreB to receive scalar ended. ***********/
+
+
+	/****CoreB start to send scalar data back to CoreA. ***********/
 	i = 0;
 	mcapi_sclchan_connect_i(ep2,ep3,&request,&status);
 	coreb_msg("CoreB connect %x\n", ep2);
@@ -137,7 +138,11 @@ void icc_task_init(int argc, char *argv[])
 	coreb_msg("CoreB scalar send open %x\n", ep2);
 
 	while (1) {
-			send(s1,ep3,test_pattern,sizes[i++],status,MCAPI_SUCCESS);
+			rc = send(s1,ep3,test_pattern,sizes[i++],status,MCAPI_SUCCESS);
+			if (rc == MCAPI_FALSE)
+			{	coreb_msg("scl send data fail\n");
+				wrong;
+			}		
 
 			if ( i == NUM_SIZES )
 			break;
@@ -145,6 +150,13 @@ void icc_task_init(int argc, char *argv[])
 
 	mcapi_sclchan_send_close_i(s1,&request,&status);
 
+	/****CoreB to send scalar ended. ***********/
+
+	mcapi_endpoint_delete(ep1,&status);
+	mcapi_endpoint_delete(ep2,&status);
+	mcapi_endpoint_delete(ep3,&status);
+
+	coreb_msg("CoreB Send Close PASSED\n");
 	mcapi_finalize(&status);
 
 	coreb_msg("CoreB Test PASSED\n");
