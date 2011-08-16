@@ -20,6 +20,9 @@ all: task1 task2 scalar mcapi_msg1 mcapi_pkt1 mcapi_scl1
 mcapi_scl1: mcapi_scl1.o $(ICC_CORE) $(LIBMCAPI_COREB)
 	$(LD) -static $(LDFLAGS) -o mcapi_scl1 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_scl1.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
 
+mcapi_scl2: mcapi_scl2.o $(ICC_CORE) $(LIBMCAPI_COREB)
+	$(LD) -static $(LDFLAGS) -o mcapi_scl2 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_scl2.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
+
 mcapi_pkt1: mcapi_pkt1.o $(ICC_CORE) $(LIBMCAPI_COREB)
 	$(LD) -static $(LDFLAGS) -o mcapi_pkt1 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_pkt1.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
 
