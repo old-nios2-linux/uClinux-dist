@@ -70,7 +70,7 @@ incr case_num
 send -s "./icc_loader -f -e ./mcapi_msg1 \r"
 while 1 {
    expect {
-     -re "sm_debug:sm_find_session.*sm_send_packet.*COREB: sm_handle_control_message.*COREB: sm_send_message_internal.*COREB: finish sm_handle_control_message.*COREB: before run task" {
+     -re "COREB: before run task.*mcapi_initialize.*create ep" {
                case_pass $case_num
                break
       }
@@ -104,7 +104,7 @@ incr case_num
 send -s "msg1  \r"
 while 1 {
    expect {
-     -re "endpoint=.* has sent: .*1Hello MCAPI.*endpoint=.* has received: .*1Hello MCAPI" {
+     -re "endpoint=.* has sent: .*1Hello MCAPI.*endpoint=.* has received: .*1Hello MCAPI.*Test PASSED" {
 
          case_pass $case_num
          break
