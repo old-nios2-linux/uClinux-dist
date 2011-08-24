@@ -69,8 +69,7 @@ extern "C" {
    need to update the pointer arithmetic in mcapi_trans_pktchan_free */
 typedef struct {
   uint32_t magic_num;
-  size_t size; /* size (in bytes) of the buffer */
-  uint64_t scalar;
+  uint32_t size; /* size (in bytes) of the buffer */
   char buff [MCAPI_MAX(MCAPI_MAX_PKT_SIZE,MCAPI_MAX_MSG_SIZE)]; // the buffer is used for both pkts and msgs
 } buffer_entry;
 

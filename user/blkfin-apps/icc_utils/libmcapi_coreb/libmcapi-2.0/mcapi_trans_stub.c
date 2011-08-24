@@ -814,6 +814,7 @@ void mcapi_trans_endpoint_delete( mcapi_endpoint_t endpoint)
 	mcapi_trans_decode_handle_internal(endpoint,&d,&n,&e);
 
 	index = mcapi_trans_get_port_index(n, e);
+	coreb_msg("%s %d d %d n %d e %d index %d\n", __func__, __LINE__,d,n,e,index);
 	if (index >= MCAPI_MAX_ENDPOINTS) {
 		return MCAPI_FALSE;
 	}
@@ -1170,6 +1171,7 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 	int i;
 	mcapi_endpoint_t send_endpoint;
 	buffer_entry* db_buff = NULL;
+	void *buf = NULL;
 
 	mcapi_boolean_t completed =  (*mcapi_status == MCAPI_SUCCESS) ? MCAPI_FALSE : MCAPI_TRUE;
 
@@ -1191,19 +1193,27 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 	if (i == MCAPI_MAX_BUFFERS) {
 		/* we couldn't get a free buffer */
 		mcapi_dprintf(2," ERROR mcapi_trans_send_internal: No more buffers available - try freeing some buffers. \n");
+		coreb_msg("pktchan buffer is full\n");
+		*mcapi_status = MCAPI_FALSE;
 		return MCAPI_FALSE;
 	}
 
-	ret = sm_recv_packet(index,&se, &sn, buffer, &len);
+	ret = sm_recv_packet(index,&se, &sn, &buf, &len);
 	if (ret) {
 		mcapi_dprintf(1,"recv failed\n");
 		*mcapi_status = ret;
 	}
-	mcapi_dprintf(1,"index %d, se %d, sn %d\n", index, se, sn);
 	coreb_msg("index %d, se %d, sn %d\n", index, se, sn);
-	mcapi_dprintf(1,"buffer %s\n", buffer);
 
-	*mcapi_status = MCAPI_SUCCESS;
+	if (buf) {
+		memcpy(db_buff->buff, buf, len);
+		coreb_msg("buffer %s len %d se %d sn %d\n", buf, len, se, sn);
+		sm_recv_release(buf, len, index);
+		*buffer = db_buff->buff;
+		*mcapi_status = MCAPI_SUCCESS;
+	} else
+		*mcapi_status = MCAPI_FALSE;
+
 
 	send_endpoint = mcapi_trans_encode_handle_internal(0,sn,se);
 	setup_request_internal(send_endpoint, receive_handle, request, len, RECV);
@@ -1233,8 +1243,9 @@ mcapi_boolean_t mcapi_trans_pktchan_free( void* buffer)
 
 	/* optimization - just do pointer arithmetic on the buffer pointer to get
 	   the base address of the buffer_entry structure. */
-	b_e = buffer-9;
+	b_e = buffer - 8;
 	if (b_e->magic_num == MAGIC_NUM) {
+		coreb_msg("free pkt buffer %08x\n", buffer);
 		memset(b_e,0,sizeof(buffer_entry));
 	} else {
 		/* didn't find the buffer */
