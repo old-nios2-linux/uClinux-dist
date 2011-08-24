@@ -269,8 +269,8 @@ void gen_pool_free(struct gen_pool *pool, unsigned long addr, size_t size)
 
 	nbits = (size + (1UL << order) - 1) >> order;
 
-	for_each_set_bit(_chunk, &pool->chunk_bits, 32) {
-		chunk = &gchunk[_chunk];
+	for_each_set_bit(_chunk, pool->chunk_bits, BITS_PER_LONG) {
+		chunk = &pool->chunks[_chunk];
 
 		if (addr >= chunk->start_addr && addr < chunk->end_addr) {
 			bit = (addr - chunk->start_addr) >> order;
@@ -292,7 +292,7 @@ int gen_pool_check(struct gen_pool *pool, unsigned long addr, size_t size)
 	nbits = (size + (1UL << order) - 1) >> order;
 
 	for_each_set_bit(_chunk, &pool->chunk_bits, 32) {
-		chunk = &gchunk[_chunk];
+		chunk = &pool->chunks[_chunk];
 
 		if (addr >= chunk->start_addr && addr < chunk->end_addr) {
 			bit = (addr - chunk->start_addr) >> order;

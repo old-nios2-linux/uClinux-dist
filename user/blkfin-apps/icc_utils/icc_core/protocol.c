@@ -842,6 +842,10 @@ static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 	int cpu = blackfin_core_id();
 	struct sm_message *message = get_message();
 	coreb_msg("%s msg type %x alloc %x\n", __func__, msg->type, (unsigned long)message);
+	if (!message) {
+		coreb_msg("no mem in pool discard message\n");
+		return -1;
+	}
 	memcpy(&message->msg, msg, sizeof(struct sm_msg));
 	message->dst = cpu;
 	message->src = cpu ^ 1;
