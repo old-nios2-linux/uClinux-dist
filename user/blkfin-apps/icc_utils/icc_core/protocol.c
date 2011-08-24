@@ -97,7 +97,7 @@ static int sm_message_enqueue(int dstcpu, int srccpu, struct sm_msg *msg)
 		coreb_msg("over run\n");
 		return -EAGAIN;
 	}
-	memcpy(&outqueue->messages[(sent%SM_MSGQ_LEN)], msg, sizeof(struct sm_message));
+	memcpy(&outqueue->messages[(sent%SM_MSGQ_LEN)], msg, sizeof(struct sm_msg));
 	sent++;
 	sm_atomic_write(&outqueue->sent, sent);
 	return 0;
@@ -961,9 +961,11 @@ matched1:
 		session->remote_ep = 0;
 		session->flags = 0;
 		sm_send_close_ack(session, msg->src_ep, cpu ^ 1);
+		break;
 	case SM_SESSION_PACKET_CLOSE_ACK:
 		session->remote_ep = 0;
 		session->flags = 0;
+		break;
 	case SM_PACKET_READY:
 	case SM_SESSION_PACKET_READY:
 		if (SM_MSG_PROTOCOL(msg->type) != session->type) {
@@ -1056,8 +1058,9 @@ void icc_run_task(void)
 		sm_task1_status = SM_TASK_RUNNING;
 		coreb_msg("before run task1\n");
 		sm_task1.task_init(sm_task1.task_argc, task_argv);
+		sm_task1_status = SM_TASK_NONE;
 	}
-	coreb_idle();
+	icc_wait(0);
 }
 
 int sm_get_session_status(uint32_t session_idx, struct sm_session_status *status)

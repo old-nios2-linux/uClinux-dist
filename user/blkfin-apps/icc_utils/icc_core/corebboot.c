@@ -76,7 +76,7 @@ void udelay(sm_uint32_t count)
 
 void delay(sm_uint32_t count)
 {
-	sm_uint32_t ncount = 500 * count;
+	sm_uint32_t ncount = 100 * count;
 	while(ncount--)
 		udelay(10000);
 }
