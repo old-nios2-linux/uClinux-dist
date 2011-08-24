@@ -38,6 +38,8 @@ void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
 	if (status != exp_status) { WRONG}
 	if (status == MCAPI_SUCCESS) {
 		coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,pbuffer);
+		if (pbuffer)
+			mcapi_pktchan_release(pbuffer, &status);
 		mcapi_pktchan_recv_close_i(r1,&request1, &status);
 	}
 }
@@ -102,23 +104,23 @@ void icc_task_init(int argc, char *argv[])
 			recv_pktchan(ep1,status,MCAPI_SUCCESS);
 			if (status != MCAPI_SUCCESS) { WRONG }
 
-			mcapi_pktchan_connect_i(ep2,ep3,&request,&status);
+			if (i == 0)
+				mcapi_pktchan_connect_i(ep2,ep3,&request,&status);
 
-			send_pktchan(ep2,status,MCAPI_SUCCESS);
 			if (status != MCAPI_SUCCESS) { WRONG }
 
 			coreb_msg("\nCoreB: mcapi pktchan test. The %i time send back ok. \n", i);
 
-			if ( i == NUM_SIZES )
-			break;
- 			
+			if ( i == NUM_SIZES - 1 ) {
+				send_pktchan(ep2,status,MCAPI_SUCCESS);
+				break;
+			}
 			i++;
 		}
 	}
 
 	mcapi_endpoint_delete(ep1,&status);
 	mcapi_endpoint_delete(ep2,&status);
-	mcapi_endpoint_delete(ep3,&status);
 
 	mcapi_finalize(&status);
 	coreb_msg("   Test PASSED\n");
