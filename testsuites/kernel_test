@@ -956,7 +956,7 @@ do
       tail -50 ./build_audio_ad1836_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE audio_ad1836 >/dev/null  2>&1
+      ./audio_test.exp $BOARD_TYPE audio_ad1836 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1010,7 +1010,7 @@ do
       tail -50 ./build_audio_ad73311_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE audio_ad73311 >/dev/null  2>&1
+      ./audio_test.exp $BOARD_TYPE audio_ad73311 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1064,7 +1064,7 @@ do
       tail -50 ./build_audio_ad1938_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE audio_ad1938 >/dev/null  2>&1
+      ./audio_test.exp $BOARD_TYPE audio_ad1938 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1119,7 +1119,7 @@ do
       tail -50 ./build_audio_adau1373_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE audio_adau1373 >/dev/null  2>&1
+      ./audio_test.exp $BOARD_TYPE audio_adau1373 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
@@ -1223,7 +1223,7 @@ do
       tail -50 ./build_audio_ssm2603_kernel_log
   else
       sleep 30
-      ./one_channel_audio_test.exp $BOARD_TYPE audio_ssm2603 >/dev/null  2>&1
+      ./audio_test.exp $BOARD_TYPE audio_ssm2603 >/dev/null  2>&1
 
       if [ $RESET_BOARD -eq 1  ] ; then
           cd $UCLINUX_DIST_TESTSUITES
