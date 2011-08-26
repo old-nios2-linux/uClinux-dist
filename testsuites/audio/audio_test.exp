@@ -184,7 +184,7 @@ set timeout 4
 send "\n"
 expect -re $kernel_prompt
 
-set repeat_count 2
+set repeat_count 10
 set mem_leak_valve [expr 64*$channel_num*$repeat_count*2]
 
 incr case_num

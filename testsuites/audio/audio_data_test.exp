@@ -27,6 +27,24 @@ source ../spawn_kermit.exp
 step "Reboot the kernel."
 source ../reboot_kernel.exp
 
+step "Start testing."
+
+set output_file_type "wav"
+if { $audio_dev == "audio_ad1938" || $audio_dev == "audio_ad1836" || $audio_dev == "audio_ssm2603" } {
+    set channel "Stereo"
+    set channel_num "2"
+    set sample_rate "48000"
+    set alsa_format "S32_LE"
+} elseif { $audio_dev == "audio_ad73311" } {
+    set channel "Mono"
+    set channel_num "1"
+    set sample_rate "8000"
+    set alsa_format "S16_LE"
+} else {
+    send_user "Can not recognize audio device, exit"
+    exit
+}
+
 
 proc rec_at_pc { freq magnitude } {
     global case_num
@@ -34,6 +52,11 @@ proc rec_at_pc { freq magnitude } {
     global host_spawn_id
     global kernel_prompt
     global output_dir
+    global output_file_type
+    global channel
+    global channel_num
+    global sample_rate
+    global alsa_format
 
 #Generate sine wave at $freq with magnitude of $magnitude on target board.
     set spawn_id $kermit_spawn_id
@@ -56,15 +79,15 @@ proc rec_at_pc { freq magnitude } {
     }
 
 
-#In PC, record output sound from target board with signed 16 bit little endian format, 44100 sample rate and mono.
+#In PC, record output sound from target board
     set spawn_id $host_spawn_id
 
     incr case_num
     set timeout 10
-    send "arecord -t wav -c 1 -f S16_LE -r 44100 -d 5 $output_dir/${freq}Hz_BFIN2PC.wav\n"
+    send "arecord -t $output_file_type -c $channel_num -f $alsa_format -r $sample_rate -d 5 $output_dir/${freq}Hz_BFIN2PC.wav\n"
     while 1 {
         expect {
-            -re "Signed 16 bit Little Endian, Rate 44100 Hz, Mono.*>" {
+            -re "$channel.*>" {
                 case_pass $case_num
                 break
             }
@@ -103,6 +126,11 @@ proc rec_from_pc { freq magnitude } {
     global kernel_prompt
     global targetip
     global output_dir
+    global output_file_type
+    global channel
+    global channel_num
+    global sample_rate
+    global alsa_format
 
 #Generate sine wave at $freq with magnitude of $magnitude on PC.
     set spawn_id $host_spawn_id
@@ -129,10 +157,10 @@ proc rec_from_pc { freq magnitude } {
 
     incr case_num
     set timeout 10
-    send "arecord -t wav -c 1 -f S16_LE -r 44100 -d 5 ${freq}Hz_PC2BFIN.wav\n"
+    send "arecord -t $output_file_type -c $channel_num -f $alsa_format -r $sample_rate -d 5 ${freq}Hz_PC2BFIN.wav\n"
     while 1 {
         expect {
-            -re "Signed 16 bit Little Endian, Rate 44100 Hz, Mono.*$kernel_prompt" {
+            -re "$channel.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
