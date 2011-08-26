@@ -13,6 +13,8 @@ if { $argc == 2 } {
     exit
 }
 
+set wakeup_pattern "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt"
+
 if { $pm_state_count == 1 } {
     set pm_state_str "standby"
     append TITLE " (STANDBY)"
@@ -23,6 +25,7 @@ if { $pm_state_count == 1 } {
     send_user "Power Management State setting error\n"
     exit
 }
+
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -43,13 +46,14 @@ proc standby_test_case1 {} {
     global wait_time
     global standby_fail
     global pm_state_str
+    global wakeup_pattern
 
     set timeout [expr $wait_time + 10]
     incr case_num
     send "\nrtcwake -s $wait_time -m $pm_state_str\r"
     while 1 {
         expect {
-            -re "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt" {
+            -re $wakeup_pattern {
                 case_pass $case_num
                 break
             }
@@ -66,13 +70,13 @@ proc standby_test_case1 {} {
 
     incr case_num
     set timeout 10
-    send -s "vrec -w -S -b 16 -s 48000 -t 5|vplay\n"
+    send -s "vrec -w -S -b 32 -s 48000 -t 5|vplay\n"
     while 1 {
         expect {
             -re "\[fF]ail|\[eE]rror" {
                 case_fail $case_num
             }
-            -re "Stereo.*$kernel_prompt" {
+            -re "Stereo \.\.\.\r\n$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -84,13 +88,13 @@ proc standby_test_case1 {} {
 
     incr case_num
     set timeout 10
-    send -s "arecord -t wav -c 2 -f S16_LE -r 48000 -d 5 |aplay\n"
+    send -s "arecord -t wav -c 2 -f S32_LE -r 48000 -d 5 |aplay\n"
     while 1 {
         expect {
             -re "\[fF]ail|\[eE]rror" {
                 case_fail $case_num
             }
-            -re "Stereo.*$kernel_prompt" {
+            -re "Stereo\r\n$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -107,13 +111,14 @@ proc standby_test_case2 {} {
     global wait_time
     global standby_fail
     global pm_state_str
+    global wakeup_pattern
 
     set timeout [expr $wait_time + 10]
     incr case_num
     send "\nrtcwake -s $wait_time -m $pm_state_str\r"
     while 1 {
         expect {
-            -re "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt" {
+            -re $wakeup_pattern {
                 case_pass $case_num
                 break
             }
@@ -139,14 +144,14 @@ expect -re $kernel_prompt
 
 set timeout 20
 incr case_num
-send "modprobe snd-ssm2602\r"
+send "modprobe snd-soc-bf5xx-sport; sleep 1; modprobe snd_bf5xx_i2s; sleep 1; modprobe snd_soc_ssm2602; sleep 1; modprobe snd_soc_bf5xx_i2s; sleep 1; modprobe snd_ssm2602\r"
 while 1 {
     expect {
         -re "(modprobe:|No such|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             send_user "Install module failed!\r"
             case_fail $case_num
         }
-        -nocase -re "asoc.*SSM2602.*mapping ok.*$kernel_prompt" {
+        -re "mapping ok.*$kernel_prompt" {
             break
         }
         timeout {
@@ -172,13 +177,13 @@ sleep 5
 
 incr case_num
 set timeout 10
-send -s "vrec -w -S -b 16 -s 48000 -t 5|vplay\n"
+send -s "vrec -w -S -b 32 -s 48000 -t 5|vplay\n"
 while 1 {
     expect {
-	-re "\[fF]ail|\[eE]rror" {
+        -re "\[fF]ail|\[eE]rror" {
 	    case_fail $case_num
 	}
-	-re "Stereo.*$kernel_prompt" {
+        -re "Stereo \.\.\.\r\n$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -190,13 +195,13 @@ while 1 {
 
 incr case_num
 set timeout 10
-send -s "arecord -t wav -c 2 -f S16_LE -r 48000 -d 5 |aplay\n"
+send -s "arecord -t wav -c 2 -f S32_LE -r 48000 -d 5 |aplay\n"
 while 1 {
     expect {
         -re "\[fF]ail|\[eE]rror" {
             case_fail $case_num
         }
-        -re "Stereo.*$kernel_prompt" {
+        -re "Stereo\r\n$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -274,7 +279,7 @@ while 1 {
         -re $kernel_prompt {
             sleep 1
             send "\r"
-            expect -nocase "Done"
+            expect -nocase -re "Done.*$kernel_prompt"
             case_pass $case_num
             break
         }
@@ -286,7 +291,7 @@ while 1 {
 
 set timeout 20
 incr case_num
-send "modprobe -r snd-ssm2602\r"
+send "modprobe -r snd_ssm2602\r"
 while 1 {
     expect {
         -re "(modprobe:|No such|\[eE]rror|\[fF]ail).*$kernel_prompt" {
@@ -309,10 +314,10 @@ incr case_num
 send "lsmod\r"
 while 1 {
     expect {
-        -re "snd_ssm2602" {
+        -re "snd_ssm2602.*$kernel_prompt" {
             case_fail $case_num
         }
-        -re $kernel_prompt {
+        -re "Used by.*$kernel_prompt" {
             case_pass $case_num
             break
         }
