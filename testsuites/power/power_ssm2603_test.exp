@@ -277,9 +277,6 @@ while 1 {
             case_fail $case_num
         }
         -re $kernel_prompt {
-            sleep 1
-            send "\r"
-            expect -nocase -re "Done.*$kernel_prompt"
             case_pass $case_num
             break
         }
@@ -288,6 +285,9 @@ while 1 {
         }
     }
 }
+
+send "\r"
+expect -nocase -re "Done.*$kernel_prompt"
 
 set timeout 20
 incr case_num
@@ -314,7 +314,7 @@ incr case_num
 send "lsmod\r"
 while 1 {
     expect {
-        -re "snd_ssm2602.*$kernel_prompt" {
+        -re "snd_ssm2602 +\[0-9].*$kernel_prompt" {
             case_fail $case_num
         }
         -re "Used by.*$kernel_prompt" {
