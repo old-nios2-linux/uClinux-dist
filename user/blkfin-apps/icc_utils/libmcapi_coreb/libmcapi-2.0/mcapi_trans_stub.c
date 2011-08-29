@@ -1508,8 +1508,9 @@ mcapi_boolean_t mcapi_trans_sclchan_recv( mcapi_sclchan_recv_hndl_t receive_hand
 	}
 
 	ret = sm_recv_scalar(index, &se, &sn, &scalar0, &scalar1, &type);
-	if (ret) {
-		mcapi_dprintf(1,"send failed\n");
+	if (ret != 1) {
+		coreb_msg("receive falied %d\n", ret);
+		return MCAPI_FALSE;
 	} 
 	received_size = type;
 
