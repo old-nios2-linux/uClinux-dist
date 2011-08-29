@@ -113,7 +113,8 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_sclchan_recv_hndl_t r1;
 	mcapi_uint_t avail;
 	int s;
-	int i = 0;
+	int i1 = 0;
+	int i2 = 0;
 	int sizes[NUM_SIZES] = {8,16,32,64};
 	size_t size;
 	mcapi_info_t version;
@@ -143,9 +144,12 @@ void icc_task_init(int argc, char *argv[])
 
 	while (1) {
 		if (icc_wait()) {
-			rc1 = recv_sclchan1(ep1, sizes[i],status,MCAPI_SUCCESS);
-			rc2 = recv_sclchan2(ep2, sizes[i++],status,MCAPI_SUCCESS);
-
+			rc1 = recv_sclchan1(ep1, sizes[i1],status,MCAPI_SUCCESS);
+			if (rc1 == MCAPI_TRUE)
+				i1++;
+			rc2 = recv_sclchan2(ep2, sizes[i2],status,MCAPI_SUCCESS);
+			if (rc2 == MCAPI_TRUE)
+				i2++;
 			if ((rc1 == MCAPI_FALSE) && (rc2 == MCAPI_FALSE)) {
                         WRONG 
 			}
@@ -159,6 +163,7 @@ void icc_task_init(int argc, char *argv[])
 
 	//			break;
 //			}
+
 		}
 	}
 

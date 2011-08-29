@@ -15,7 +15,7 @@ LIBMCAPI_COREB := ${PWD}/../../../../../staging/usr/lib/libmcapi_coreb.a
 CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I${ICC_INCLUDE} -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/include/generated  -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/drivers/staging/icc/include -I${MCAPI_INCLUDE} -I${MCAPI_TEST_INCLUDE} -DCONFIG_BF561 -D__KERNEL__
 LDFLAGS  = -L${ICC_INCLUDE}
 ASFLAGS  = $(CFLAGS)
-all: task1 task2 scalar mcapi_msg1 mcapi_pkt1 mcapi_scl1
+all: task1 task2 scalar mcapi_msg1 mcapi_pkt1 mcapi_scl1 mcapi_scl2
 
 mcapi_scl1: mcapi_scl1.o $(ICC_CORE) $(LIBMCAPI_COREB)
 	$(LD) -static $(LDFLAGS) -o mcapi_scl1 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_scl1.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
