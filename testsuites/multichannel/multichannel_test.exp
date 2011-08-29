@@ -30,17 +30,18 @@ step "Start testing"
 set case_num 0
 
 if { $audio_dev == "audio_ad1836" } {
-    set audio_mod "snd-ad183x"
+    set modprobe_cmd "modprobe snd_soc_ad1836; sleep 1; modprobe snd_soc_bf5xx_tdm; sleep 1; modprobe snd_ad1836"
     set channel_num 6
 } elseif { $audio_dev == "audio_ad1938" } {
-    set audio_mod "snd-ad193x"
+    set modprobe_cmd "modprobe snd_soc_ad193x; sleep 1; modprobe snd_soc_bf5xx_tdm; sleep 1; modprobe snd-ad193x"
     set channel_num 8
 }
+set format S32_LE
 
 sleep 5
 set timeout 30
 incr case_num
-send "modprobe $audio_mod\r"
+send "$modprobe_cmd\r"
 while 1 {
     expect {
         -re "(modprobe:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
@@ -63,7 +64,7 @@ sleep 10
 set count_under_run 0
 set timeout 120
 incr case_num
-send "speaker-test -c $channel_num\r"
+send "speaker-test -c $channel_num -F $format\r"
 while 1 {
     expect {
         -re "TUV|UVF|TU|UV|VF" {
@@ -102,8 +103,6 @@ if { $count_under_run == 0 } {
     case_fail $case_num
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
