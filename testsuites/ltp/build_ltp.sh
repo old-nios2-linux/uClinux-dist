@@ -55,7 +55,7 @@ cd $LTP_SUB_DIR
 
 # configure ltp
 echo "$0:	Configure ..."
-./configure --prefix=$CWD/$LTP_SUB_DIR --host=bfin-uclinux --build=i686-pc-linux-gnu CFLAGS="-g -O2 -mstack-check-l1" LDFLAGS="-elf2flt=-s8192" > /dev/null 2>&1
+./configure --prefix=$CWD/$LTP_SUB_DIR --host=bfin-uclinux --build=i686-pc-linux-gnu CFLAGS="-g -O2 -mstack-check-l1" LDFLAGS="-elf2flt=-s32768" > /dev/null 2>&1
 if [ $? -ne 0 ]
 then
 	echo "$0:	Error, configure failed" 
