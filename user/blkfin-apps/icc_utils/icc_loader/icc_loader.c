@@ -246,7 +246,7 @@ unsigned int elf_sym_addr(void *buf, const char *symname)
 	/* make sure we have a valid ELF */
 	if (!IS_ELF(ehdr->e_ident) || ehdr->e_machine != EM_BLACKFIN) {
 		fprintf(stderr, "file is not a Blackfin ELF file\n");
-		return -ENOENT;
+		return -1;
 	}
 
 	ElfW(Shdr) *shdr = (ElfW(Shdr) *)(buf + ehdr->e_shoff);
@@ -265,7 +265,7 @@ unsigned int elf_sym_addr(void *buf, const char *symname)
 		}
 	}
 
-	return -EINVAL;
+	return -1;
 }
 
 
@@ -339,12 +339,13 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 	int taskargs = 2;
 	char taskargv0[] = "task1";
 	char taskargv1[] = "icc";
-	int packetsize = sizeof(struct sm_task) + MAX_TASK_NAME * (taskargs - 1);
+	int packetsize = sizeof(struct sm_task) + MAX_TASK_NAME * taskargs;
 
 	task1 = malloc(packetsize);
 	if (!task1) {
 		printf("malloc failed\n");
 	}
+
 	memset(task1, 0, packetsize);
 	task1->task_init = task_init_addr;
 	task1->task_exit = task_exit_addr;
@@ -428,12 +429,13 @@ int main(int argc, char *argv[])
 				return EXIT_FAILURE;
 			elf_load(buf);
 			task_init_addr = elf_sym_addr(buf, ICC_TASKINIT_FUNC);
-			if (task_init_addr < 0)
+			if (task_init_addr == 0xffffffff)
 				return EXIT_FAILURE;
 			fprintf(stderr, "task_init_addr %x\n", task_init_addr);
 			task_exit_addr = elf_sym_addr(buf, ICC_TASKEXIT_FUNC);
-			if (task_exit_addr < 0)
-				return EXIT_FAILURE;
+			fprintf(stderr, "task_exit_addr %x\n", task_exit_addr);
+			if (task_exit_addr == 0xffffffff)
+				task_exit_addr = 0;
 			exec_task(fd, task_init_addr, task_exit_addr);
 			unmap_elf(buf, &stat);
 			break;
