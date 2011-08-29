@@ -329,9 +329,7 @@ void icc_init(void)
 
 	coreb_info.icc_info.icc_queue = (struct sm_message_queue *)MSGQ_START_ADDR;
 	init_sm_session_table();
-
 	register_sm_proto();
-
 }
 
 void secondary_start_kernel(void)

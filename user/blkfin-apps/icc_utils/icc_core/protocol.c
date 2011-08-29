@@ -34,6 +34,7 @@ struct sm_task sm_task1;
 int sm_task1_status = 0;
 int sm_task1_control_ep = 0;
 uint32_t sm_task1_msg_buffer = 0;
+int reinit = 0;
 
 struct sm_proto *sm_protos[SP_MAX];
 
@@ -379,18 +380,26 @@ void sm_handle_control_message(sm_uint32_t cpu)
 			iccq_should_stop = 1;
 			break;
 		case SM_TASK_RUN:
-			if (sm_task1.task_init)
-				sm_task1.task_exit();
+			if (sm_task1.task_init) {
+				coreb_msg("task exit %x\n", sm_task1.task_exit);
+				if (sm_task1.task_exit)
+					sm_task1.task_exit();
+				gen_pool_destroy(coreb_info.pool);
+				gen_pool_destroy(coreb_info.msg_pool);
+				reinit = 1;
+			}
 			memset(&sm_task1, 0, sizeof(struct sm_task));
-
 			memcpy(&sm_task1, msg->payload,
 				sizeof(struct sm_task));
-			coreb_msg("task init %x\n", sm_task1.task_init);
+			coreb_msg("task init %x exit %x\n", sm_task1.task_init, sm_task1.task_exit);
 			sm_task1_control_ep = msg->src_ep;
 			sm_task1_msg_buffer = msg->payload;
 			if (sm_task1.task_init)
 				sm_task1_status = SM_TASK_INIT;
 
+			if (reinit) {
+				icc_init();
+			}
 			sm_send_task_run_ack(sm_task1_control_ep, cpu ^ 1);
 
 			delay(1);
@@ -849,6 +858,14 @@ static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 	memcpy(&message->msg, msg, sizeof(struct sm_msg));
 	message->dst = cpu;
 	message->src = cpu ^ 1;
+
+	if ((SM_MSG_PROTOCOL(msg->type) == SP_SCALAR))
+		sm_send_scalar_ack(session, msg->src_ep, message->src,
+				msg->payload, msg->length);
+	else if ((SM_MSG_PROTOCOL(msg->type) == SP_SESSION_SCALAR))
+		sm_send_session_scalar_ack(session, msg->src_ep, message->src,
+				msg->payload, msg->length);
+
 	if (session->handle) {
 		coreb_msg("default handler\n");
 		session->handle(message, session);
@@ -1057,6 +1074,7 @@ void icc_run_task(void)
 	if (sm_task1_status == SM_TASK_INIT) {
 		sm_task1_status = SM_TASK_RUNNING;
 		coreb_msg("before run task1\n");
+		reinit = 0;
 		sm_task1.task_init(sm_task1.task_argc, task_argv);
 		sm_task1_status = SM_TASK_NONE;
 	}
@@ -1130,6 +1148,8 @@ int icc_wait(int session_mask)
 	int cpu = blackfin_core_id();
 	int pending = iccqueue_getpending(cpu);
 	uint32_t avail = 0;
+	if (reinit)
+		icc_run_task();
 	if (!pending) {
 		coreb_idle();
 		coreb_msg("@@@ wake up\n");

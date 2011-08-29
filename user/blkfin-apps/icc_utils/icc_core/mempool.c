@@ -189,26 +189,22 @@ int gen_pool_add(struct gen_pool *pool, unsigned long addr, size_t size)
 	return 0;
 }
 
-#if 0
 void gen_pool_destroy(struct gen_pool *pool)
 {
-	struct list_head *_chunk, *_next_chunk;
+	int _chunk;
 	struct gen_pool_chunk *chunk;
 	int order = pool->min_alloc_order;
 	int bit, end_bit;
 
 
-	for_each_set_bit(_chunk, _next_chunk, &pool->chunks) {
-		chunk = list_entry(_chunk, struct gen_pool_chunk, next_chunk);
-		list_del(&chunk->next_chunk);
-
-		end_bit = (chunk->end_addr - chunk->start_addr) >> order;
-		bit = find_next_bit(chunk->bits, end_bit, 0);
-
+	for_each_set_bit(_chunk, pool->chunk_bits, BITS_PER_LONG) {
+		chunk = &pool->chunks[_chunk];
+		memset(chunk, 0, sizeof(*chunk));
 	}
+
+	memset(pool, 0, sizeof(*pool));
 	return;
 }
-#endif
 
 unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
 {
