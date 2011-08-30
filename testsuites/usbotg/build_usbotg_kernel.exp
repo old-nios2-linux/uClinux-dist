@@ -28,15 +28,15 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Virtual terminal.*VT.*\\\[.*]" {
             send "N\r"
         }
 
 #enable power Management, otherwise build will fail
-        -re "Power Management support \\\(PM\\\) \\\[.*]" {
-            send "Y\r"
-        }
-
         -re "Suspend to RAM and standby \\\(SUSPEND\\\) \\\[.*]" {
             send "Y\r"
         }
@@ -59,6 +59,10 @@ while 1 {
         }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Platform Glue Layer \\\[.*]" {
             send "Y\r"
         }
 
@@ -147,10 +151,6 @@ while 1 {
             send "y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
             sleep .01
             send "\r"
@@ -185,6 +185,10 @@ while 1 {
             send "n\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "USB Peripheral Controller.*(\[0-9]+). Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\[cC]hoice\\\[.*]" {
             send "$expect_out(1,string)\r"
         }
@@ -195,10 +199,6 @@ while 1 {
 
         -re "Driver Mode.*(\[0-9])\. Both host and peripheral.*USB_MUSB_OTG.*\[cC]hoice\\\[.*]" {
             send "$expect_out(1,string)\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {
@@ -224,11 +224,11 @@ while 1 {
 
 cd $uclinux_path/testsuites
 step "Make"
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
 step "Copy linux"
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file

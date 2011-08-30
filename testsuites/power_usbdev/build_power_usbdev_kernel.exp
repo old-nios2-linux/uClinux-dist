@@ -36,6 +36,10 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Virtual terminal.*VT.*\\\[.*]" {
             send "N\r"
         }
@@ -66,10 +70,6 @@ while 1 {
 
         -re "USB testing driver.*USB_TEST.*\\\[.*]" {
             send "M\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {
@@ -106,7 +106,15 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Platform Glue Layer \\\[.*]" {
             send "Y\r"
         }
 
@@ -161,24 +169,12 @@ while 1 {
         }
 
 #Power Management
-        -re "Power Management support \\\(PM\\\) \\\[.*]" {
-            send "Y\r"
-        }
-
         -re "Suspend to RAM and standby \\\(SUSPEND\\\) \\\[.*]" {
             send "Y\r"
         }
 
-        -re "Allow Wakeup from Standby by GPIO.*PM_WAKEUP_BY_GPIO.*\\\[.*]" {
-            send "N\r"
-        }
-
         -re "rtcwake.*USER_BUSYBOX_RTCWAKE.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {

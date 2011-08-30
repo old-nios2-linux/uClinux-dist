@@ -31,6 +31,10 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
 #TFT LCD
         -re "Support for generic platform NAND driver.*MTD_NAND_PLATFORM.*\\\[.*]" {
             #conflict with TFT LCD
@@ -186,6 +190,10 @@ while 1 {
             }
         }
 
+        -re "Platform Glue Layer \\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
             if { $board_type == "BF548-EZKIT" } {
                 send "N\r"
@@ -244,10 +252,6 @@ while 1 {
 
         -re "Binary format.*FLAT.*Shared-FLAT.*FDPIC.*\\\[.*]" {
             send  "4\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
         }
 
         "\\\(*) \\\[*]" {

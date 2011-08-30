@@ -37,21 +37,13 @@ while 1 {
             send "y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
         }
 
 #Power Management
-        -re "Power Management support \\\(PM\\\) \\\[.*]" {
-            send "Y\r"
-        }
-
         -re "Suspend to RAM and standby \\\(SUSPEND\\\) \\\[.*]" {
             send "Y\r"
-        }
-
-        -re "Allow Wakeup from Standby by GPIO.*PM_WAKEUP_BY_GPIO.*\\\[.*]" {
-            send "N\r"
         }
 
         -re "rtcwake.*USER_BUSYBOX_RTCWAKE.*\\\[.*]" {
@@ -60,31 +52,35 @@ while 1 {
 
 #usb
         -re "Virtual terminal.*VT.*\\\[.*]" {
-            send "n\r"
+            send "N\r"
         }
 
         -re "SCSI device support \\\(SCSI\\\).*\\\[./././.]" {
             if { [string match "BF527-EZKIT*" $board_type] } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
         }
 
         -re "SCSI disk support.*BLK_DEV_SD.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Support for Host-side USB.*USB.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
+        }
+
+        -re "Platform Glue Layer \\\[.*]" {
+            send "Y\r"
         }
 
         -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
@@ -98,19 +94,19 @@ while 1 {
         }
 
         -re "USB Mass Storage support.*USB_STORAGE.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Second extended fs support.*EXT2_FS.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "MSDOS fs support.*MSDOS_FS.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "VFAT.*Windows-95.*fs support.*VFAT_FS.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Default codepage for FAT.*FAT_DEFAULT_CODEPAGE.*\\\[*]" {
@@ -126,31 +122,31 @@ while 1 {
         }
 
         -re "Codepage 437.*United States, Canada.*NLS_CODEPAGE_437.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "NLS ISO 8859-1.*Latin 1; Western European Languages.*NLS_ISO8859_1.*\\\[./././.]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "fdisk.*USER_FDISK_FDISK.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "mke2fs.*USER_E2FSPROGS_MISC_MKE2FS.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "e2fsck.*USER_E2FSPROGS_E2FSCK_E2FSCK.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "mkdosfs.*USER_DOSFSTOOLS_MKDOSFS.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "dosfsck.*USER_DOSFSTOOLS_DOSFSCK.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         "\\\(*) \\\[*]" {

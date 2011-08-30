@@ -22,7 +22,6 @@ spawn make config
 
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -31,54 +30,58 @@ while 1 {
             send "y\r"
         }
 
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
         -re "Virtual terminal.*VT.*\\\[.*]" {
-            send "n\r"
+            send "N\r"
         }
 
         -re "Bluetooth subsystem support.*BT.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "L2CAP protocol support.*BT_L2CAP.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "SCO links support.*BT_SCO.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "RFCOMM protocol support.*BT_RFCOMM.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "RFCOMM TTY support.*BT_RFCOMM_TTY.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "BNEP protocol support.*BT_BNEP.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Multicast filter support.*BT_BNEP_MC_FILTER.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Protocol filter support.*BT_BNEP_PROTO_FILTER.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "HIDP protocol support.*BT_HIDP.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "HCI USB driver.*BT_HCIBTUSB.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
 #CONFIG_MTD_PHYSMAP claims the entire Async. Memory Space
 #need to entirely disable it while using various U-Connector boards
-            send "n\r"
+            send "N\r"
         }
 
         -re "Bank 3.*BANK_3.*\\\[.*]" {
@@ -90,26 +93,30 @@ while 1 {
         }
 
         -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Support for Host-side USB.*USB.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
             if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
         }
 
+        -re "Platform Glue Layer \\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
             if { $board_type == "BF548-EZKIT" } {
-                send "n\r"
+                send "N\r"
             } elseif { [string match "BF527-EZKIT*" $board_type] } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
@@ -117,7 +124,7 @@ while 1 {
 
         -re "ISP1362 HCD support \\\(USB_ISP1362_HCD\\\).*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
@@ -125,18 +132,14 @@ while 1 {
 
         -re "SL811HS HCD support.*USB_SL811_HCD.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
         }
 
         -re "Bluez-utils.*USER_BLUEZ.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
+            send "Y\r"
         }
 
         "\\\(*) \\\[*]" {
@@ -161,16 +164,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
