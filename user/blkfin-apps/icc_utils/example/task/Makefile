@@ -15,19 +15,14 @@ LIBMCAPI_COREB := ${PWD}/../../../../../staging/usr/lib/libmcapi_coreb.a
 CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I${ICC_INCLUDE} -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/include/generated  -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/drivers/staging/icc/include -I${MCAPI_INCLUDE} -I${MCAPI_TEST_INCLUDE} -DCONFIG_BF561 -D__KERNEL__
 LDFLAGS  = -L${ICC_INCLUDE}
 ASFLAGS  = $(CFLAGS)
-all: task1 task2 scalar mcapi_msg1 mcapi_pkt1 mcapi_scl1 mcapi_scl2
 
-mcapi_scl1: mcapi_scl1.o $(ICC_CORE) $(LIBMCAPI_COREB)
-	$(LD) -static $(LDFLAGS) -o mcapi_scl1 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_scl1.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
+INSTALL_TASK_SRC := $(notdir $(wildcard mcapi_*.c))
+INSTALL_TASK := $(patsubst %.c,%,$(INSTALL_TASK_SRC))
 
-mcapi_scl2: mcapi_scl2.o $(ICC_CORE) $(LIBMCAPI_COREB)
-	$(LD) -static $(LDFLAGS) -o mcapi_scl2 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_scl2.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
+all: task1 task2 scalar $(INSTALL_TASK)
 
-mcapi_pkt1: mcapi_pkt1.o $(ICC_CORE) $(LIBMCAPI_COREB)
-	$(LD) -static $(LDFLAGS) -o mcapi_pkt1 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_pkt1.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
-
-mcapi_msg1: mcapi_msg1.o $(ICC_CORE) $(LIBMCAPI_COREB)
-	$(LD) -static $(LDFLAGS) -o mcapi_msg1 -T coreb_task.lds --just-symbol $(ICC_CORE) mcapi_msg1.o $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
+$(INSTALL_TASK): %:%.o $(ICC_CORE) $(LIBMCAPI_COREB)
+	$(LD) -static $(LDFLAGS) -o $@ -T coreb_task.lds --just-symbol $(ICC_CORE) $< $(LIBMCAPI_COREB)  -Ttext $(TASK_LOAD_BASE)
 
 task1: task1.o $(ICC_CORE)
 	$(LD) $(LDFLAGS) -o task1 -T coreb_task.lds --just-symbol $(ICC_CORE) task1.o -Ttext $(TASK_LOAD_BASE)
@@ -39,6 +34,6 @@ scalar: scalar.o $(ICC_CORE)
 	$(LD) $(LDFLAGS) -o scalar -T coreb_task.lds --just-symbol $(ICC_CORE) scalar.o -Ttext $(TASK_LOAD_BASE)
 
 clean:
-	rm -rf *.o task1 task2 scalar mcapi_msg1 mcapi_pkt1 mcapi_scl1
+	rm -rf *.o task1 task2 scalar $(INSTALL_TASK) 
 
 .PHONY: all clean
