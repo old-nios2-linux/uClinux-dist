@@ -89,7 +89,11 @@ int run_program0(struct space *space,
 		argv[0] = program;
 	}
 
+#ifdef __uClinux__
+	pid = vfork();
+#else
 	pid = fork();
+#endif
 	switch(pid) {
 	case 0:
 		/* child closes parent ends of pipes */

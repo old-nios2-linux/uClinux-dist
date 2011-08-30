@@ -850,7 +850,11 @@ int main(int argc, char *argv[])
 			logit(LOG_CRIT, "daemon() failed: %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
 		}
+#ifdef __uClinux__
+		i = vfork();
+#else
 		i = fork();
+#endif
 		if (i < 0) {
 			logit(LOG_CRIT, "fork() failed: %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
