@@ -212,7 +212,7 @@ set timeout 3
 send "ls /dev/gadget/ -l\r"
 while 1 {
     expect {
-        -re "musb_hdrc.*$kernel_prompt" {
+        -re "(musb_hdrc|musb-hdrc).*$kernel_prompt" {
             case_pass $case_num
             break
         }
