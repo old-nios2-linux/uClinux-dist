@@ -1,4 +1,4 @@
-VER = alsa-lib-1.0.18
+VER = alsa-lib-1.0.24
 
 CONF_OPTS = \
 	--with-softfloat \
@@ -6,7 +6,7 @@ CONF_OPTS = \
 	--enable-static \
 	--disable-alisp \
 	--disable-python \
-	$(CONFIGURE_SHARED_ENABLE)
+	$(CONFIGURE_SHARED_ENABLE) CFLAGS="$(CFLAGS) -lm"
 
 # install target is not parallel safe
 .NOTPARALLEL:
