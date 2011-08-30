@@ -402,7 +402,7 @@ if {  $core_config != "SMP" } {
 		}
 	}
         incr case_num
-        send "break 34\r"
+        send "break 35\r"
         expect {
               -re  "Breakpoint 4 at 0xffa0\[0-9a-f]{4}" {
                 case_pass $case_num
@@ -1188,7 +1188,7 @@ if { $board_type == "BF548-EZKIT" || $board_type == "BF561-EZKIT" } {
                 }
         }
         incr case_num
-        send "hbreak 48\r"
+        send "hbreak 49\r"
         expect {
               -re  "Hardware assisted breakpoint .* at 0xfeb0\[0-9a-f]{4}" {
                 case_pass $case_num
