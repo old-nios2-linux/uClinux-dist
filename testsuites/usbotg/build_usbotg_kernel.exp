@@ -189,6 +189,10 @@ while 1 {
             continue
         }
 
+        -re "Platform Glue Layer \\\[.*]" {
+            send "\r"
+        }
+
         -re "USB Peripheral Controller.*(\[0-9]+). Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\[cC]hoice\\\[.*]" {
             send "$expect_out(1,string)\r"
         }
