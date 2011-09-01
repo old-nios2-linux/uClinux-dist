@@ -102,22 +102,6 @@ while 1 {
             }
         }
 
-        -re "Second extended fs support \\\(EXT2_FS\\\) \\\[.*]" {
-            if { $board_type == "BF548-EZKIT" } {
-                send "Y\r"
-            } else {
-                send "\r"
-            }
-        }
-
-        -re "mke2fs.*USER_E2FSPROGS_MISC_MKE2FS.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" } {
-                send "Y\r"
-            } else {
-                send "\r"
-            }
-        }
-
         -re "hostid.*USER_BUSYBOX_HOSTID.*\\\[.*]" {
             send "Y\r"
         }
@@ -158,7 +142,47 @@ while 1 {
         -nocase -re "Native language support.*NLS.*\\\[.*n.*]" {
             send "N\r"
         }
-#END - Need to reduce size for some platform, such as BF533-EZKIT
+
+#enable usb host related driver for bf548-ezkit
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            if { $board_type == "BF548-EZKIT" } {
+                send "Y\r"
+            } else {
+                send "\r"
+            }
+        }
+
+        -re "Support for Host-side USB.*USB.*\\\[./././.]" {
+            send "Y\r"
+        }
+
+        -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[./././.]" {
+            send "Y\r"
+        }
+
+        -re "Platform Glue Layer \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Mass Storage support.*USB_STORAGE.*\\\[./././.]" {
+            send "Y\r"
+        }
+
+        -re "Second extended fs support \\\(EXT2_FS\\\) \\\[.*]" {
+            if { $board_type == "BF548-EZKIT" } {
+                send "Y\r"
+            } else {
+                send "\r"
+            }
+        }
+
+        -re "mke2fs.*USER_E2FSPROGS_MISC_MKE2FS.*\\\[.*]" {
+            if { $board_type == "BF548-EZKIT" } {
+                send "Y\r"
+            } else {
+                send "\r"
+            }
+        }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
