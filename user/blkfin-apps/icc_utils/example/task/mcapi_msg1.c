@@ -82,17 +82,14 @@ void icc_task_init(int argc, char *argv[]) {
 i = 0;  
 
 while(1) {
-
-if (icc_wait())
-  
-	recv_loopback(ep1,status,MCAPI_SUCCESS);
-  	if (status != MCAPI_SUCCESS) { WRONG }
-
-        coreb_msg("\nCoreB: mcapi message loop test. The %i time send back ok. \n", i);
-
-        if ( i == NUM_SIZES )
-               break;
-        i++;
+	if (icc_wait()) {
+		recv_loopback(ep1,status,MCAPI_SUCCESS);
+		if (status != MCAPI_SUCCESS) { WRONG }
+		i++;
+		coreb_msg("\nCoreB: mcapi message loop test. The %i time send back ok. \n", i);
+		if (i == NUM_SIZES)
+			break;
+	}
 
 }
 
