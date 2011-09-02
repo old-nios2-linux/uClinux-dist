@@ -1182,6 +1182,15 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 		return;
 	}
 
+
+	ret = sm_recv_packet(index,&se, &sn, &buf, &len);
+	if (ret < 0) {
+		mcapi_dprintf(1,"recv failed\n");
+		*mcapi_status = ret;
+		return;
+	}
+	coreb_msg("index %d, se %d, sn %d\n", index, se, sn);
+
 	/* find a free mcapi buffer (we only have to worry about this on the sending side) */
 	for (i = 0; i < MCAPI_MAX_BUFFERS; i++) {
 		if (!c_db->buffers[i].magic_num) {
@@ -1195,19 +1204,13 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 		mcapi_dprintf(2," ERROR mcapi_trans_send_internal: No more buffers available - try freeing some buffers. \n");
 		coreb_msg("pktchan buffer is full\n");
 		*mcapi_status = MCAPI_FALSE;
-		return MCAPI_FALSE;
+		return;
 	}
 
-	ret = sm_recv_packet(index,&se, &sn, &buf, &len);
-	if (ret) {
-		mcapi_dprintf(1,"recv failed\n");
-		*mcapi_status = ret;
-	}
-	coreb_msg("index %d, se %d, sn %d\n", index, se, sn);
 
 	if (buf) {
 		memcpy(db_buff->buff, buf, len);
-		coreb_msg("buffer %s len %d se %d sn %d\n", buf, len, se, sn);
+		coreb_msg("buffer %08x %s len %d se %d sn %d\n", db_buff->buff, buf, len, se, sn);
 		sm_recv_release(buf, len, index);
 		*buffer = db_buff->buff;
 		*mcapi_status = MCAPI_SUCCESS;
@@ -1249,6 +1252,7 @@ mcapi_boolean_t mcapi_trans_pktchan_free( void* buffer)
 		memset(b_e,0,sizeof(buffer_entry));
 	} else {
 		/* didn't find the buffer */
+		coreb_msg("didn't find%08x\n", buffer);
 		rc = MCAPI_FALSE;
 	}
 	return rc;

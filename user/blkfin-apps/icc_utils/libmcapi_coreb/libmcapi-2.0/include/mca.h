@@ -15,7 +15,7 @@ extern "C" {
 #define MCAPI_MAX_ATTRIBUTES 2
 
 /* Defined and set to $max_buffers. */
-#define MCAPI_MAX_BUFFERS 4
+#define MCAPI_MAX_BUFFERS 8
 
 /* Defined and set to $max_channels. */
 #define MCAPI_MAX_CHANNELS 32
