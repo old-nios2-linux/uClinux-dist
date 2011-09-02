@@ -15,7 +15,7 @@ if { $argc == 2 } {
 }
 
 if { $board_type == "BF548-EZKIT" }  {
-    set wakeup_pattern "Syncing filesystems \.\.\. done.*Freezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done.*Freezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done.*Suspending console\\\(s\\\).*Restarting tasks.*done.*$kernel_prompt"
+    set wakeup_pattern "Syncing filesystems \.\.\. done.*Freezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done.*Freezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done.*Suspending console\\\(s\\\).*Restarting tasks.*$kernel_prompt"
 } else {
     set wakeup_pattern "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt"
 }
@@ -74,7 +74,7 @@ proc standby_test_case1 {} {
     }
 
     set timeout 5
-    expect -re "Full\r\n|lpa 0x41E1\r\n"
+    expect -re "(Full|lpa 0x41E1|SD card at address.*)\r\n"
 
     incr case_num
     set timeout 10
