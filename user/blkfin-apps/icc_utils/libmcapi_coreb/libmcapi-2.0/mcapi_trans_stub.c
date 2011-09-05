@@ -986,9 +986,10 @@ void mcapi_trans_msg_recv_i( mcapi_endpoint_t  receive_endpoint,  char* buffer, 
 	}
 
 	ret = sm_recv_packet(index,&se, &sn, &buf, &len);
-	if (ret) {
+	if (ret < 0) {
 		mcapi_dprintf(1,"recv failed\n");
 		*mcapi_status = ret;
+		return;
 	}
 	if (buf) {
 		memcpy(buffer, buf, len);
@@ -997,7 +998,7 @@ void mcapi_trans_msg_recv_i( mcapi_endpoint_t  receive_endpoint,  char* buffer, 
 		sm_recv_release(buf, len, index);
 		*mcapi_status = MCAPI_SUCCESS;
 	} else
-		*mcapi_status = MCAPI_SUCCESS;
+		*mcapi_status = MCAPI_FALSE;
 
 	send_endpoint = mcapi_trans_encode_handle_internal(0,sn,se);
 
