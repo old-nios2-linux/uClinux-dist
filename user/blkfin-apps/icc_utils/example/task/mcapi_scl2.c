@@ -30,8 +30,9 @@ mcapi_boolean_t send (mcapi_sclchan_send_hndl_t send_handle, mcapi_endpoint_t re
   default: coreb_msg(stderr,"ERROR: bad data size in call to send. size is %i\n", size);
   };
   if (status == MCAPI_SUCCESS) {
-    coreb_msg("endpoint=%i has sent %i byte(s): [%llu]!!\n",(int)send_handle,(int)size/8,data);
-  }
+    coreb_msg("endpoint=%i has sent %i byte(s): [%llx]!!\n",(int)send_handle,(int)size/8,data);
+  } else
+  	coreb_msg("send failed size %d\n", size);
   if (status == exp_status) {
     rc = MCAPI_TRUE;
   }
