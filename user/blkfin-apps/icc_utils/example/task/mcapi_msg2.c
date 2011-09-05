@@ -34,14 +34,15 @@ void send (mcapi_endpoint_t send, mcapi_endpoint_t recv,char* msg,mcapi_status_t
   }
 }
 
-void recv_loopback (mcapi_endpoint_t recv,mcapi_status_t status,int exp_status) {
+void recv_loopback (mcapi_endpoint_t recv,mcapi_status_t *status,int exp_status) {
   size_t recv_size;
   mcapi_request_t request1;
   mcapi_request_t request2;
   mcapi_endpoint_t send_back;
-  mcapi_msg_recv_i(recv,buffer,BUFF_SIZE,&request1,&status);
-  if (status != exp_status) { WRONG}
-  if (status == MCAPI_SUCCESS) {
+  memset(buffer, 0, BUFF_SIZE);
+  mcapi_msg_recv_i(recv,buffer,BUFF_SIZE,&request1,status);
+  if (*status != exp_status) { WRONG}
+  if (*status == MCAPI_SUCCESS) {
     coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,buffer);
   }
 
@@ -64,6 +65,7 @@ void icc_task_init(int argc, char *argv[]) {
   mcapi_param_t parms;
   mcapi_endpoint_t ep1,ep2;
   int i ;
+  int i1=0,i2=0;
   mcapi_uint_t avail;
 
   coreb_msg("[%s] %d\n", __func__, __LINE__);
@@ -89,21 +91,21 @@ void icc_task_init(int argc, char *argv[]) {
 i = 0;  
 
 while(1) {
+	if (icc_wait()) {
+		if ((i1 + i2) == NUM_SIZES * 2)
+			break;
 
-if (icc_wait())
-  
-	recv_loopback(ep1,status,MCAPI_SUCCESS);
-  	if (status != MCAPI_SUCCESS) { WRONG }
+		recv_loopback(ep1,&status,MCAPI_SUCCESS);
+		if (status != MCAPI_SUCCESS) { WRONG }
+		else {i1++;}
 
-	recv_loopback(ep2,status,MCAPI_SUCCESS);
-  	if (status != MCAPI_SUCCESS) { WRONG }
+		recv_loopback(ep2,&status,MCAPI_SUCCESS);
+		if (status != MCAPI_SUCCESS) { WRONG }
+		else {i2++;}
 
-        coreb_msg("\nCoreB: mcapi message loop test. The %i time send back ok. \n", i);
+		coreb_msg("\nCoreB: mcapi message loop test. The %i time send back ok. \n", (i1+i2));
 
-        if ( i == NUM_SIZES )
-               break;
-        i++;
-
+	}
 }
 
   mcapi_endpoint_delete(ep1,&status);
