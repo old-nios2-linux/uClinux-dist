@@ -136,8 +136,8 @@ void icc_task_init(int argc, char *argv[])
 	if (status != MCAPI_SUCCESS) { WRONG }
 	coreb_msg("mcapi sclchan test ep2 %x\n", ep2);
 
-//	ep3 = mcapi_endpoint_get (DOMAIN,MASTER_NODE_NUM,MASTER_PORT_NUM2,MCA_INFINITE,&status);
-//	if (status != MCAPI_SUCCESS) { WRONG }
+	ep3 = mcapi_endpoint_get (DOMAIN,MASTER_NODE_NUM,MASTER_PORT_NUM1,MCA_INFINITE,&status);
+	if (status != MCAPI_SUCCESS) { WRONG }
 
 	coreb_msg("mcapi sclchan test ep3 %x\n", ep3);
 
@@ -154,15 +154,15 @@ void icc_task_init(int argc, char *argv[])
                         WRONG 
 			}
 
-	//		if (i == NUM_SIZES) {
-	//			mcapi_sclchan_connect_i(ep2,ep3,&request,&status);
+			if ((i1 + i2) == NUM_SIZES * 2) {
+				mcapi_sclchan_connect_i(ep1,ep3,&request,&status);
 
-	//			mcapi_sclchan_send_open_i(&s1,ep2, &request, &status);
+				mcapi_sclchan_send_open_i(&s1,ep1, &request, &status);
 
-	//			send(s1,ep3,test_pattern,64,status,MCAPI_SUCCESS);
+				send(s1,ep3,test_pattern,64,status,MCAPI_SUCCESS);
 
-	//			break;
-//			}
+				break;
+			}
 
 		}
 	}
