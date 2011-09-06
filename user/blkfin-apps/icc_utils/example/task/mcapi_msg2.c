@@ -54,8 +54,6 @@ void recv_loopback (mcapi_endpoint_t recv,mcapi_status_t *status,int exp_status)
       coreb_msg("endpoint=%i has sent: [%s]\n",(int)recv,buffer);
     }
   
-    mcapi_endpoint_delete(send_back,&status);
-    if (status != MCAPI_SUCCESS) { WRONG }
   
   }
 }
