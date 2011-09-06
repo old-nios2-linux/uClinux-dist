@@ -870,7 +870,7 @@ static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 		session->handle(message, session);
 		free_message(message);
 	} else {
-		list_add(&message->next, &session->rx_messages);
+		list_add_tail(&message->next, &session->rx_messages);
 		session->n_avail++;
 		coreb_msg("avail %d \n", session->n_avail);
 	}
@@ -886,7 +886,7 @@ static int sm_default_sendmsg(struct sm_message *message, struct sm_session *ses
 	case SP_SESSION_PACKET:
 	case SP_SCALAR:
 	case SP_SESSION_SCALAR:
-		list_add(&message->next, &session->tx_messages);
+		list_add_tail(&message->next, &session->tx_messages);
 		session->n_uncompleted++;
 		break;
 	case SM_PACKET_ERROR:
