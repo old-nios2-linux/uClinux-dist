@@ -216,6 +216,8 @@ static  char* put_dec(char *buf, unsigned NUM_TYPE num)
 		unsigned rem;
 		if (num < 100000)
 			return put_dec_trunc(buf, num);
+		else
+			return put_dec_trunc(buf, num & 0x1869f);
 	}
 }
 
