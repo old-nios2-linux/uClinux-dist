@@ -10,7 +10,7 @@
 #include <string.h>
 
 #define BUFF_SIZE 64
-#define NUM_SIZES 100
+#define NUM_SIZES 8 
 
 #define DOMAIN 0
 
@@ -117,7 +117,6 @@ void icc_task_init(int argc, char *argv[])
 
       			if ( i == NUM_SIZES - 1 ) {
 				send_pktchan(ep1,status,MCAPI_SUCCESS);
-				break;
 			}
 			i++;
 		}
