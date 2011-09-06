@@ -677,7 +677,6 @@ sm_send_scalar(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 	ret = sm_send_message_internal(&message->msg, dst_cpu, blackfin_core_id());
 	if (!ret)
 		goto out;
-
 fail:
 	free_message(message);
 out:
@@ -795,7 +794,7 @@ int sm_recv_scalar(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 
 	} else {
 		coreb_msg("no message\n");
-		ret = -EAGAIN;
+		ret = 0;
 	}
 	coreb_msg(" %s msg\n",__func__);
 	return ret;
@@ -975,11 +974,13 @@ matched1:
 		}
 		break;
 	case SM_SESSION_PACKET_CLOSE:
+	case SM_SESSION_SCALAR_CLOSE:
 		session->remote_ep = 0;
 		session->flags = 0;
 		sm_send_close_ack(session, msg->src_ep, cpu ^ 1);
 		break;
 	case SM_SESSION_PACKET_CLOSE_ACK:
+	case SM_SESSION_SCALAR_CLOSE_ACK:
 		session->remote_ep = 0;
 		session->flags = 0;
 		break;
@@ -1172,15 +1173,11 @@ uint32_t msg_handle(void)
 	struct sm_session_status status;
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
-	if (icc_handle_scalar_cmd(msg)) {
-		sm_message_dequeue(cpu, msg);
-		return;
-	}
-
 	index = sm_find_session(msg->dst_ep, 0, coreb_info.icc_info.sessions_table);
 
 	session = sm_index_to_session(index);
 	if (!session) {
+		coreb_msg("error messag type %08xe\n", msg->type);
 		sm_message_dequeue(cpu, msg);
 		return;
 	}
