@@ -93,7 +93,7 @@ void icc_task_init(int argc, char *argv[])
 	if (status != MCAPI_SUCCESS) { WRONG }
 	coreb_msg("mcapi pktchan test ep2 %x\n", ep2);
 
-	ep3 = mcapi_endpoint_get (DOMAIN,MASTER_NODE_NUM,MASTER_PORT_NUM2,MCA_INFINITE,&status);
+	ep3 = mcapi_endpoint_get (DOMAIN,MASTER_NODE_NUM,MASTER_PORT_NUM1,MCA_INFINITE,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
 
 	coreb_msg("mcapi pktchan test ep3 %x\n", ep3);
@@ -104,20 +104,19 @@ void icc_task_init(int argc, char *argv[])
 			recv_pktchan(ep1,status1,MCAPI_SUCCESS);
 			recv_pktchan(ep2,status2,MCAPI_SUCCESS);
 
-			if ((status1 == MCAPI_FALSE) || (status2 == MCAPI_FALSE)) {
+			if ((status1 == MCAPI_FALSE) && (status2 == MCAPI_FALSE)) {
 			       WRONG
 			}
 
+			if (i == 0)
+				mcapi_pktchan_connect_i(ep1,ep3,&request,&status);
 
-//			if (i == 0)
-//				mcapi_pktchan_connect_i(ep2,ep3,&request,&status);
-//
-//			if (status != MCAPI_SUCCESS) { WRONG }
-//
-//			coreb_msg("\nCoreB: mcapi pktchan test. The %i time send back ok. \n", i);
-//
-			if ( i == NUM_SIZES - 1 ) {
-//				send_pktchan(ep2,status,MCAPI_SUCCESS);
+			if (status != MCAPI_SUCCESS) { WRONG }
+
+			coreb_msg("\nCoreB: mcapi pktchan test. The %i time send back ok. \n", i);
+
+      			if ( i == NUM_SIZES - 1 ) {
+				send_pktchan(ep1,status,MCAPI_SUCCESS);
 				break;
 			}
 			i++;

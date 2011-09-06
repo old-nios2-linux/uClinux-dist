@@ -41,29 +41,30 @@ void recv_loopback (mcapi_endpoint_t recv,mcapi_status_t *status,int exp_status)
   mcapi_endpoint_t send_back;
   memset(buffer, 0, BUFF_SIZE);
   mcapi_msg_recv_i(recv,buffer,BUFF_SIZE,&request1,status);
-  if (*status != exp_status) { WRONG}
+  if (*status != exp_status) { WRONG }
   if (*status == MCAPI_SUCCESS) {
     coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,buffer);
+
+    send_back = mcapi_endpoint_get(DOMAIN,MASTER_NODE_NUM, MASTER_PORT_NUM1, MCA_INFINITE, &status);
+  
+    coreb_msg("endpoint=%i sendback: buf %x\n",(int)send_back, (unsigned int)buffer);
+    mcapi_msg_send_i(recv,send_back,buffer,BUFF_SIZE,1,&request2,&status);
+    if (status != exp_status) { WRONG}
+    if (status == MCAPI_SUCCESS) {
+      coreb_msg("endpoint=%i has sent: [%s]\n",(int)recv,buffer);
+    }
+  
+    mcapi_endpoint_delete(send_back,&status);
+    if (status != MCAPI_SUCCESS) { WRONG }
+  
   }
-
-//send_back = mcapi_endpoint_get(DOMAIN,MASTER_NODE_NUM, MASTER_PORT_NUM1, MCA_INFINITE, &status);
-//
-//  coreb_msg("endpoint=%i sendback: buf %x\n",(int)send_back, (unsigned int)buffer);
-//  mcapi_msg_send_i(recv,send_back,buffer,BUFF_SIZE,1,&request2,&status);
-//  if (status != exp_status) { WRONG}
-//  if (status == MCAPI_SUCCESS) {
-//    coreb_msg("endpoint=%i has sent: [%s]\n",(int)recv,buffer);
-//  }
-
-//  mcapi_endpoint_delete(send_back,&status);
-//  if (status != MCAPI_SUCCESS) { WRONG }
 }
 
 void icc_task_init(int argc, char *argv[]) {
   mcapi_status_t status;
   mcapi_info_t version;
   mcapi_param_t parms;
-  mcapi_endpoint_t ep1,ep2;
+  mcapi_endpoint_t ep1,ep2,ep3;
   int i ;
   int i1=0,i2=0;
   mcapi_uint_t avail;
@@ -92,8 +93,9 @@ i = 0;
 
 while(1) {
 	if (icc_wait()) {
-		if ((i1 + i2) == NUM_SIZES * 2)
-			break;
+		if ((i1 + i2) == NUM_SIZES * 2) {
+		break;
+		}
 
 		recv_loopback(ep1,&status,MCAPI_SUCCESS);
 		if (status != MCAPI_SUCCESS) { WRONG }
