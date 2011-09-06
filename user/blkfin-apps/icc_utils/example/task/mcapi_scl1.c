@@ -151,10 +151,11 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_sclchan_send_close_i(s1,&request,&status);
 
 	/****CoreB to send scalar ended. ***********/
+	while(1)
+		icc_wait();
 
 	mcapi_endpoint_delete(ep1,&status);
 	mcapi_endpoint_delete(ep2,&status);
-	mcapi_endpoint_delete(ep3,&status);
 
 	coreb_msg("CoreB Send Close PASSED\n");
 	mcapi_finalize(&status);
