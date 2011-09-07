@@ -113,6 +113,7 @@ send "/usr/bin/opreport -l\r"
 while 1 {
     expect {
         -re "not found|\[eE]rror|\[fF]ail|Hardware Trace" {
+            expect -re $kernel_prompt
             case_fail $case_num
         }
         -re "Profiling through timer interrupt.*symbol name.*$kernel_prompt" {
@@ -151,6 +152,7 @@ send "/usr/bin/opreport -l\r"
 while 1 {
     expect {
         -re "not found|\[eE]rror|\[fF]ail|Hardware Trace" {
+            expect -re $kernel_prompt
             case_fail $case_num
         }
         -re "Profiling through timer interrupt.*symbol name.*$kernel_prompt" {
@@ -303,6 +305,7 @@ send "/usr/bin/opreport -lw\r"
 while 1 {
     expect {
         -re "not found|\[eE]rror|\[fF]ail|Hardware Trace" {
+            expect -re $kernel_prompt
             case_fail $case_num
         }
         -re "Profiling through timer interrupt.*symbol name.*$kernel_prompt" {
@@ -316,8 +319,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
