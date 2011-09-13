@@ -41,7 +41,7 @@ while 1 {
 
 incr case_num
 set timeout 10
-send "modprobe videobuf2_dma_contig; sleep 3; modprobe bfin_video_capture\r"
+send "modprobe bfin_video_capture\r"
 while 1 {
     expect {
         -re "\[eE]rror|\[fF]ail|Hardware Trace|SIGSEGV" {
