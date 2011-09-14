@@ -38,6 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <mca.h>
 #include <mcapi_impl_spec.h>
+#include <debug.h>
 
 #ifdef __GNUC__
 #define MCAPI_DECL_ALIGNED __attribute__ ((aligned (32))) 

@@ -1,5 +1,6 @@
 #include <linux/bitmap.h>
 #include "mempool.h"
+#include <debug.h>
 
 #define BITOP_WORD(nr)          ((nr) / BITS_PER_LONG)
 /**
@@ -15,8 +16,6 @@
 #define MAX_CHUNK 32
 struct gen_pool gmempool[MAX_POOL];
 struct gen_pool_chunk gchunk[MAX_POOL * MAX_CHUNK];
-
-void coreb_msg(char *fmt, ...);
 
 #define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) % BITS_PER_LONG))
 void bitmap_set(unsigned long *map, int start, int nr)

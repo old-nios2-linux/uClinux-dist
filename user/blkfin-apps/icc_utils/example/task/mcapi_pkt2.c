@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h> /* for malloc */
 #include <string.h>
+#include <debug.h>
 
 #define BUFF_SIZE 64
 #define NUM_SIZES 8 

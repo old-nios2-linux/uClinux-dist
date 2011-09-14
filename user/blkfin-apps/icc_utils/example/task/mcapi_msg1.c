@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h> /* for malloc */
 #include <string.h>
+#include <debug.h>
 
 #define BUFF_SIZE 64
 #define NUM_SIZES 4
@@ -88,7 +89,7 @@ while(1) {
 		i++;
 		coreb_msg("\nCoreB: mcapi message loop test. The %i time send back ok. \n", i);
 		if (i == NUM_SIZES)
-			break;
+			coreb_msg("CoreB Test PASSED\n");
 	}
 
 }
@@ -96,6 +97,5 @@ while(1) {
   mcapi_endpoint_delete(ep1,&status);
 
   mcapi_finalize(&status);
-  coreb_msg("CoreB Test PASSED\n");
   return; 
 }

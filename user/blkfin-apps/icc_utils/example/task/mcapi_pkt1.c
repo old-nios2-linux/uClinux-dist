@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h> /* for malloc */
 #include <string.h>
+#include <debug.h>
 
 #define BUFF_SIZE 64
 #define NUM_SIZES 100
@@ -79,6 +80,7 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_request_t request;
 
 	coreb_msg("[%s] %d\n", __func__, __LINE__);
+
 	/* create a node */
   	mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
@@ -113,7 +115,6 @@ void icc_task_init(int argc, char *argv[])
 
 			if ( i == NUM_SIZES - 1 ) {
 				send_pktchan(ep2,status,MCAPI_SUCCESS);
-				break;
 			}
 			i++;
 		}
@@ -124,5 +125,6 @@ void icc_task_init(int argc, char *argv[])
 
 	mcapi_finalize(&status);
 	coreb_msg("   Test PASSED\n");
+
 	return;
 }

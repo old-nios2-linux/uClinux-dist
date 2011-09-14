@@ -406,7 +406,6 @@ mcapi_boolean_t mcapi_trans_valid_endpoint (mcapi_endpoint_t endpoint)
 
 		rc = c_db->domains[domain_index].nodes[0].node_d.endpoints[index].valid;
 
-		coreb_msg("%s ep %d index %d valid %d\n", __func__, endpoint, index, rc);
 	}
 
 	mcapi_dprintf(3,"mcapi_trans_valid_endpoint endpoint=0x%llx (database indices: n=%d,e=%d) rc=%d\n",(unsigned long long)endpoint,n,e,rc);

@@ -1,5 +1,6 @@
 #include <icc.h>
 #include <protocol.h>
+#include <debug.h>
 
 #define LOCAL_SESSION 5
 
