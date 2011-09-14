@@ -111,7 +111,9 @@ static int put_region(void *dst, size_t dst_size, const void *src, size_t src_si
 	size_t i;
 	int ret;
 	void *new_src = NULL;
+	unsigned int nbytes = 0;
 	unsigned long ldst = (unsigned long)dst;
+	char *cdst, *csrc;
 
 	/* figure out how to get this section into the memory map */
 	for (i = 0; i < ARRAY_SIZE(mem_regions); ++i) {
@@ -177,9 +179,20 @@ static int put_region(void *dst, size_t dst_size, const void *src, size_t src_si
 	if (ret == 0) {
 		if (ldst >= 0xff000000)
 			dma_memcpy(dst, src, dst_size);
-		else
+		else {
+			memset(0x3c00000, 0, 0x400000);
 			memcpy(dst, src, dst_size);
+			nbytes = dst_size;
+			cdst = (char *)dst;
+			csrc = (char *)src;
+			for (i = 0; i < dst_size; i++) {
+				if (cdst[i] != csrc[i])
+					printf("check failed %d\n", nbytes);
+			}
+
+		}
 	}
+
 
 	free(new_src);
 
