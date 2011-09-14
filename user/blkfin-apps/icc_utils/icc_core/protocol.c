@@ -9,6 +9,7 @@
 #include <icc.h>
 #include <protocol.h>
 #include <blackfin.h>
+#include <debug.h>
 
 static inline void coreb_idle(void)
 {
@@ -35,6 +36,7 @@ int sm_task1_status = 0;
 int sm_task1_control_ep = 0;
 uint32_t sm_task1_msg_buffer = 0;
 int reinit = 0;
+uint16_t pending = 0;
 
 struct sm_proto *sm_protos[SP_MAX];
 
@@ -71,7 +73,8 @@ int init_sm_session_table(void)
 		coreb_msg("@@@ alloc session table failed\n");
 		return -ENOMEM;
 	}
-	coreb_info.icc_info.sessions_table->nfree = MAX_ENDPOINTS; 
+	coreb_msg("session table %x\n", coreb_info.icc_info.sessions_table);
+	coreb_info.icc_info.sessions_table->nfree = MAX_ENDPOINTS;
 }
 
 static int get_msg_src(struct sm_msg *msg)
@@ -382,8 +385,6 @@ void sm_handle_control_message(sm_uint32_t cpu)
 		case SM_TASK_RUN:
 			if (sm_task1.task_init) {
 				coreb_msg("task exit %x\n", sm_task1.task_exit);
-				if (sm_task1.task_exit)
-					sm_task1.task_exit();
 				gen_pool_destroy(coreb_info.pool);
 				gen_pool_destroy(coreb_info.msg_pool);
 				reinit = 1;
@@ -394,17 +395,17 @@ void sm_handle_control_message(sm_uint32_t cpu)
 			coreb_msg("task init %x exit %x\n", sm_task1.task_init, sm_task1.task_exit);
 			sm_task1_control_ep = msg->src_ep;
 			sm_task1_msg_buffer = msg->payload;
-			if (sm_task1.task_init)
-				sm_task1_status = SM_TASK_INIT;
 
 			if (reinit) {
 				icc_init();
 			}
+
+			sm_task1_status = SM_TASK_INIT;
 			sm_send_task_run_ack(sm_task1_control_ep, cpu ^ 1);
 
 			delay(1);
 
-			coreb_msg("finish %s\n", __func__);
+			coreb_msg("finish %s task status %d\n", __func__, sm_task1_status);
 			break;
 		case SM_TASK_KILL:
 			if (sm_task1.task_init)
@@ -414,6 +415,7 @@ void sm_handle_control_message(sm_uint32_t cpu)
 			break;
 		}
 		sm_message_dequeue(cpu, msg);
+		coreb_msg("finish1 %s task status %d\n", __func__, sm_task1_status);
 		return;
 	}
 }
@@ -832,7 +834,7 @@ int sm_recv_packet(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 	return ret;
 }
 
-int iccqueue_getpending(sm_uint32_t srccpu)
+inline uint16_t iccqueue_getpending(sm_uint32_t srccpu)
 {
 	struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[srccpu];
 	sm_atomic_t sent = sm_atomic_read(&inqueue->sent);
@@ -1066,20 +1068,17 @@ void icc_run_task(void)
 	struct sm_task *task;
 	int i;
 	int cpu = blackfin_core_id();
-	task = &sm_task1;
-	for (i = 0; i < SM_MAX_TASKARGS; i++) {
-		task_argv[i] = task->task_argv[i];
-	}
-
-	coreb_msg("before run task\n");
 	if (sm_task1_status == SM_TASK_INIT) {
+		task = &sm_task1;
+		for (i = 0; i < SM_MAX_TASKARGS; i++) {
+			task_argv[i] = task->task_argv[i];
+		}
+
+		coreb_msg("before run task %x\n", sm_task1.task_init);
 		sm_task1_status = SM_TASK_RUNNING;
-		coreb_msg("before run task1\n");
-		reinit = 0;
 		sm_task1.task_init(sm_task1.task_argc, task_argv);
 		sm_task1_status = SM_TASK_NONE;
 	}
-	icc_wait(0);
 }
 
 int sm_get_session_status(uint32_t session_idx, struct sm_session_status *status)
@@ -1147,13 +1146,13 @@ uint32_t msg_handle(void);
 int icc_wait(int session_mask)
 {
 	int cpu = blackfin_core_id();
-	int pending = iccqueue_getpending(cpu);
 	uint32_t avail = 0;
-	if (reinit)
-		icc_run_task();
+	unsigned long flags;
+	icc_run_task();
+	pending = iccqueue_getpending(cpu);
 	if (!pending) {
+		bfin_coretmr_set_next_event(4000000000);
 		coreb_idle();
-		coreb_msg("@@@ wake up\n");
 		return 0;
 	}
 	avail = msg_handle();

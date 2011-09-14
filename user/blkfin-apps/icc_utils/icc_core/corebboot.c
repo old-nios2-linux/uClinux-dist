@@ -24,6 +24,9 @@
 #include <asm/blackfin.h>
 
 #include <protocol.h>
+#include <debug.h>
+
+extern uint16_t pending;
 
 static inline void coreb_idle(void)
 {
@@ -39,6 +42,7 @@ static inline void coreb_idle(void)
 
 
 extern void evt_evt7(void );
+extern void evt_evt6(void );
 extern void evt_evt2(void );
 extern void evt_evt3(void );
 extern void evt_evt5(void );
@@ -76,7 +80,7 @@ void udelay(sm_uint32_t count)
 
 void delay(sm_uint32_t count)
 {
-	sm_uint32_t ncount = 100 * count;
+	sm_uint32_t ncount = 30 * count;
 	while(ncount--)
 		udelay(10000);
 }
@@ -135,7 +139,30 @@ void platform_clear_ipi(unsigned int cpu, int irq)
 	SSYNC();
 }
 
-#define DEBUG
+void bfin_coretmr_init(void)
+{
+	/* power up the timer, but don't enable it just yet */
+	bfin_write_TCNTL(TMPWR);
+	CSYNC();
+
+	/* the TSCALE prescaler counter. */
+	bfin_write_TSCALE(0);
+	bfin_write_TPERIOD(0);
+	bfin_write_TCOUNT(0);
+
+	CSYNC();
+}
+
+int bfin_coretmr_set_next_event(unsigned long cycles)
+{
+	bfin_write_TCNTL(TMPWR);
+	CSYNC();
+	bfin_write_TCOUNT(cycles);
+	CSYNC();
+	bfin_write_TCNTL(TMPWR | TMREN);
+	return 0;
+}
+
 #ifdef DEBUG
 # define MSG_LINE 128
 void coreb_msg(char *fmt, ...)
@@ -171,9 +198,12 @@ void coreb_msg(char *fmt, ...)
 	platform_send_ipi_cpu(0, IRQ_SUPPLE_0);
 	delay(1);
 }
-#else
-# define coreb_msg(x) do {} while (0)
 #endif
+
+void dump_execption(unsigned int errno, unsigned int addr)
+{
+	coreb_msg("execption %x addr %x\n", errno, addr);
+}
 
 void init_exception_vectors(void)
 {
@@ -183,6 +213,7 @@ void init_exception_vectors(void)
          */
 	/* ipi evt */
 	bfin_write_EVT7(evt_evt7);
+	bfin_write_EVT6(evt_evt6);
 	bfin_write_EVT2(evt_evt2);
 	bfin_write_EVT3(evt_evt3);
 	bfin_write_EVT5(evt_evt5);
@@ -220,6 +251,7 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 	++intcnt;
 
 	platform_clear_ipi(cpu, IRQ_SUPPLE_0);
+	pending = iccqueue_getpending(cpu);
 	sm_handle_control_message(cpu);
 	return IRQ_HANDLED;
 }
@@ -229,7 +261,15 @@ irqreturn_t ipi_handler_int1(int irq, void *dev_instance)
 	sm_uint32_t cpu = blackfin_core_id();
 
 	platform_clear_ipi(cpu, IRQ_SUPPLE_1);
+	pending = iccqueue_getpending(cpu);
+	return IRQ_HANDLED;
+}
 
+irqreturn_t timer_handle(int irq, void *dev_instance)
+{
+	sm_uint32_t cpu = blackfin_core_id();
+
+	pending = iccqueue_getpending(cpu);
 	return IRQ_HANDLED;
 }
 
@@ -248,7 +288,7 @@ static void setup_secondary(unsigned int cpu)
 	/* Enable interrupt levels IVG7. IARs have been already
 	 * programmed by the boot CPU.  */
 //	bfin_irq_flags = IMASK_IVG7 | IMASK_IVGHW;
-	bfin_irq_flags = IMASK_IVG7 ;
+	bfin_irq_flags = IMASK_IVG7| IMASK_IVGTMR;
 	bfin_sti(bfin_irq_flags);
 	SSYNC();
 }
@@ -283,7 +323,7 @@ void bfin_setup_caches(unsigned int cpu)
 
 	for(i = 1; i < 16; i++) {
 		bfin_write32(ICPLB_ADDR0 + i * 4, addr + (i - 1) * 4 * 1024 * 1024);
-		bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_4MB));
+		bfin_write32(ICPLB_DATA0 + i * 4 ,((SDRAM_IGENERIC & ~CPLB_L1_CHBL) | PAGE_SIZE_4MB));
 		bfin_write32(DCPLB_ADDR0 + i * 4, addr + (i - 1) * 4 * 1024 * 1024);
 		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_4MB));
 	}
@@ -300,19 +340,18 @@ void bfin_setup_caches(unsigned int cpu)
 void icc_run_task(void);
 void coreb_icc_dispatcher(void)
 {
-	int cpu = 1;
-	int bfin_irq_flags;
-	struct sm_msg *msg;
 	while (iccq_should_stop) {
 		/*to do drop no control messages*/
 		coreb_idle();
 	}
-	icc_run_task();
+	icc_wait(0);
 }
 
 void icc_init(void)
 {
 	struct gen_pool *pool;
+
+	memset(COREB_MEMPOOL_START , 0, 0x100000 * 2);
 	pool = gen_pool_create(12);
 	if (!pool)
 		coreb_msg("@@@ create 4k pool failed\n");
@@ -326,6 +365,7 @@ void icc_init(void)
 	coreb_info.msg_pool = pool;
 	if (gen_pool_add(pool, COREB_MEMPOOL_START + (1 << 12) * 64 , (1 << 6) * 64))
 		coreb_msg("@@@add chunk fail\n");
+
 
 	coreb_info.icc_info.icc_queue = (struct sm_message_queue *)MSGQ_START_ADDR;
 	init_sm_session_table();
@@ -343,6 +383,8 @@ void secondary_start_kernel(void)
 	platform_secondary_init();
 
 	bfin_setup_caches(cpu);
+
+	bfin_coretmr_init();
 
 	icc_init();
 
