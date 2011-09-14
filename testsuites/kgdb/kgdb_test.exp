@@ -1,4 +1,7 @@
 #!/usr/bin/expect
+#
+# Usage example:
+# kgdb_test.exp BF561-EZKIT ethernet SMP
 
 #
 #Test program to test the KGDB patch.
@@ -228,7 +231,7 @@ while 1 {
 		}
 	}
         incr case_num
-        send -s "hbreak 58\r"
+        send -s "hbreak 59\r"
         expect {
                 "Hardware assisted breakpoint 2*(gdb) " {
                 case_pass $case_num

@@ -1,4 +1,7 @@
 #!/usr/bin/expect
+#
+# usage example
+# build_kgdb_kernel.exp BF561-EZKIT ethernet SMP
 
 source ../kernel_config.exp
 
