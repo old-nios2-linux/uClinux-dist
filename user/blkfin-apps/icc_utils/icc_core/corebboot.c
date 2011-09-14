@@ -340,11 +340,13 @@ void bfin_setup_caches(unsigned int cpu)
 void icc_run_task(void);
 void coreb_icc_dispatcher(void)
 {
-	while (iccq_should_stop) {
-		/*to do drop no control messages*/
-		coreb_idle();
+	while (1) {
+		while (iccq_should_stop) {
+			/*to do drop no control messages*/
+			coreb_idle();
+		}
+		icc_wait(0);
 	}
-	icc_wait(0);
 }
 
 void icc_init(void)
@@ -388,9 +390,6 @@ void secondary_start_kernel(void)
 
 	icc_init();
 
-	while(1) {
-restart:
-		coreb_icc_dispatcher();
-	}
+	coreb_icc_dispatcher();
 }
 
