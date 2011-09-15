@@ -2,7 +2,7 @@
 # really made anymore by the mtd guys):
 GITWEB = http://git.infradead.org/?p=$(GITREPO).git
 GITREPO = mtd-utils
-VER = fec81abd9593fe11ba8577d38e4143e5708e3343
+VER = 73c6c15a4f10f9fd437d28a7de9dc90a6ed97826
 
 # Host based builds needed for constructing host images
 BUILDTARGETS-m :=
@@ -28,10 +28,7 @@ define MAKE_HOST_MTD
 	for f in $(1) ; do ln -sf build-$(VER)-host/$(2)/$$f $$f ; done
 endef
 all:
-	$(call _MAKE_HOST_MTD,libmtd.a libcrc32.a,,subdirs_lib_all)
-	$(call _MAKE_HOST_MTD,libubi.a,ubi-utils)
-	$(call MAKE_HOST_MTD,$(BUILDTARGETS))
-	$(call MAKE_HOST_MTD,$(UBI_UTILS_BUILDTARGETS),mkfs.ubifs)
+	$(call MAKE_HOST_MTD)
 	$(call MAKE_MTD)
 
 clean:
