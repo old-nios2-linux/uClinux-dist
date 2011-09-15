@@ -62,7 +62,7 @@ void icc_task_init(int argc, char *argv[]) {
   mcapi_info_t version;
   mcapi_param_t parms;
   mcapi_endpoint_t ep1,ep2;
-  int i ;
+  int i ,pass_num=0 ;
   mcapi_uint_t avail;
 
   coreb_msg("[%s] %d\n", __func__, __LINE__);
@@ -77,8 +77,6 @@ void icc_task_init(int argc, char *argv[]) {
   if (status != MCAPI_SUCCESS) { WRONG }
   coreb_msg("ep1 %x   \n", ep1);
   /* send and recv messages on the endpoints */
-  /* regular endpoints */
-//  send (ep1,ep2,"1Hello MCAPI",status,MCAPI_SUCCESS);
  
 i = 0;  
 
@@ -86,16 +84,20 @@ while(1) {
 	if (icc_wait()) {
 		recv_loopback(ep1,status,MCAPI_SUCCESS);
 		if (status != MCAPI_SUCCESS) { WRONG }
+		else {pass_num++;}
+		coreb_msg("\nCoreB: mcapi message loop test. The %i time send back, status %i . \n", i, status);
 		i++;
-		coreb_msg("\nCoreB: mcapi message loop test. The %i time send back ok. \n", i);
 		if (i == NUM_SIZES)
-			coreb_msg("CoreB Test PASSED\n");
+  		coreb_msg("CoreB finished data loop back!\n");
 	}
-
 }
 
   mcapi_endpoint_delete(ep1,&status);
 
   mcapi_finalize(&status);
+  if (pass_num == NUM_SIZES)
+  coreb_msg("CoreB Test PASSED\n");
+  else
+  coreb_msg("CoreB Test FAILED\n");
   return; 
 }

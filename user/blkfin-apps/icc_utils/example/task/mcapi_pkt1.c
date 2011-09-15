@@ -29,6 +29,7 @@ void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
 	mcapi_request_t request1;
 	mcapi_request_t request2;
 	mcapi_endpoint_t send_back;
+	mcapi_status_t status1;
 	mcapi_pktchan_recv_hndl_t r1;
 	void *pbuffer = NULL;
 
@@ -40,8 +41,8 @@ void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
 	if (status == MCAPI_SUCCESS) {
 		coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,pbuffer);
 		if (pbuffer)
-			mcapi_pktchan_release(pbuffer, &status);
-		mcapi_pktchan_recv_close_i(r1,&request1, &status);
+			mcapi_pktchan_release(pbuffer, &status1);
+		mcapi_pktchan_recv_close_i(r1,&request1, &status1);
 	}
 }
 
@@ -75,12 +76,11 @@ void icc_task_init(int argc, char *argv[])
   	mcapi_info_t version;
   	mcapi_param_t parms;
 	mcapi_endpoint_t ep1,ep2,ep3;
-	int i;
+	int i,pass_num=0;
 	mcapi_uint_t avail;
 	mcapi_request_t request;
 
 	coreb_msg("[%s] %d\n", __func__, __LINE__);
-
 	/* create a node */
   	mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
@@ -105,18 +105,18 @@ void icc_task_init(int argc, char *argv[])
 		if (icc_wait()) {
 			recv_pktchan(ep1,status,MCAPI_SUCCESS);
 			if (status != MCAPI_SUCCESS) { WRONG }
+			else {pass_num++;}
 
-			if (i == 0)
-				mcapi_pktchan_connect_i(ep2,ep3,&request,&status);
-
+			coreb_msg("\nCoreB: mcapi pktchan test. The %i time send back,status %i. \n", i,status);
+			if (i == 0){
+			mcapi_pktchan_connect_i(ep2,ep3,&request,&status);
 			if (status != MCAPI_SUCCESS) { WRONG }
+			}
 
-			coreb_msg("\nCoreB: mcapi pktchan test. The %i time send back ok. \n", i);
-
-			if ( i == NUM_SIZES - 1 ) {
+			i++;
+			if ( i == NUM_SIZES ) {
 				send_pktchan(ep2,status,MCAPI_SUCCESS);
 			}
-			i++;
 		}
 	}
 
@@ -124,7 +124,10 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_endpoint_delete(ep2,&status);
 
 	mcapi_finalize(&status);
-	coreb_msg("   Test PASSED\n");
 
+	if (pass_num == NUM_SIZES)
+	coreb_msg("CoreB Test PASSED\n");
+  	else
+  	coreb_msg("CoreB Test FAILED\n");
 	return;
 }

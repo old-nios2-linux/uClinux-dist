@@ -12,7 +12,6 @@
 #include <string.h>
 #include <debug.h>
 
-
 #define NUM_SIZES 4
 
 #define DOMAIN 0
@@ -84,6 +83,7 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_uint_t avail;
 	int s;
 	int i = 0;
+	int pass_num = 0;
 	int sizes[NUM_SIZES] = {8,16,32,64};
 	size_t size;
 	mcapi_info_t version;
@@ -120,7 +120,8 @@ void icc_task_init(int argc, char *argv[])
 			if (rc == MCAPI_FALSE)
 			{	coreb_msg("scl recv wrong data\n");
 				wrong;
-			}		
+			}else if (rc == MCAPI_TRUE)
+			{pass_num++;}		
 			if ( i == NUM_SIZES )
 			break;
 		}
@@ -143,7 +144,7 @@ void icc_task_init(int argc, char *argv[])
 			if (rc == MCAPI_FALSE)
 			{	coreb_msg("scl send data fail\n");
 				wrong;
-			}		
+			}else {pass_num++;}		
 
 			if ( i == NUM_SIZES )
 			break;
@@ -161,6 +162,9 @@ void icc_task_init(int argc, char *argv[])
 	coreb_msg("CoreB Send Close PASSED\n");
 	mcapi_finalize(&status);
 
+	if (pass_num == NUM_SIZES)
 	coreb_msg("CoreB Test PASSED\n");
+  	else
+  	coreb_msg("CoreB Test FAILED\n");
 	return;
 }

@@ -115,8 +115,8 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_sclchan_recv_hndl_t r1;
 	mcapi_uint_t avail;
 	int s;
-	int i1 = 0;
-	int i2 = 0;
+	int i = 0;
+	int pass_num1=0,pass_num2=0;
 	int sizes[NUM_SIZES] = {8,16,32,64};
 	size_t size;
 	mcapi_info_t version;
@@ -146,17 +146,20 @@ void icc_task_init(int argc, char *argv[])
 
 	while (1) {
 		if (icc_wait()) {
-			rc1 = recv_sclchan1(ep1, sizes[i1],status,MCAPI_SUCCESS);
+			rc1 = recv_sclchan1(ep1, sizes[i%NUM_SIZES],status,MCAPI_SUCCESS);
 			if (rc1 == MCAPI_TRUE)
-				i1++;
-			rc2 = recv_sclchan2(ep2, sizes[i2],status,MCAPI_SUCCESS);
+				pass_num1++;
+
+			rc2 = recv_sclchan2(ep2, sizes[i%NUM_SIZES],status,MCAPI_SUCCESS);
 			if (rc2 == MCAPI_TRUE)
-				i2++;
+				pass_num2++;
+			
+			i++;
 			if ((rc1 == MCAPI_FALSE) && (rc2 == MCAPI_FALSE)) {
                         WRONG 
 			}
 
-			if ((i1 + i2) == NUM_SIZES * 2) {
+			if (i == NUM_SIZES*2 ) {
 				mcapi_sclchan_connect_i(ep1,ep3,&request,&status);
 
 				mcapi_sclchan_send_open_i(&s1,ep1, &request, &status);
@@ -171,6 +174,9 @@ void icc_task_init(int argc, char *argv[])
 
 	mcapi_finalize(&status);
 
-	coreb_msg("   Test PASSED\n");
+	if ((pass_num1 + pass_num2) == NUM_SIZES *2)
+	coreb_msg("CoreB Test PASSED\n");
+  	else
+  	coreb_msg("CoreB Test FAILED\n");
 	return;
 }
