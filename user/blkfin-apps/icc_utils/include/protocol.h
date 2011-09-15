@@ -11,11 +11,12 @@ struct coreb_icc_node {
 
 extern struct coreb_icc_node coreb_info;
 
-int iccqueue_getpending(sm_uint32_t srccpu);
 int init_sm_session_table(void);
 
 
 int sm_send_packet(sm_uint32_t session_idx, sm_uint16_t dst_ep,
 		sm_uint16_t dst_cpu, void *buf, sm_uint32_t len);
+
+int icc_get_session_status(void *user_param, uint32_t session_idx);
 
 #endif
