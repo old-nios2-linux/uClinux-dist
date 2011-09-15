@@ -18,6 +18,7 @@ set case_num 0
 send "ifconfig eth0 $targetip up\r"
 expect -re $kernel_prompt
 
+incr case_num
 if [ catch { exec make clean } ] {
     send_user "\nFAIL: Clean src directory\n"
     send_user "$errorInfo\n"
@@ -26,14 +27,26 @@ if [ catch { exec make clean } ] {
     send_user "\nPASS: Clean src directory\n"
 }
 
-if [ catch { exec make } ] {
-    send_user "\nFAIL: Build test program\n"
-    send_user "$errorInfo\n"
-    case_fail $case_num
-} else {
-    send_user "\nPASS: Build test program\n"
+incr case_num
+spawn make
+while 1 {
+    expect {
+        -re "\[eE]rror" {
+            send_user "\nFAIL: Build test program\n"
+            case_fail $case_num
+        }
+        eof {
+            send_user "\nPASS: Build test program\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
+incr case_num
 if [ catch { exec rcp libhelloworld.so root@$targetip:/lib/. } ] {
     send_user "\nFAIL: Copy libhelloworld.so to target board\n"
     send_user "$errorInfo\n"
@@ -58,6 +71,7 @@ if [ catch { exec rcp test_helloworld root@$targetip:/. } ] {
     send_user "\nPASS: Copy test_helloworld to target board\n\n"
 }
 
+set spawn_id $kermit_spawn_id
 
 incr case_num
 set timeout 5
