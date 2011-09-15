@@ -21,7 +21,7 @@ define MAKE_MTD
 	$(MAKE) -C $(VER)/$(2) WITHOUT_XATTR=1 BUILDDIR=$$PWD/build-$(VER)$(4)/$(2) $(1) $(3)
 endef
 define _MAKE_HOST_MTD
-	unset CC CFLAGS CPPFLAGS CROSS LDFLAGS; $(call MAKE_MTD,SUBDIRS= TARGETS="$(1)",$(2),$(3),-host)
+	unset CC CFLAGS CPPFLAGS CROSS LDFLAGS; $(call MAKE_MTD,,$(2),$(3),-host)
 endef
 define MAKE_HOST_MTD
 	$(call _MAKE_HOST_MTD,$(1),$(2),$(3))

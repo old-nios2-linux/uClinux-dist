@@ -30,8 +30,9 @@ UBI_BINS = \
 	ubidetach ubinize ubiformat ubirename mtdinfo ubirsvol
 
 BINS = $(MTD_BINS)
+ifeq ($(origin CROSS),undefined)
 BINS += mkfs.ubifs/mkfs.ubifs
-BINS += $(addprefix ubi-utils/,$(UBI_BINS))
+endif
 SCRIPTS = flash_eraseall
 
 TARGETS = $(BINS)
