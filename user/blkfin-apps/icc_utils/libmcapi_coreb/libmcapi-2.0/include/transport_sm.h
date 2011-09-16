@@ -70,7 +70,8 @@ extern "C" {
 typedef struct {
   uint32_t magic_num;
   uint32_t size; /* size (in bytes) of the buffer */
-  char buff [MCAPI_MAX(MCAPI_MAX_PKT_SIZE,MCAPI_MAX_MSG_SIZE)]; // the buffer is used for both pkts and msgs
+  uint32_t paddr;
+  uint32_t id;
 } buffer_entry;
 
 typedef enum {

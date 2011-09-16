@@ -1209,10 +1209,10 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 
 
 	if (buf) {
-		memcpy(db_buff->buff, buf, len);
-		coreb_msg("buffer %08x %s len %d se %d sn %d\n", db_buff->buff, buf, len, se, sn);
-		sm_recv_release(buf, len, index);
-		*buffer = db_buff->buff;
+		db_buff->paddr = (uint32_t)buf;
+		db_buff->size = len;
+		db_buff->id = index;
+		*buffer = buf;
 		*mcapi_status = MCAPI_SUCCESS;
 	} else
 		*mcapi_status = MCAPI_FALSE;
@@ -1243,18 +1243,26 @@ mcapi_boolean_t mcapi_trans_pktchan_free( void* buffer)
 {
 	int rc = MCAPI_TRUE;
 	buffer_entry* b_e;
+	int i;
 
 	/* optimization - just do pointer arithmetic on the buffer pointer to get
 	   the base address of the buffer_entry structure. */
-	b_e = buffer - 8;
-	if (b_e->magic_num == MAGIC_NUM) {
-		coreb_msg("free pkt buffer %08x\n", buffer);
-		memset(b_e,0,sizeof(buffer_entry));
-	} else {
+	for (i = 0; i < MCAPI_MAX_BUFFERS; i++) {
+		if ((c_db->buffers[i].magic_num == MAGIC_NUM) 
+			|| (c_db->buffers[i].paddr == (uint32_t)buffer)) {
+			b_e = &c_db->buffers[i];
+			sm_recv_release(buffer, b_e->size, b_e->id);
+			memset(b_e,0,sizeof(buffer_entry));
+			return rc;
+		}
+	}
+
+	if (i == MCAPI_MAX_BUFFERS) {
 		/* didn't find the buffer */
 		coreb_msg("didn't find%08x\n", buffer);
 		rc = MCAPI_FALSE;
 	}
+
 	return rc;
 }
 
