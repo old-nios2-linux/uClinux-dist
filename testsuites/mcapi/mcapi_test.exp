@@ -16,6 +16,10 @@ source ../reboot_kernel.exp
 step "Starting test"
 set timeout 8
 
+set allcases {msg1  msg2  pkt1  pkt2  scl1  scl2}
+set bin_num [llength $allcases]
+send_user "bin_num=$bin_num\n"
+
 set case_num 0
 
 incr case_num
@@ -32,12 +36,11 @@ while 1 {
          }
      }
 }
-
 expect "root:/bin>"
 send -s "./icc_loader -l ./icc \r"
 while 1 {
    expect {
-     -re "sm_debug.*COREB.*received 1.*sm_debug.*COREB.*received 2" {
+     -re "OK.*COREB" {
                 case_pass $case_num
                 break
       }
@@ -65,9 +68,13 @@ expect {
        }
 }
 
-set timeout 60
+for {set i 0} {$i < $bin_num} {incr i} {
+
+set case_name [lindex $allcases $i]
+sleep 3
 incr case_num
-send -s "./icc_loader -f -e ./mcapi_msg1 \r"
+set timeout 60
+send -s "./icc_loader -f -e ./mcapi_$case_name \r"
 while 1 {
    expect {
      -re "COREB: before run task.*mcapi_initialize.*create ep" {
@@ -99,18 +106,25 @@ expect {
        }
 }
 
-set timeout 60
+
 incr case_num
-send -s "msg1  \r"
+send -s "rm /tmp/* 2> /dev/null\r"
+expect "root:/bin>"
+send -s "$case_name ; cat /tmp/*  2> /dev/null \r"
 while 1 {
    expect {
-     -re "endpoint=.* has sent: .*1Hello MCAPI.*endpoint=.* has received: .*1Hello MCAPI.*Test PASSED" {
+     -re "CoreA Test PASSED" {
 
          case_pass $case_num
          break
       }
 
      -re "Hardware Trace" {
+         case_fail $case_num
+         break
+      }
+
+     -re "Test FAILED" {
          case_fail $case_num
          break
       }
@@ -132,7 +146,8 @@ expect {
                 exit
        }
 }
-
+sleep 4
+}
 send_log "\n"
 send_log "\n$TITLE ............\[PASS\]\n"
 
