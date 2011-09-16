@@ -6212,6 +6212,8 @@ index b7091d5..2997ea8 100644
 +
 +void __ipipe_ack_level_irq(unsigned irq, struct irq_desc *desc)
 +{
++	if (desc->chip->ack)
++		desc->chip->ack(irq);
 +	mask_ack_irq(desc, irq);
 +}
 +
