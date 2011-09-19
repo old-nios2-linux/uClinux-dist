@@ -25,10 +25,14 @@ define _MAKE_HOST_MTD
 endef
 define MAKE_HOST_MTD
 	$(call _MAKE_HOST_MTD,$(1),$(2),$(3))
-	for f in $(1) ; do ln -sf build-$(VER)-host/$(2)/$$f $$f ; done
+endef
+define MAKE_HOST_LINK
+	for f in $(1); do ln -sf build-$(VER)-host/$(2)/$$f $$f ; done
 endef
 all:
 	$(call MAKE_HOST_MTD)
+	$(call MAKE_HOST_LINK, $(BUILDTARGETS))
+	$(call MAKE_HOST_LINK, $(UBI_UTILS_BUILDTARGETS),mkfs.ubifs)
 	$(call MAKE_MTD)
 
 clean:
