@@ -898,6 +898,23 @@ proc run_LTP_test { filename command torun mode} {
        }
    }
 
+   if { $filename == "mmap03" } {
+       set timeout 5
+       send "dmesg|grep -c \"^MPU\"\r"
+       while 1 {
+           expect {
+               -re "1.*$kernel_prompt" {
+                   set result_flag $LTP_NA
+                   step "Test NA on uClinux"
+                   return $result_flag
+               }
+               timeout {
+                   break
+               }
+           }
+       }
+   }
+
    if { $filename == "munlock01" || $filename == "semget05"} {
        force_reboot
    }
