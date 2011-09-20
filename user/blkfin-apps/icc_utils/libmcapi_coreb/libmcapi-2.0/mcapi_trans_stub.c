@@ -992,8 +992,6 @@ void mcapi_trans_msg_recv_i( mcapi_endpoint_t  receive_endpoint,  char* buffer, 
 	}
 	if (buf) {
 		memcpy(buffer, buf, len);
-		mcapi_dprintf(1,"index %d, se %d, sn %d\n", index, se, sn);
-		coreb_msg("buffer %s len %d se %d sn %d\n", buffer, len, se, sn);
 		sm_recv_release(buf, len, index);
 		*mcapi_status = MCAPI_SUCCESS;
 	} else
