@@ -824,13 +824,11 @@ int sm_recv_packet(sm_uint32_t session_idx, sm_uint16_t *src_ep, sm_uint16_t *sr
 			*src_cpu = message->src;
 		if (len)
 			*len = message->msg.length;
-		coreb_msg("%s() %s\n", __func__, msg->payload);
 		*buf = msg->payload;
 		ret = msg->length;
 	} else {
 		ret = -EINVAL;
 	}
-	coreb_msg(" %s msg\n",__func__);
 	return ret;
 }
 
