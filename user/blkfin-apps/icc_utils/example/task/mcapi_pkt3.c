@@ -61,7 +61,7 @@ void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t *status)
 		size = ph->size;
 		op = ph->op;
 
-		p = (void *)paddr;
+		p = (char *)paddr;
 
 		coreb_msg("##%08x %08x %08x %08x\n", vaddr, paddr, size, op);
 		if (op == 1) {
@@ -159,7 +159,7 @@ void icc_task_init(int argc, char *argv[])
 			}
 
 	                i++;
-      			if ( i == NUM_SIZES*2 - 1 ) {
+      			if ( i == NUM_SIZES*2) {
 				send_pktchan(ep1,status,MCAPI_SUCCESS);
 				send_pktchan(ep2,status,MCAPI_SUCCESS);
 			}
