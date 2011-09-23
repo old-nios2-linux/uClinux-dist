@@ -1822,7 +1822,8 @@ if [ ${AUTO_RUN_STATUS[$((n+2))]} -eq 1 ] ; then
 
       cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.ltp_${ltp_suf[i]}
       echo "ltp copy linux.ltp done"
-      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.ltp_${ltp_suf[i]}
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.ltp_${ltp_suf[i]}
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.ltp_${ltp_suf[i]}
       echo "ltp copy config.ltp done"
       cp $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]}
       if [ -e $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]} ]; then
@@ -2310,7 +2311,8 @@ if [ ${AUTO_RUN_STATUS[$((n+20))]} -eq 1  ] ; then
         fi
 
         cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.oprofile.$format
-        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.oprofile.$format
+        cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.oprofile.$format
+        cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.oprofile.$format
         mv $UCLINUX_DIST_TESTSUITES/oprofile/build_oprofile_kernel_log $THIS_LOG/build_oprofile_${format}_kernel_log
         mv $UCLINUX_DIST_TESTSUITES/oprofile/oprofile_test_log $THIS_LOG/oprofile_${format}_test_log
 
