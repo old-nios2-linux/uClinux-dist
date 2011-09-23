@@ -352,6 +352,9 @@ size_t op_bfd::symbol_size(op_bfd_symbol const & sym,
 	unsigned long start = sym.filepos();
 	unsigned long end = next ? next->filepos() : file_size;
 
+	if (start > end)
+		return 0;
+
 	return end - start;
 }
 
