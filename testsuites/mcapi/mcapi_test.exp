@@ -16,8 +16,11 @@ source ../reboot_kernel.exp
 step "Starting test"
 set timeout 8
 
-set allcases {msg1  msg2  pkt1  pkt2  scl1  scl2}
+#set allcases {msg1  msg2 }
+set allcases {msg1  msg2  pkt1  pkt2 pkt3  scl1  scl2}
 set bin_num [llength $allcases]
+set test_round 100
+
 send_user "bin_num=$bin_num\n"
 
 set case_num 0
@@ -68,9 +71,14 @@ expect {
        }
 }
 
-for {set i 0} {$i < $bin_num} {incr i} {
+for {set i 0} {$i < $bin_num*$test_round} {incr i} {
 
-set case_name [lindex $allcases $i]
+set test_case_num [ expr $i % $bin_num ] 
+
+set case_name [lindex $allcases $test_case_num ]
+
+send_log "!!!!!##### Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num] time testing!\n"
+
 sleep 3
 incr case_num
 set timeout 60
@@ -106,8 +114,8 @@ expect {
        }
 }
 
+set timeout 60
 
-incr case_num
 send -s "rm /tmp/* 2> /dev/null\r"
 expect "root:/bin>"
 send -s "$case_name ; cat /tmp/*  2> /dev/null \r"
