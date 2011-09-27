@@ -19,13 +19,13 @@ romfs:
 # if you feel this list is not complete - please send patches
 	rm -rf $(ROMFSDIR)/usr/share/alsa/cards/*.conf
 	$(ROMFSINST) $(VER)/src/conf/cards/aliases.conf /usr/share/alsa/cards/aliases.conf
-	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD183X $(VER)/src/conf/cards/AD183X.conf /usr/share/alsa/cards/AD183X.conf
-	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD193X $(VER)/src/conf/cards/AD193X.conf /usr/share/alsa/cards/AD193X.conf
-	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD73311 $(VER)/src/conf/cards/AD73311.conf /usr/share/alsa/cards/AD73311.conf
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD1836 $(VER)/src/conf/cards/bfin-ad1836.conf /usr/share/alsa/cards/bfin-ad1836.conf
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD193X $(VER)/src/conf/cards/bfin-ad193x.conf /usr/share/alsa/cards/bfin-ad193x.conf
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_AD73311 $(VER)/src/conf/cards/bfin-ad73311.conf /usr/share/alsa/cards/bfin-ad73311.conf
 	$(ROMFSINST) -e CONFIG_SND_BFIN_AD73322 $(VER)/src/conf/cards/AD73322.conf /usr/share/alsa/cards/AD73322.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_AC97 -e CONFIG_SND_BF5XX_MMAP_SUPPORT $(VER)/src/conf/cards/AD1980.conf /usr/share/alsa/cards/AD1980.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_AC97 -E CONFIG_SND_BF5XX_MMAP_SUPPORT $(VER)/src/conf/cards/AD1980-no-mmap.conf /usr/share/alsa/cards/AD1980.conf
-	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_SSM2602 $(VER)/src/conf/cards/SSM2602.conf /usr/share/alsa/cards/SSM2602.conf
+	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_SSM2602 $(VER)/src/conf/cards/bfin-ssm2602.conf /usr/share/alsa/cards/bfin-ssm2602.conf
 	$(ROMFSINST) -e CONFIG_SND_USB_AUDIO $(VER)/src/conf/cards/USB-Audio.conf /usr/share/alsa/cards/USB-Audio.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_ADAU1371 $(VER)/src/conf/cards/ADAU1371.conf /usr/share/alsa/cards/ADAU1371.conf
 	$(ROMFSINST) -e CONFIG_SND_BF5XX_SOC_ADAU1361 $(VER)/src/conf/cards/ADAU1361.conf /usr/share/alsa/cards/ADAU1361.conf
