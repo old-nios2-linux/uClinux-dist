@@ -16,6 +16,11 @@ send_user "Starting $argv0\n"
 
 if { $board_type == "BF537-STAMP" } {
     set board_file $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c
+    if [ catch {exec sed -i "/modalias.*mmc_spi/,/chip_select/ s/4/1/" $board_file} ] {
+        send_user "\nfail to modify board file\n"
+        send_user "$errorInfo\n"
+        exit
+    }
 }
 
 if { $spi_mode == "interrupt" } {
