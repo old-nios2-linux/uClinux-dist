@@ -43,7 +43,7 @@ expect "root:/bin>"
 send -s "./icc_loader -l ./icc \r"
 while 1 {
    expect {
-     -re "OK.*COREB" {
+     -re "OK" {
                 case_pass $case_num
                 break
       }
@@ -85,7 +85,7 @@ set timeout 60
 send -s "./icc_loader -f -e ./mcapi_$case_name \r"
 while 1 {
    expect {
-     -re "COREB: before run task.*mcapi_initialize.*create ep" {
+     -re "OK.*task_init_addr.*task_exit_addr" {
                case_pass $case_num
                break
       }
@@ -118,10 +118,10 @@ set timeout 60
 
 send -s "rm /tmp/* 2> /dev/null\r"
 expect "root:/bin>"
-send -s "$case_name ; cat /tmp/*  2> /dev/null \r"
+send -s "$case_name ; ls /tmp | xargs cat \r"
 while 1 {
    expect {
-     -re "CoreA Test PASSED" {
+     -re "CoreB Test PASSED.*CoreA Test PASSED" {
 
          case_pass $case_num
          break
