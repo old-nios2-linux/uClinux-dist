@@ -20,7 +20,7 @@ char buffer[BUFF_SIZE];
 
 void wrong(unsigned line)
 {
-coreb_msg("WRONG: line==%i \n",line);
+COREB_DEBUG(1, "WRONG: line==%i \n",line);
 }
 
 void send (mcapi_endpoint_t send, mcapi_endpoint_t recv,char* msg,mcapi_status_t status,int exp_status) {
@@ -31,7 +31,7 @@ void send (mcapi_endpoint_t send, mcapi_endpoint_t recv,char* msg,mcapi_status_t
   mcapi_msg_send_i(send,recv,msg,size,priority,&request,&status);
   if (status != exp_status) { WRONG}
   if (status == MCAPI_SUCCESS) {
-    coreb_msg("endpoint=%i has sent: [%s]\n",(int)send,msg);
+    COREB_DEBUG(1, "endpoint=%i has sent: [%s]\n",(int)send,msg);
   }
 }
 
@@ -44,15 +44,15 @@ void recv_loopback (mcapi_endpoint_t recv,mcapi_status_t *status,int exp_status)
   mcapi_msg_recv_i(recv,buffer,BUFF_SIZE,&request1,status);
   if (*status != exp_status) { WRONG }
   if (*status == MCAPI_SUCCESS) {
-    coreb_msg("endpoint=%i has received: [%s]\n",(int)recv,buffer);
+    COREB_DEBUG(1, "endpoint=%i has received: [%s]\n",(int)recv,buffer);
 
     send_back = mcapi_endpoint_get(DOMAIN,MASTER_NODE_NUM, MASTER_PORT_NUM1, MCA_INFINITE, &status);
   
-    coreb_msg("endpoint=%i sendback: buf %x\n",(int)send_back, (unsigned int)buffer);
+    COREB_DEBUG(1, "endpoint=%i sendback: buf %x\n",(int)send_back, (unsigned int)buffer);
     mcapi_msg_send_i(recv,send_back,buffer,BUFF_SIZE,1,&request2,&status);
     if (status != exp_status) { WRONG}
     if (status == MCAPI_SUCCESS) {
-      coreb_msg("endpoint=%i has sent: [%s]\n",(int)recv,buffer);
+      COREB_DEBUG(1, "endpoint=%i has sent: [%s]\n",(int)recv,buffer);
     }
   
   
@@ -68,22 +68,22 @@ void icc_task_init(int argc, char *argv[]) {
   int pass_num1=0,pass_num2=0;
   mcapi_uint_t avail;
 
-  coreb_msg("[%s] %d\n", __func__, __LINE__);
+  COREB_DEBUG(1, "[%s] %d\n", __func__, __LINE__);
   /* create a node */
   mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
 
   if (status != MCAPI_SUCCESS) { WRONG }
-  coreb_msg("[%s] %d\n", __func__, __LINE__);
+  COREB_DEBUG(1, "[%s] %d\n", __func__, __LINE__);
 
   /* create endpoints */
   ep1 = mcapi_endpoint_create(SLAVE_PORT_NUM1,&status);
   if (status != MCAPI_SUCCESS) { WRONG }
-  coreb_msg("ep1 %x   \n", ep1);
+  COREB_DEBUG(1, "ep1 %x   \n", ep1);
 
 
   ep2 = mcapi_endpoint_create(SLAVE_PORT_NUM2,&status);
   if (status != MCAPI_SUCCESS) { WRONG }
-  coreb_msg("ep2 %x   \n", ep2);
+  COREB_DEBUG(1, "ep2 %x   \n", ep2);
   /* send and recv messages on the endpoints */
   /* regular endpoints */
 //  send (ep1,ep2,"1Hello MCAPI",status,MCAPI_SUCCESS);
@@ -92,10 +92,6 @@ i = 0;
 
 while(1) {
 	if (icc_wait()) {
-		if (i == NUM_SIZES*2 ) {
-		break;
-		}
-
 		recv_loopback(ep1,&status1,MCAPI_SUCCESS);
 		if (status1 != MCAPI_SUCCESS) { WRONG }
 		else {pass_num1++;}
@@ -104,8 +100,11 @@ while(1) {
 		if (status2 != MCAPI_SUCCESS) { WRONG }
 		else {pass_num2++;}
 
-		coreb_msg("\nCoreB: mcapi message loop test. The %i time send back,status1 %d ,status2 %d . \n", i,status1, status2);
+		COREB_DEBUG(1, "\nCoreB: mcapi message loop test. The %i time send back,status1 %d ,status2 %d . \n", i,status1, status2);
 		i++;
+
+		if ((pass_num1 + pass_num2) == NUM_SIZES *2)
+		COREB_DEBUG(0, "CoreB Test PASSED\n");
 
 	}
 }
@@ -115,8 +114,8 @@ while(1) {
 
  	 mcapi_finalize(&status);
 	if ((pass_num1 + pass_num2) == NUM_SIZES *2)
-	coreb_msg("CoreB Test PASSED\n");
+	COREB_DEBUG(0, "CoreB Test PASSED\n");
   	else
-  	coreb_msg("CoreB Test FAILED\n");
+  	COREB_DEBUG(0, "CoreB Test FAILED\n");
 	return;
 }

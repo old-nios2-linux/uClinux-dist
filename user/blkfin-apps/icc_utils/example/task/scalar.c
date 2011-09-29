@@ -12,19 +12,19 @@ void  __icc_task icc_task_init(int argc, char *argv[])
 	int ret;
 	int src_ep, src_cpu;
 	session_index = sm_create_session(LOCAL_SESSION, SP_SCALAR);
-	coreb_msg("%s() %s %s index %d\n", __func__, argv[0], argv[1], session_index);
+	COREB_DEBUG(1, "%s() %s %s index %d\n", __func__, argv[0], argv[1], session_index);
 	if (session_index >= 32)
-		coreb_msg("create session failed\n");
+		COREB_DEBUG(1, "create session failed\n");
 
 	while (1) {
-		coreb_msg("task loop\n");
+		COREB_DEBUG(1, "task loop\n");
 		if (icc_wait()) {
 			ret = sm_recv_scalar(session_index, &src_ep, &src_cpu, &scalar0, &scalar1, &size);
 			if (ret <= 0) {
-				coreb_msg("recv packet failed\n");
+				COREB_DEBUG(1, "recv packet failed\n");
 			}
 			/* handle payload */
-			coreb_msg("processing msg %x %x\n", scalar0, scalar1);
+			COREB_DEBUG(1, "processing msg %x %x\n", scalar0, scalar1);
 			if (scalar0  == 0xab) {
 				int dst_ep = src_ep;
 				int dst_cpu = src_cpu;
@@ -36,7 +36,7 @@ void  __icc_task icc_task_init(int argc, char *argv[])
 
 	}
 
-	coreb_msg("%s() end\n", __func__);
+	COREB_DEBUG(1, "%s() end\n", __func__);
 }
 
 void  __icc_task icc_task_exit(void)

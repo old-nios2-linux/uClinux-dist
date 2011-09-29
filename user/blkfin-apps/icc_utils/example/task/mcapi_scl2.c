@@ -28,12 +28,12 @@ mcapi_boolean_t send (mcapi_sclchan_send_hndl_t send_handle, mcapi_endpoint_t re
   case (16): mcapi_sclchan_send_uint16(send_handle,data,&status); break;
   case (32): mcapi_sclchan_send_uint32(send_handle,data,&status); break;
   case (64): mcapi_sclchan_send_uint64(send_handle,data,&status); break;
-  default: coreb_msg(stderr,"ERROR: bad data size in call to send. size is %i\n", size);
+  default: COREB_DEBUG(1, stderr,"ERROR: bad data size in call to send. size is %i\n", size);
   };
   if (status == MCAPI_SUCCESS) {
-    coreb_msg("endpoint=%i has sent %i byte(s): [%llx]!!\n",(int)send_handle,(int)size/8,data);
+    COREB_DEBUG(1, "endpoint=%i has sent %i byte(s): [%llx]!!\n",(int)send_handle,(int)size/8,data);
   } else
-  	coreb_msg("send failed size %d\n", size);
+  	COREB_DEBUG(1, "send failed size %d\n", size);
   if (status == exp_status) {
     rc = MCAPI_TRUE;
   }
@@ -49,17 +49,17 @@ mcapi_boolean_t recv (mcapi_sclchan_recv_hndl_t recv_handle,uint32_t size,mcapi_
   case (16): size_mask = 0xffff;data=mcapi_sclchan_recv_uint16(recv_handle,&status); break;
   case (32): size_mask = 0xffffffff;data=mcapi_sclchan_recv_uint32(recv_handle,&status); break;
   case (64): size_mask = 0xffffffffffffffffULL;data=mcapi_sclchan_recv_uint64(recv_handle,&status); break;
-  default: coreb_msg("ERROR: bad data size in call to send. size is %i\n", size);
+  default: COREB_DEBUG(1, "ERROR: bad data size in call to send. size is %i\n", size);
   };
  
-    coreb_msg("eeeeeee recv scalar[%llx] exp[%llx] %d %d\n",data, exp_data, status, exp_status);
+    COREB_DEBUG(1, "eeeeeee recv scalar[%llx] exp[%llx] %d %d\n",data, exp_data, status, exp_status);
   exp_data = exp_data & size_mask;
    
   if (status == exp_status) {
     rc = MCAPI_TRUE;
   }
   if (status == MCAPI_SUCCESS) {
-    coreb_msg("endpoint=%i has received %i byte(s): [%llx]\n",(int)recv_handle,(int)size/8,data);
+    COREB_DEBUG(1, "endpoint=%i has received %i byte(s): [%llx]\n",(int)recv_handle,(int)size/8,data);
     if (data != exp_data) { 
        rc = MCAPI_FALSE; 
      }
@@ -78,7 +78,7 @@ mcapi_boolean_t recv_sclchan1(mcapi_endpoint_t re,int size,mcapi_status_t status
 	mcapi_sclchan_recv_open_i(&r1 /*recv_handle*/,re, &request, &status);
 	rc = recv(r1, size, status, exp_status, exp_data);
 	if (rc == MCAPI_FALSE)
-		coreb_msg("pppppppscl recv wrong data\n");
+		COREB_DEBUG(1, "pppppppscl recv wrong data\n");
 	mcapi_sclchan_recv_close_i(r1,&request,&status);
 
   return rc;	
@@ -95,7 +95,7 @@ mcapi_boolean_t recv_sclchan2(mcapi_endpoint_t re,int size,mcapi_status_t status
 	mcapi_sclchan_recv_open_i(&r1 /*recv_handle*/,re, &request, &status);
 	rc = recv(r1, size, status, exp_status, exp_data);
 	if (rc == MCAPI_FALSE)
-		coreb_msg("pccccccccscl recv wrong data\n");
+		COREB_DEBUG(1, "pccccccccscl recv wrong data\n");
 	mcapi_sclchan_recv_close_i(r1,&request,&status);
 
   return rc;	
@@ -132,16 +132,16 @@ void icc_task_init(int argc, char *argv[])
 	/* create endpoints */
 	ep1 = mcapi_endpoint_create(SLAVE_PORT_NUM1,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
-	coreb_msg("mcapi sclchan test ep1 %x\n", ep1);
+	COREB_DEBUG(1, "mcapi sclchan test ep1 %x\n", ep1);
 
 	ep2 = mcapi_endpoint_create(SLAVE_PORT_NUM2,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
-	coreb_msg("mcapi sclchan test ep2 %x\n", ep2);
+	COREB_DEBUG(1, "mcapi sclchan test ep2 %x\n", ep2);
 
 	ep3 = mcapi_endpoint_get (DOMAIN,MASTER_NODE_NUM,MASTER_PORT_NUM1,MCA_INFINITE,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
 
-	coreb_msg("mcapi sclchan test ep3 %x\n", ep3);
+	COREB_DEBUG(1, "mcapi sclchan test ep3 %x\n", ep3);
 
 
 	while (1) {
@@ -175,8 +175,8 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_finalize(&status);
 
 	if ((pass_num1 + pass_num2) == NUM_SIZES *2)
-	coreb_msg("CoreB Test PASSED\n");
+	COREB_DEBUG(0, "CoreB Test PASSED\n");
   	else
-  	coreb_msg("CoreB Test FAILED\n");
+  	COREB_DEBUG(0, "CoreB Test FAILED\n");
 	return;
 }

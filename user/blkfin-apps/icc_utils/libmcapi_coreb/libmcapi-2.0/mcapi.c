@@ -157,14 +157,14 @@ void mcapi_initialize(
 {  
   *mcapi_status = MCAPI_ERR_NODE_INITFAILED;
   
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
   if (!mcapi_trans_valid_node(node_id)) {
 
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
     *mcapi_status = MCAPI_ERR_NODE_INVALID;
   } else if (mcapi_trans_initialized(domain_id,node_id)) {
 
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
     *mcapi_status = MCAPI_ERR_NODE_INITIALIZED;
   } else if (mcapi_trans_initialize(domain_id,node_id,mcapi_node_attributes)) {
     
@@ -440,23 +440,23 @@ mcapi_endpoint_t mcapi_endpoint_create(
     *mcapi_status = MCAPI_SUCCESS;
     mcapi_domain_t domain_id = mcapi_domain_id_get(&status);
     if (status != MCAPI_SUCCESS) {
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_NODE_NOTINIT;
     } else if (mcapi_trans_endpoint_exists (domain_id,port_id)) {
 
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_ENDP_EXISTS;
     } else if (mcapi_trans_num_endpoints (domain_id) == MCAPI_MAX_ENDPOINTS) {
 
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_ENDP_LIMIT;
     } else if (!mcapi_trans_valid_port(port_id)) {
 
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_PORT_INVALID;  
     } else if (!mcapi_trans_endpoint_create(&e,port_id,MCAPI_FALSE))  {
 
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_ENDP_NOPORTS;
     }
   
@@ -1968,13 +1968,13 @@ void mcapi_sclchan_send_open_i(
     *mcapi_status = MCAPI_ERR_PARAMETER;
   } else {
     if (! mcapi_trans_valid_endpoint(send_endpoint) ) {
-	coreb_msg("  %s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "  %s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_ENDP_INVALID;
     } else if  (mcapi_trans_channel_type (send_endpoint) == MCAPI_PKT_CHAN){
-	coreb_msg("  %s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "  %s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_CHAN_TYPE;
     } else if (! mcapi_trans_send_endpoint (send_endpoint)) {
-	coreb_msg("  %s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "  %s %d\n", __func__, __LINE__);
       *mcapi_status = MCAPI_ERR_CHAN_DIRECTION;
     }
     mcapi_trans_sclchan_send_open_i(send_handle,send_endpoint,request,mcapi_status); 
@@ -2020,7 +2020,7 @@ void mcapi_sclchan_send_uint64(
   /* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
   *mcapi_status = MCAPI_SUCCESS; 
   if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {
-	coreb_msg("  %s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "  %s %d\n", __func__, __LINE__);
     *mcapi_status = MCAPI_ERR_CHAN_INVALID;
   }  else if (!mcapi_trans_sclchan_send (send_handle,dataword,8)) {
     *mcapi_status = MCAPI_ERR_MEM_LIMIT;  /* MR: added this  */
@@ -2164,7 +2164,7 @@ void mcapi_sclchan_send_uint8(
         MCAPI_OUT mcapi_status_t* mcapi_status)
 {
 	uint64_t tmp = (uint64_t)dataword;
-	coreb_msg("%llx tmp\n", tmp);
+	COREB_DEBUG(2, "%llx tmp\n", tmp);
 	/* FIXME: (errata B3) this function needs to check MCAPI_ERR_MEM_LIMIT */
 	*mcapi_status = MCAPI_SUCCESS;
 	if (! mcapi_trans_valid_sclchan_send_handle(send_handle) ) {

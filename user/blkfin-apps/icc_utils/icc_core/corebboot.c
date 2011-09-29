@@ -164,6 +164,7 @@ int bfin_coretmr_set_next_event(unsigned long cycles)
 }
 
 #ifdef DEBUG
+int coreb_debug_level = 2;
 # define MSG_LINE 128
 void coreb_msg(char *fmt, ...)
 {

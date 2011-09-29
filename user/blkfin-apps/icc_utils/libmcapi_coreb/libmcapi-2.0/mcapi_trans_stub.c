@@ -119,7 +119,7 @@ mcapi_boolean_t mcapi_trans_get_domain_num(mcapi_domain_t* domain)
 
 	return mcapi_trans_whoami(&node,&n,domain,&d);
 #endif
-	coreb_msg("domain name %x  domain id %x\n", c_db->domains[0].valid, c_db->domains[0].domain_id);
+	COREB_DEBUG(2, "domain name %x  domain id %x\n", c_db->domains[0].valid, c_db->domains[0].domain_id);
 	if (c_db->domains[0].valid) {
 		*domain = c_db->domains[0].domain_id;
 		return MCAPI_TRUE;
@@ -200,7 +200,7 @@ mcapi_boolean_t mcapi_trans_add_node (mcapi_domain_t domain_id, mcapi_uint_t nod
 	int i = 0;
 
 
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 	/* lock the database */
 
 	/* mcapi should have checked that the node doesn't already exist */
@@ -235,7 +235,7 @@ mcapi_boolean_t mcapi_trans_add_node (mcapi_domain_t domain_id, mcapi_uint_t nod
 					/* this node already exists for this domain */
 					rc = MCAPI_FALSE;
 					mcapi_dprintf(1,"This node (%d) already exists for this domain(%d)",node_id,domain_id);
-					coreb_msg("%s %d\n", __func__, __LINE__);
+					COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 					break; 
 				}
 			}
@@ -249,14 +249,14 @@ mcapi_boolean_t mcapi_trans_add_node (mcapi_domain_t domain_id, mcapi_uint_t nod
 		} else {
 			/* we didn't find an available domain index */
 			mcapi_dprintf(1,"You have hit MCA_MAX_DOMAINS, either use less domains or reconfigure with more domains");
-			coreb_msg("%s %d\n", __func__, __LINE__);
+			COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 			rc = MCAPI_FALSE;
 		}
 
 		if (n == MCA_MAX_NODES) {
 			/* we didn't find an available node index */
 			mcapi_dprintf(1,"You have hit MCA_MCA_MAX_NODES, either use less nodes or reconfigure with more nodes.");
-			coreb_msg("%s %d\n", __func__, __LINE__);
+			COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 			rc = MCAPI_FALSE;
 		}
 	}
@@ -354,7 +354,7 @@ void setup_request_internal (mcapi_endpoint_t send, mcapi_endpoint_t recv,
 	if (!request)
 		return;
 
-	coreb_msg("%s[%i,%i]\n", __func__, send, recv);
+	COREB_DEBUG(2, "%s[%i,%i]\n", __func__, send, recv);
 	request->send_endpoint = send;
 	request->recv_endpoint = recv;
 	request->valid = MCAPI_TRUE;
@@ -521,7 +521,7 @@ mcapi_boolean_t mcapi_trans_channel_connected  (mcapi_endpoint_t endpoint)
 			c_db->domains[0].nodes[0].node_d.endpoints[index].connected = MCAPI_TRUE;
 			c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt = status.remote_ep;
 
-			coreb_msg("%s %d %d remote%d\n", __func__, __LINE__, status.flags, status.remote_ep);
+			COREB_DEBUG(2, "%s %d %d remote%d\n", __func__, __LINE__, status.flags, status.remote_ep);
 			return MCAPI_TRUE;
 		} else
 			return MCAPI_FALSE;
@@ -623,7 +623,7 @@ mcapi_boolean_t mcapi_trans_connected(mcapi_endpoint_t endpoint)
 		if (ret)
 			return MCAPI_FALSE;
 
-		coreb_msg("%s %d %d remote%d\n", __func__, __LINE__, status.flags, status.remote_ep);
+		COREB_DEBUG(2, "%s %d %d remote%d\n", __func__, __LINE__, status.flags, status.remote_ep);
 		if (status.flags == MCAPI_TRUE) {
 			/* update ep status */
 			c_db->domains[0].nodes[0].node_d.endpoints[index].connected = MCAPI_TRUE;
@@ -677,7 +677,7 @@ mcapi_boolean_t mcapi_trans_initialize_()
 {
 	int i;
 	char *p;
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 	int semkey = 0;
 	int shmkey = 0;
 	mcapi_boolean_t rc = MCAPI_TRUE;
@@ -691,26 +691,26 @@ mcapi_boolean_t mcapi_trans_initialize_()
 		if (!shm_addr) {
 			mcapi_dprintf(1, "%s %d\n", __func__, __LINE__);
 
-			coreb_msg("%s %d\n", __func__, __LINE__);
+			COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 			rc = MCAPI_FALSE;
 		}
 
 		c_db = shm_addr; 
 		memset(c_db, 0, sizeof(mcapi_database));
-		coreb_msg("%s %d db size %x\n", __func__, __LINE__, sizeof(mcapi_database));
+		COREB_DEBUG(2, "%s %d db size %x\n", __func__, __LINE__, sizeof(mcapi_database));
 
 		/* mcapi_icc_node_init(); */
 	}
 	transport_sm_unlock_semaphore(sem_id);
 	mcapi_dprintf(1, "%s %d\n", __func__, __LINE__);
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 	return MCAPI_TRUE;
 }
 
 /* initialize the transport layer */
 mcapi_boolean_t mcapi_trans_initialize(mca_domain_t domain_id,mcapi_node_t node_num,const mcapi_node_attributes_t* node_attrs)
 {
-	coreb_msg("%s %d\n", __func__, __LINE__);
+	COREB_DEBUG(2, "%s %d\n", __func__, __LINE__);
 	if (mcapi_trans_initialize_()) {
 		mcapi_trans_add_node(domain_id, node_num, node_attrs);
 		return MCAPI_TRUE;
@@ -742,7 +742,7 @@ mcapi_boolean_t mcapi_trans_endpoint_create(mcapi_endpoint_t *endpoint,  mcapi_u
 	mcapi_trans_get_node_num(&node_num);
 	node_index = mcapi_trans_get_node_index(node_num);
 
-	coreb_msg(" node index %d ep index %d\n", node_index, endpoint_index);
+	COREB_DEBUG(2, " node index %d ep index %d\n", node_index, endpoint_index);
 	if (mcapi_db->domains[domain_index].nodes[node_index].node_d.endpoints[endpoint_index].valid == MCAPI_FALSE) {
 
 	/* initialize the endpoint entry*/  
@@ -813,7 +813,7 @@ void mcapi_trans_endpoint_delete( mcapi_endpoint_t endpoint)
 	mcapi_trans_decode_handle_internal(endpoint,&d,&n,&e);
 
 	index = mcapi_trans_get_port_index(n, e);
-	coreb_msg("%s %d d %d n %d e %d index %d\n", __func__, __LINE__,d,n,e,index);
+	COREB_DEBUG(2, "%s %d d %d n %d e %d index %d\n", __func__, __LINE__,d,n,e,index);
 	if (index >= MCAPI_MAX_ENDPOINTS) {
 		return MCAPI_FALSE;
 	}
@@ -935,7 +935,7 @@ void mcapi_trans_msg_send_i( mcapi_endpoint_t  send_endpoint, mcapi_endpoint_t  
 
 	index = mcapi_trans_get_port_index(sn, se);
 
-	coreb_msg("index %d, se %d, sn %d\n", index, se, sn);
+	COREB_DEBUG(2, "index %d, se %d, sn %d\n", index, se, sn);
 
 	if (index >= MCAPI_MAX_ENDPOINTS) {
 		*mcapi_status = MCAPI_FALSE;
@@ -943,7 +943,7 @@ void mcapi_trans_msg_send_i( mcapi_endpoint_t  send_endpoint, mcapi_endpoint_t  
 	}
 
 	mcapi_dprintf(1,"index %d, re %d, rn %d%d\n", index, re, rn);
-	coreb_msg("index %d, re %d, rn %d\n", index, re, rn);
+	COREB_DEBUG(2, "index %d, re %d, rn %d\n", index, re, rn);
 	ret = sm_send_packet(index, re, rn, buffer, buffer_size);
 	if (ret) {
 		mcapi_dprintf(1,"send failed\n");
@@ -1187,7 +1187,7 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 		*mcapi_status = ret;
 		return;
 	}
-	coreb_msg("index %d, se %d, sn %d\n", index, se, sn);
+	COREB_DEBUG(2, "index %d, se %d, sn %d\n", index, se, sn);
 
 	/* find a free mcapi buffer (we only have to worry about this on the sending side) */
 	for (i = 0; i < MCAPI_MAX_BUFFERS; i++) {
@@ -1200,7 +1200,7 @@ void mcapi_trans_pktchan_recv_i( mcapi_pktchan_recv_hndl_t receive_handle,  void
 	if (i == MCAPI_MAX_BUFFERS) {
 		/* we couldn't get a free buffer */
 		mcapi_dprintf(2," ERROR mcapi_trans_send_internal: No more buffers available - try freeing some buffers. \n");
-		coreb_msg("pktchan buffer is full\n");
+		COREB_DEBUG(2, "pktchan buffer is full\n");
 		*mcapi_status = MCAPI_FALSE;
 		return;
 	}
@@ -1257,7 +1257,7 @@ mcapi_boolean_t mcapi_trans_pktchan_free( void* buffer)
 
 	if (i == MCAPI_MAX_BUFFERS) {
 		/* didn't find the buffer */
-		coreb_msg("didn't find%08x\n", buffer);
+		COREB_DEBUG(2, "didn't find%08x\n", buffer);
 		rc = MCAPI_FALSE;
 	}
 
@@ -1332,7 +1332,7 @@ void mcapi_trans_sclchan_connect_i( mcapi_endpoint_t  send_endpoint, mcapi_endpo
 		*mcapi_status = MCAPI_FALSE;
 	*mcapi_status = MCAPI_TRUE;
 	/* update the send endpoint */
-	coreb_msg("%s index %d ep%d\n", __func__, index, receive_endpoint);
+	COREB_DEBUG(2, "%s index %d ep%d\n", __func__, index, receive_endpoint);
 	c_db->domains[0].nodes[0].node_d.endpoints[index].connected = MCAPI_TRUE;
 	c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt = receive_endpoint;
 	c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.channel_type = MCAPI_SCL_CHAN;
@@ -1385,7 +1385,7 @@ void mcapi_trans_sclchan_send_open_i( mcapi_sclchan_send_hndl_t* send_handle, mc
 		return;
 	}
 
-	coreb_msg("  %s %d\n",__func__, __LINE__);
+	COREB_DEBUG(2, "  %s %d\n",__func__, __LINE__);
 	if (!completed) {
 
 		/* mark the endpoint as open */
@@ -1471,10 +1471,10 @@ mcapi_boolean_t mcapi_trans_sclchan_send( mcapi_sclchan_send_hndl_t send_handle,
 		return MCAPI_FALSE;
 	}
 
-	coreb_msg("mcapi_trans_sclchan_send %d %d %d %d\n",sd, sn, se, c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt);
+	COREB_DEBUG(2, "mcapi_trans_sclchan_send %d %d %d %d\n",sd, sn, se, c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt);
 	mcapi_trans_decode_handle_internal(c_db->domains[0].nodes[0].node_d.endpoints[index].recv_queue.recv_endpt,&rd,&rn,&re);
 
-	coreb_msg("send_handle=%x index%d size %d %d %d %d\n",send_handle, index, size,rd,rn,re);
+	COREB_DEBUG(2, "send_handle=%x index%d size %d %d %d %d\n",send_handle, index, size,rd,rn,re);
 
 	switch (size) {
 	case 1:
@@ -1519,7 +1519,7 @@ mcapi_boolean_t mcapi_trans_sclchan_recv( mcapi_sclchan_recv_hndl_t receive_hand
 
 	ret = sm_recv_scalar(index, &se, &sn, &scalar0, &scalar1, &type);
 	if (ret != 1) {
-		coreb_msg("receive falied %d\n", ret);
+		COREB_DEBUG(2, "receive falied %d\n", ret);
 		return MCAPI_FALSE;
 	} 
 	received_size = type;
@@ -1537,7 +1537,7 @@ mcapi_boolean_t mcapi_trans_sclchan_recv( mcapi_sclchan_recv_hndl_t receive_hand
 		return MCAPI_FALSE;
 	}
 
-	coreb_msg("[%llx] size %d received_size %d\n", *data, size, received_size);
+	COREB_DEBUG(2, "[%llx] size %d received_size %d\n", *data, size, received_size);
 	if (size != received_size)
 		return MCAPI_FALSE;
 
