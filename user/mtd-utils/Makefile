@@ -2,7 +2,7 @@
 # really made anymore by the mtd guys):
 GITWEB = http://git.infradead.org/?p=$(GITREPO).git
 GITREPO = mtd-utils
-VER = 73c6c15a4f10f9fd437d28a7de9dc90a6ed97826
+VER = 36d8de81049c9c908740b690c664b5bd3703ccd6
 
 # Host based builds needed for constructing host images
 BUILDTARGETS-m :=
