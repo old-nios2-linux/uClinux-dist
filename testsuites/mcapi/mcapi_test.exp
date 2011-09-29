@@ -118,7 +118,7 @@ set timeout 60
 
 send -s "rm /tmp/* 2> /dev/null\r"
 expect "root:/bin>"
-send -s "$case_name ; ls /tmp | xargs cat \r"
+send -s "$case_name ; ls /tmp/* 2> /dev/null | xargs cat \r"
 while 1 {
    expect {
      -re "CoreB Test PASSED.*CoreA Test PASSED" {
