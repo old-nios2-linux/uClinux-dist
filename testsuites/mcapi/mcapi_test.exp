@@ -16,7 +16,7 @@ source ../reboot_kernel.exp
 step "Starting test"
 set timeout 8
 
-#set allcases {msg1  msg2 }
+#set allcases {scl1  pkt2 }
 set allcases {msg1  msg2  pkt1  pkt2 pkt3  scl1  scl2}
 set bin_num [llength $allcases]
 set test_round 100
@@ -86,13 +86,32 @@ send -s "./icc_loader -f -e ./mcapi_$case_name \r"
 while 1 {
    expect {
      -re "OK.*task_init_addr.*task_exit_addr" {
-               case_pass $case_num
-               break
+               expect {
+	       -re  "root:/bin>" {
+	                case_pass $case_num
+               		break
+	       }
+	
+	        -re "execption" {
+	                case_fail $case_num
+	                exit
+	       }
+	        timeout {
+	                case_fail $case_num
+	                exit
+	       }
+  	       }
+
       }
 
      -re "Hardware Trace" {
          case_fail $case_num
          break
+      }
+
+     -re "execption" {
+         case_fail $case_num
+         exit
       }
 
       timeout {
@@ -103,28 +122,22 @@ while 1 {
 }
 
 send -s "\r"
-expect {
-       -re  "root:/bin>" {
-                case_pass $case_num
-       }
-
-       timeout {
-                case_fail $case_num
-                exit
-       }
-}
-
-set timeout 60
-
-send -s "rm /tmp/* 2> /dev/null\r"
 expect "root:/bin>"
-send -s "$case_name ; ls /tmp/* 2> /dev/null | xargs cat \r"
+
+set timeout 600
+
+send -s "rm /tmp/* 2> /dev/null; dmesg -c > /dev/null\r"
+sleep 3
+expect "root:/bin>"
+
+set case_status  0
+#send -s "$case_name ; ls /tmp/* 2> /dev/null | xargs cat \r"
+spawn rsh -l root $targetip  $case_name \; ls /tmp/*  2> /dev/null | xargs cat \;dmesg 
 while 1 {
    expect {
-     -re "CoreB Test PASSED.*CoreA Test PASSED" {
-
+     -re "CoreA Test PASSED.*CoreB Test PASSED" {
          case_pass $case_num
-         break
+         set case_status  1
       }
 
      -re "Hardware Trace" {
@@ -132,7 +145,7 @@ while 1 {
          break
       }
 
-     -re "Test FAILED" {
+     -re "execption" {
          case_fail $case_num
          break
       }
@@ -141,19 +154,19 @@ while 1 {
          case_fail $case_num
          exit
       }
+
+      eof {
+         if { $case_status != 1 } { 
+         case_fail $case_num
+         }
+         break
+      }
       }
 }
-send -s "\r"
-expect {
-       -re  "root:/bin>" {
-                case_pass $case_num
-       }
 
-       timeout {
-                case_fail $case_num
-                exit
-       }
-}
+set spawn_id $kermit_spawn_id 
+send -s "\r"
+expect "root:/bin>"
 sleep 4
 }
 send_log "\n"
