@@ -127,6 +127,9 @@ void icc_task_init(int argc, char *argv[])
       			if ( i == NUM_SIZES*2 ) {
 				send_pktchan(ep1,status,MCAPI_SUCCESS);
 			}
+	
+			if ((pass_num1 + pass_num2) == NUM_SIZES *2)
+			COREB_DEBUG(0, "CoreB Test PASSED\n");
 		}
 	}
 

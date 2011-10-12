@@ -88,7 +88,9 @@ while(1) {
 		COREB_DEBUG(1, "\nCoreB: mcapi message loop test. The %i time send back, status %i . \n", i, status);
 		i++;
 		if (i == NUM_SIZES)
-  		COREB_DEBUG(1, "CoreB finished data loop back!\n");
+  		COREB_DEBUG(1, "CoreB finished data loop back! %d \n",pass_num);
+  		if (pass_num == NUM_SIZES)
+  		COREB_DEBUG(0, "CoreB Test PASSED\n");
 	}
 }
 

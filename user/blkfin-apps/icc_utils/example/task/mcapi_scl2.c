@@ -159,6 +159,9 @@ void icc_task_init(int argc, char *argv[])
                         WRONG 
 			}
 
+			if ((pass_num1 + pass_num2) == NUM_SIZES *2)
+			COREB_DEBUG(0, "CoreB Test PASSED\n");
+
 			if (i == NUM_SIZES*2 ) {
 				mcapi_sclchan_connect_i(ep1,ep3,&request,&status);
 

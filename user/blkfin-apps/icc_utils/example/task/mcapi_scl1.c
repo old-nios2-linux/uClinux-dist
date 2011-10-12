@@ -134,6 +134,7 @@ void icc_task_init(int argc, char *argv[])
 
 	/****CoreB start to send scalar data back to CoreA. ***********/
 	i = 0;
+        pass_num = 0;
 	mcapi_sclchan_connect_i(ep2,ep3,&request,&status);
 	COREB_DEBUG(1, "CoreB connect %x\n", ep2);
 	mcapi_sclchan_send_open_i(&s1,ep2, &request, &status);
@@ -146,11 +147,15 @@ void icc_task_init(int argc, char *argv[])
 				wrong;
 			}else {pass_num++;}		
 
-			if ( i == NUM_SIZES )
-			break;
+			if ( i == NUM_SIZES ){
+			break;}
 	}
 
 	mcapi_sclchan_send_close_i(s1,&request,&status);
+	COREB_DEBUG(1, "CoreB Send Close PASSED\n");
+
+	if (pass_num == NUM_SIZES)
+	COREB_DEBUG(0, "CoreB Test PASSED\n");
 
 	/****CoreB to send scalar ended. ***********/
 	while(1)
@@ -159,7 +164,6 @@ void icc_task_init(int argc, char *argv[])
 	mcapi_endpoint_delete(ep1,&status);
 	mcapi_endpoint_delete(ep2,&status);
 
-	COREB_DEBUG(1, "CoreB Send Close PASSED\n");
 	mcapi_finalize(&status);
 
 	if (pass_num == NUM_SIZES)
