@@ -156,7 +156,7 @@ code.h:	gen
 	./gen -s ${srcdir} > code.h
 
 gen: gen.c
-	${HOSTCC} ${ALL_CFLAGS} ${LDFLAGS} -o $@ ${srcdir}/gen.c ${LIBS}
+	${HOSTCC} ${ALL_HOST_CFLAGS} -o $@ ${srcdir}/gen.c ${LIBS}
 
 rbtdb64.@O@: rbtdb.c
 

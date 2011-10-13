@@ -281,10 +281,18 @@ main(int argc, char **argv) {
 	while (*pts->pfv != NULL) {
 		if (T_tvec[tnum / 8] & (0x01 << (tnum % 8))) {
 			if (subprocs) {
+#ifdef __uClinux__
+				T_pid = vfork();
+#else
 				T_pid = fork();
+#endif
 				if (T_pid == 0) {
 					(*pts->pfv)();
+#ifdef __uClinux__
+					_exit(0);
+#else
 					exit(0);
+#endif
 				} else if (T_pid > 0) {
 
 					T_int = 0;

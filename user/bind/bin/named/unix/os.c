@@ -314,7 +314,11 @@ ns_os_daemonize(void) {
 		ns_main_earlyfatal("pipe(): %s", strbuf);
 	}
 
+#ifdef __uClinux__
+	pid = vfork();
+#else
 	pid = fork();
+#endif
 	if (pid == -1) {
 		isc__strerror(errno, strbuf, sizeof(strbuf));
 		ns_main_earlyfatal("fork(): %s", strbuf);
