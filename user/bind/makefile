@@ -2,6 +2,9 @@ CONFOPTIONS=--with-randomdev=/dev/random \
 	    --enable-shared \
 	    --sysconfdir=/etc/config \
 	    --with-libtool
+ifneq ($(CONFIG_LIB_LIBSSL),y)
+ CONFOPTIONS += --without-openssl
+endif
 
 all: builddir
 	$(MAKE) -C builddir
