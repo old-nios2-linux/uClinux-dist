@@ -17,7 +17,7 @@ step "Starting test"
 set timeout 8
 
 #set allcases {scl1  pkt2 }
-set allcases {msg1  msg2  pkt1  pkt2 pkt3  scl1  scl2}
+set allcases {msg1  msg2  pkt1 pkt2 pkt3  scl1  scl2}
 set bin_num [llength $allcases]
 set test_round 100
 
@@ -68,13 +68,13 @@ expect {
        }
 }
 
-for {set i 1} {$i < $bin_num*$test_round} {incr i} {
+for {set i 0} {$i < $bin_num*$test_round} {incr i} {
 
 set test_case_num [ expr $i % $bin_num ] 
 
 set case_name [lindex $allcases $test_case_num ]
 
-send_log "\n!!!!!##### Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num] time testing!\n"
+send_log "\n!!!!!##### Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num + 1 ] time testing!\n"
 
 sleep 3
 incr case_num
@@ -117,9 +117,6 @@ while 1 {
       }
 }
 
-send -s "\r"
-expect "root:/bin>"
-
 set timeout 600
 
 send -s "rm /tmp/* 2> /dev/null; dmesg -c > /dev/null\r"
@@ -129,7 +126,7 @@ expect "root:/bin>"
 set corea_case_status  0
 set coreb_case_status  0
 #send -s "$case_name ; ls /tmp/* 2> /dev/null | xargs cat \r"
-spawn rsh -l root $targetip  $case_name \;  ls /tmp/*  2> /dev/null | xargs cat  
+spawn rsh -l root $targetip  $case_name \;  ls /tmp/*  2> /dev/null | xargs cat \;dmesg 
 while 1 {
    expect {
      -re "CoreA Test PASSED" {
