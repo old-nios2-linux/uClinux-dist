@@ -207,9 +207,32 @@ set timeout 5
 set output_dir audio_data
 
 send "ifconfig eth0 $targetip\r"
-sleep 5
-send "\r"
 expect -re $kernel_prompt
+sleep 5
+
+incr case_num
+set timeout 5
+send "amixer cget name='Capture Switch'\r"
+while 1 {
+    expect {
+        -re "amixer: Cannot find the given element.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        -re "values=off.*$kernel_prompt" {
+            send "amixer cset name='Capture Switch' on\r"
+            continue
+        }
+        -re "values=on.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
 
 spawn /bin/bash
 set host_spawn_id $spawn_id

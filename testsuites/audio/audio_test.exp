@@ -30,41 +30,25 @@ step "Start testing."
 
 set count_under_run 0
 set case_num 0
+set alsa_format "S32_LE S24_LE S16_LE"
+set sample_rate "48000 96000 44100 8000"
+set channel "Stereo Mono"
 set output_file_type "wav"
 
-if { $audio_dev == "audio_ad1938" || $audio_dev == "audio_ad1836" } {
-    set channel "Stereo"
-    set channel_num "2"
-    set sample_rate "48000"
-    set alsa_format "S32_LE"
-    set oss_format "32"
-} elseif { $audio_dev == "audio_ssm2603" } {
-    set channel "Stereo"
-    set channel_num "2"
-    set sample_rate "48000 96000 44100 8000"
-    set alsa_format "S32_LE S16_LE"
-    set oss_format "32 24 16"
-} elseif { $audio_dev == "audio_ad73311" } {
-    set channel "Mono"
-    set channel_num "1"
-    set sample_rate "8000"
-    set alsa_format "S16_LE"
-    set oss_format "16"
-} else {
-    send_user "Can not recognize audio device, exit"
-    exit
-}
-
-proc alsa_rec_play {format rate file_type} {
+proc alsa_rec_play {format rate channel file_type} {
     global case_num
     global kernel_prompt
     global count_under_run
-    global channel
-    global channel_num
+
+    if { $channel == "Mono" } {
+        set channel_num 1
+    } else {
+        set channel_num 2
+    }
 
     incr case_num
     set timeout 15
-    send -s "arecord -t $file_type -c $channel_num -f $format -r $rate -d 5 $file_type\n"
+    send -s "arecord -f $format -r $rate -c $channel_num -t $file_type -d 5 $file_type\n"
     while 1 {
         expect {
             -re "TUV|UVF|TU|UV|VF|(Hardware Trace:)|dma" {
@@ -75,6 +59,7 @@ proc alsa_rec_play {format rate file_type} {
                         break
                     }
                     timeout {
+                        send_user "timeout!"
                         case_fail $case_num
                     }
                 }
@@ -84,6 +69,7 @@ proc alsa_rec_play {format rate file_type} {
                 break
             }
             timeout {
+                send_user "timeout in arecord!"
                 case_fail $case_num
             }
         }
@@ -100,6 +86,7 @@ proc alsa_rec_play {format rate file_type} {
                         break
                     }
                     timeout {
+                        send_user "timeout!"
                         case_fail $case_num
                     }
                 }
@@ -109,22 +96,27 @@ proc alsa_rec_play {format rate file_type} {
                 break
             }
             timeout {
+                send_user "timeout in aplay!"
                 case_fail $case_num
             }
         }
     }
 }
 
-proc alsa_rec2play {format rate file_type} {
+proc alsa_rec2play {format rate channel file_type} {
     global case_num
     global kernel_prompt
     global count_under_run
-    global channel
-    global channel_num
+
+    if { $channel == "Mono" } {
+        set channel_num 1
+    } else {
+        set channel_num 2
+    }
 
     incr case_num
     set timeout 15
-    send -s "arecord -t $file_type -c $channel_num -f $format -r $rate -d 5 |aplay\n"
+    send -s "arecord -f $format -r $rate -c $channel_num -t $file_type -d 5|aplay\n"
     while 1 {
         expect {
             -re "TUV|UVF|TU|UV|VF|(Hardware Trace:)|dma" {
@@ -155,18 +147,21 @@ proc alsa_rec2play {format rate file_type} {
 proc repeat { test_proc total_count } {
     global sample_rate
     global alsa_format
+    global channel
     global output_file_type
 
     set count 1
     while {1} {
-        foreach rate $sample_rate {
-            foreach format $alsa_format {
-                send_user "\n$test_proc Round $count: rate $rate; format $format\n\n"
-                $test_proc $format $rate $output_file_type
-                sleep 1
-                set count [expr $count+1]
-                if { $count > $total_count } {
-                    return
+        foreach RATE $sample_rate {
+            foreach FORMAT $alsa_format {
+                foreach CHANNEL $channel {
+                    send_user "\n$test_proc Round $count: format $FORMAT; rate $RATE; channel $CHANNEL\n\n"
+                    $test_proc $FORMAT $RATE $CHANNEL $output_file_type
+                    sleep 1
+                    set count [expr $count+1]
+                    if { $count > $total_count } {
+                        return
+                    }
                 }
             }
         }
@@ -184,8 +179,31 @@ set timeout 4
 send "\n"
 expect -re $kernel_prompt
 
-set repeat_count 10
-set mem_leak_valve [expr 64*$channel_num*$repeat_count*2]
+set repeat_count 20
+set mem_leak_valve [expr 64*$repeat_count*2]
+
+incr case_num
+set timeout 5
+send "amixer cget name='Capture Switch'\r"
+while 1 {
+    expect {
+        -re "amixer: Cannot find the given element.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        -re "values=off.*$kernel_prompt" {
+            send "amixer cset name='Capture Switch' on\r"
+            continue
+        }
+        -re "values=on.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
 
 incr case_num
 set timeout 5
