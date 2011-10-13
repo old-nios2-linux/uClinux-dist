@@ -25,8 +25,6 @@ send_user "bin_num=$bin_num\n"
 
 set case_num 0
 
-incr case_num
-
 send -s "cd /bin\r"
 while 1 {
    expect {
@@ -62,7 +60,6 @@ while 1 {
 send -s "\r"
 expect {
        -re  "root:/bin>" {
-                case_pass $case_num
        }
 
        timeout {
@@ -71,13 +68,13 @@ expect {
        }
 }
 
-for {set i 0} {$i < $bin_num*$test_round} {incr i} {
+for {set i 1} {$i < $bin_num*$test_round} {incr i} {
 
 set test_case_num [ expr $i % $bin_num ] 
 
 set case_name [lindex $allcases $test_case_num ]
 
-send_log "!!!!!##### Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num] time testing!\n"
+send_log "\n!!!!!##### Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num] time testing!\n"
 
 sleep 3
 incr case_num
@@ -85,10 +82,9 @@ set timeout 60
 send -s "./icc_loader -f -e ./mcapi_$case_name \r"
 while 1 {
    expect {
-     -re "OK.*task_init_addr.*task_exit_addr" {
+     -re "task_init_addr" {
                expect {
 	       -re  "root:/bin>" {
-	                case_pass $case_num
                		break
 	       }
 	
@@ -130,14 +126,21 @@ send -s "rm /tmp/* 2> /dev/null; dmesg -c > /dev/null\r"
 sleep 3
 expect "root:/bin>"
 
-set case_status  0
+set corea_case_status  0
+set coreb_case_status  0
 #send -s "$case_name ; ls /tmp/* 2> /dev/null | xargs cat \r"
-spawn rsh -l root $targetip  $case_name \; ls /tmp/*  2> /dev/null | xargs cat \;dmesg 
+spawn rsh -l root $targetip  $case_name \;  ls /tmp/*  2> /dev/null | xargs cat  
 while 1 {
    expect {
-     -re "CoreA Test PASSED.*CoreB Test PASSED" {
-         case_pass $case_num
-         set case_status  1
+     -re "CoreA Test PASSED" {
+         send_log "CoreA test pass detected\n"
+         set corea_case_status  1
+      }
+
+     -re "CoreB Test PASSED" {
+         send_log "CoreB test pass detected!\n"
+         set coreb_case_status  1
+         sleep 1
       }
 
      -re "Hardware Trace" {
@@ -151,21 +154,25 @@ while 1 {
       }
 
       timeout {
+         send_log "time out!!\n"
          case_fail $case_num
          exit
       }
 
       eof {
-         if { $case_status != 1 } { 
+         send_log "The case is ending!! corea_case_status: $corea_case_status, coreb_case_status $coreb_case_status !!\n"
+         if { $corea_case_status != 1 || $coreb_case_status != 1 } { 
          case_fail $case_num
-         }
+         } else {
+         case_pass $case_num
+	 }
          break
       }
       }
 }
 
 set spawn_id $kermit_spawn_id 
-send -s "\r"
+send -s "date\r"
 expect "root:/bin>"
 sleep 4
 }
