@@ -91,10 +91,12 @@ void icc_task_init(int argc, char *argv[])
 	uint64_t test_pattern = 0x1122334455667788ULL;
 	unsigned long long exp_data = 0x1122334455667788ULL;
 
+	COREB_DEBUG(1, "[%s] %d\n", __func__, __LINE__);
 
 	/* create a node */
 	mcapi_initialize(DOMAIN,SLAVE_NODE_NUM,NULL,&parms,&version,&status);
 	if (status != MCAPI_SUCCESS) { WRONG }
+	COREB_DEBUG(1, "[%s] %d\n", __func__, __LINE__);
 
 	/* create endpoints */
 	ep1 = mcapi_endpoint_create(SLAVE_PORT_NUM1,&status);
