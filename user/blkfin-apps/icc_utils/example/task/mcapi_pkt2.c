@@ -23,7 +23,7 @@ void wrong(unsigned line)
 	COREB_DEBUG(1, "WRONG: line==%i \n",line);
 }
 
-void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
+void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t *status,int exp_status)
 {
 	size_t recv_size;
 	mcapi_request_t request1;
@@ -33,12 +33,12 @@ void recv_pktchan(mcapi_endpoint_t recv,mcapi_status_t status,int exp_status)
 	mcapi_pktchan_recv_hndl_t r1;
 	void *pbuffer = NULL;
 
-	mcapi_pktchan_recv_open_i(&r1,recv, &request1, &status);
-	COREB_DEBUG(1, "open recv chan status %x   \n", status);
+	mcapi_pktchan_recv_open_i(&r1,recv, &request1, status);
+	COREB_DEBUG(1, "open recv chan status %x   \n", *status);
 
-	mcapi_pktchan_recv_i(r1,(void **)&pbuffer,&request1,&status);
-	if (status != exp_status) { WRONG}
-	if (status == MCAPI_SUCCESS) {
+	mcapi_pktchan_recv_i(r1,(void **)&pbuffer,&request1,status);
+	if (*status != exp_status) { WRONG}
+	if (*status == MCAPI_SUCCESS) {
 		COREB_DEBUG(1, "endpoint=%i has received: [%s]\n",(int)recv,pbuffer);
 		if (pbuffer)
 			mcapi_pktchan_release(pbuffer, &status1);
@@ -104,11 +104,11 @@ void icc_task_init(int argc, char *argv[])
 	i = 0;
 	while (1) {
 		if (icc_wait()) {
-			recv_pktchan(ep1,status1,MCAPI_SUCCESS);
+			recv_pktchan(ep1,&status1,MCAPI_SUCCESS);
                         if (status1 == MCAPI_SUCCESS)
         	                 pass_num1++;
 
-			recv_pktchan(ep2,status2,MCAPI_SUCCESS);
+			recv_pktchan(ep2,&status2,MCAPI_SUCCESS);
                         if (status2 == MCAPI_SUCCESS)
         	                 pass_num2++;
 
