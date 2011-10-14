@@ -10,8 +10,8 @@ step "Start kermit."
 source ../spawn_kermit.exp
 
 step "Reboot the kernel."
-set bootargs  $bootargs_param11
-source ../reboot_kernel.exp
+#set bootargs  $bootargs_param11
+#source ../reboot_kernel.exp
 
 step "Starting test"
 set timeout 8
@@ -24,6 +24,7 @@ set test_round 100
 send_user "bin_num=$bin_num\n"
 
 set case_num 0
+set targetip 10.99.24.104
 
 send -s "cd /bin\r"
 while 1 {
@@ -82,7 +83,7 @@ set timeout 60
 send -s "./icc_loader -f -e ./mcapi_$case_name \r"
 while 1 {
    expect {
-     -re "task_init_addr" {
+     -re "\[icc_task_init\]" {
                expect {
 	       -re  "root:/bin>" {
                		break
