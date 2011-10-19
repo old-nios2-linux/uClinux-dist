@@ -24,7 +24,6 @@ set test_round 100
 send_user "bin_num=$bin_num\n"
 
 set case_num 0
-set targetip 10.99.24.104
 
 send -s "cd /bin\r"
 while 1 {
