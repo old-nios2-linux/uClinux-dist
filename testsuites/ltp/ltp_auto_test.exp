@@ -886,7 +886,7 @@ proc run_LTP_test { filename command torun mode} {
        send "dmesg|grep -c NOMPU\r"
        while 1 {
            expect {
-               -re "1.*$kernel_prompt" {
+               -re "\[1-9].*$kernel_prompt" {
                    set result_flag $LTP_NA
                    step "Test NA on uClinux"
                    return $result_flag
