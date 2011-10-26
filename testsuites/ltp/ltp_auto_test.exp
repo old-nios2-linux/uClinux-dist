@@ -886,9 +886,9 @@ proc run_LTP_test { filename command torun mode} {
        send "dmesg|grep -c NOMPU\r"
        while 1 {
            expect {
-               -re "\[1-9].*$kernel_prompt" {
+               -re "\r\n\[1-9].*$kernel_prompt" {
                    set result_flag $LTP_NA
-                   step "Test NA on uClinux"
+                   step "Test NA on non MPU kernel"
                    return $result_flag
                }
                timeout {
@@ -903,9 +903,9 @@ proc run_LTP_test { filename command torun mode} {
        send "dmesg|grep -c \"^MPU\"\r"
        while 1 {
            expect {
-               -re "1.*$kernel_prompt" {
+               -re "\r\n\[1-9].*$kernel_prompt" {
                    set result_flag $LTP_NA
-                   step "Test NA on uClinux"
+                   step "Test NA on MPU kernel"
                    return $result_flag
                }
                timeout {
