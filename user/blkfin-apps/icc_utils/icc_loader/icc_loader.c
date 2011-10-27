@@ -180,7 +180,7 @@ static int put_region(void *dst, size_t dst_size, const void *src, size_t src_si
 		if (ldst >= 0xff000000)
 			dma_memcpy(dst, src, dst_size);
 		else {
-			memset(0x3c00000, 0, 0x400000);
+			memset(dst, 0, dst_size);
 			memcpy(dst, src, dst_size);
 			nbytes = dst_size;
 			cdst = (char *)dst;
