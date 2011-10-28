@@ -3,14 +3,14 @@
 #
 # Build Kernel for USB network test of PLX NET2272
 #
-source  ../kernel_config.exp
-source  ../board_info.exp
+source ../kernel_config.exp
+source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
 step "Make default config."
-source  make_default_config.exp
+source make_default_config.exp
 
 step "Make config"
 
@@ -20,6 +20,9 @@ spawn make config
 
 while 1 {
     expect {
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
 
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
@@ -46,48 +49,11 @@ while 1 {
             send "Y\r"
         }
 
-        -re "USB Gadget Drivers \\\[.*]" {
+        -re "USB Peripheral Controller \\\[.*]" {
             send "Y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .01
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
-spawn make config
-while 1 {
-    expect {
-
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -re "USB Peripheral Controller.*(\[0-9]+)\. PLX NET2272.*choice\\\[.*]:" {
+        -re "(\[0-9]+)\. PLX NET2272.*choice\\\[.*]:" {
             send "$expect_out(1,string)\r"
         }
 
@@ -95,7 +61,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "USB Gadget Drivers.*(\[0-9]+)\. Ethernet Gadget.*choice\\\[.*]:" {
+        -re "(\[0-9]+)\. Ethernet Gadget.*choice\\\[.*]:" {
             send "$expect_out(1,string)\r"
         }
 
@@ -103,10 +69,6 @@ while 1 {
             send "Y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
             sleep .01
             send "\r"
@@ -129,17 +91,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make kernel"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux image"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
-
 log_file
