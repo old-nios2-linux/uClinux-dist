@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <endian.h>
 
 #include "gen_firmware.h"
 
@@ -44,7 +45,7 @@ int get_prog() {
 /* Got the parameter.bin and program.bin by "Save as Raw Data"->
  * "Adress+Data" in SigmaStudio. ToDo: caculating CRC32 value,
  * commenting out crc check routine in .../drivers/firmware/sigma.c
- * of linux kernel currently.  
+ * of linux kernel currently.
  */
 
 int main(int argc, char **argv)
@@ -62,7 +63,7 @@ int main(int argc, char **argv)
 		return -1;
 
 	param_size = sizeof(struct sigma_action) + sigma_param_size + (sigma_param_size % 2);
-	program_size = sizeof(struct sigma_action) + sigma_program_size + (sigma_program_size % 2) ;
+	program_size = sizeof(struct sigma_action) + sigma_program_size + (sigma_program_size % 2);
 
 	//
 	sa_param = (struct sigma_action *)malloc(param_size);
@@ -70,12 +71,11 @@ int main(int argc, char **argv)
 		printf("malloc param payload error\n");
 		return -1;
 	}
-	sa_param->len =  sigma_param_size & 0xffff;
+	sa_param->len =  htole16(sigma_param_size & 0xffff);
 	sa_param->len_hi = (sigma_param_size >> 16) & 0xf;
   	sa_param->instr = SIGMA_ACTION_WRITEXBYTES;
 	/* I2C transfer starts from MSB */
-	*(u8*)&sa_param->addr = sigma_param[0];
-	*((u8*)&sa_param->addr + 1) = sigma_param[1];
+	sa_param->addr = htobe16((sigma_param[0] << 8) | sigma_param[1]);
 	memcpy(sa_param->payload, &sigma_param[2], sigma_param_size - 2);
 
 	//
@@ -85,12 +85,11 @@ int main(int argc, char **argv)
 		free(sa_param);
 		return -1;
 	}
-	sa_program->len = sigma_program_size & 0xffff;
+	sa_program->len = htole16(sigma_program_size & 0xffff);
 	sa_program->len_hi = (sigma_program_size >> 16) & 0x0f;
   	sa_program->instr = SIGMA_ACTION_WRITEXBYTES;
 	/* I2C transfer starts from MSB */
-	*(u8*)&sa_program->addr = sigma_prog[0];
-	*((u8*)&sa_program->addr + 1) = sigma_prog[1];
+	sa_program->addr = htobe16((sigma_prog[0] << 8) | sigma_prog[1]);
 	memcpy(sa_program->payload, &sigma_prog[2], sigma_program_size - 2);
 
 	/* init head */

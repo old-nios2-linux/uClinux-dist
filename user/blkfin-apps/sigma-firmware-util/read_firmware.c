@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <endian.h>
 
 struct sigma_firmware {
 	unsigned char magic[7];
@@ -25,7 +26,7 @@ struct sigma_action {
 	uint16_t addr;
 	unsigned char payload[];
 };
-#define LEN_sa(sa) ((uint32_t)(((sa)->len_hi << 16) | (sa)->len))
+#define LEN_sa(sa) ((uint32_t)(((sa)->len_hi << 16) | le16toh((sa)->len)))
 #define LEN_sa_payload(sa) (LEN_sa(sa) ? LEN_sa(sa) - 2 : 0)
 #define SIZEOF_sa(sa) (1 + 1 + 2 + 2 + LEN_sa_payload(sa) + LEN_sa_payload(sa) % 2)
 
@@ -88,7 +89,7 @@ int main(int argc, char *argv[])
 			"	uint8_t version = %i;\n"
 			"	uint32_t crc = 0x%08x;\n"
 			"};\n",
-			sf->version, sf->crc);
+			sf->version, le32toh(sf->crc));
 
 		j = 0;
 		sa = (void *)(buf + SIZEOF_sf);
@@ -104,8 +105,8 @@ int main(int argc, char *argv[])
 				j,
 				sa->instr, sa->instr, decode_inst(sa->instr),
 				sa->len_hi, sa->len_hi,
-				sa->len, sa->len,
-				sa->addr, sa->addr);
+				le16toh(sa->len), le16toh(sa->len),
+				be16toh(sa->addr), be16toh(sa->addr));
 
 			if (sa->instr == 3)
 				sa->len = 0;
