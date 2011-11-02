@@ -11,6 +11,7 @@
 #include <endian.h>
 
 #include "gen_firmware.h"
+#include "crc32.h"
 
 static u8 sigma_prog[MAX_LEN];
 static u8 sigma_param[MAX_LEN];
@@ -43,9 +44,7 @@ int get_prog() {
 }
 
 /* Got the parameter.bin and program.bin by "Save as Raw Data"->
- * "Adress+Data" in SigmaStudio. ToDo: caculating CRC32 value,
- * commenting out crc check routine in .../drivers/firmware/sigma.c
- * of linux kernel currently.
+ * "Adress+Data" in SigmaStudio.
  */
 
 int main(int argc, char **argv)
@@ -56,6 +55,7 @@ int main(int argc, char **argv)
 	struct sigma_action *sa_program;
 	u32 param_size;
 	u32 program_size;
+	u32 crc;
 
 	if(get_prog() < 0)
 		return -1;
@@ -92,9 +92,13 @@ int main(int argc, char **argv)
 	sa_program->addr = htobe16((sigma_prog[0] << 8) | sigma_prog[1]);
 	memcpy(sa_program->payload, &sigma_prog[2], sigma_program_size - 2);
 
+	crc = crc32(sa_program, program_size, 0);
+	crc = crc32(sa_param, param_size, crc);
+
 	/* init head */
 	memcpy(head.magic, SIGMA_MAGIC, sizeof(SIGMA_MAGIC));
 	head.version = 1;
+	head.crc = htole32(crc);
 
 	/* write to file */
 	fd = open(OUTPUT_FILE, O_CREAT|O_RDWR|O_TRUNC, S_IRWXU);

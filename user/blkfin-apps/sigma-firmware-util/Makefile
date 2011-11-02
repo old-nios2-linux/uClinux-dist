@@ -16,7 +16,7 @@ clean:
 BUILD_CC ?= gcc
 BUILD_CFLAGS ?= -O2 -g
 BUILD_CFLAGS += -Wall
-BUILD_COMPILE = $(BUILD_CC) $(BUILD_CFLAGS) $(BUILD_LDFLAGS) -o $@ $<
+BUILD_COMPILE = $(BUILD_CC) $(BUILD_CFLAGS) $(BUILD_LDFLAGS) -o $@ $^
 
-gen_firmware: gen_firmware.c ; $(BUILD_COMPILE)
+gen_firmware: gen_firmware.c crc32.c ; $(BUILD_COMPILE)
 read_firmware: read_firmware.c ; $(BUILD_COMPILE)
