@@ -19,7 +19,7 @@ while 1 {
             continue
         }
 
-        -re "Power Management support.*PM.*\\\[.*]" {
+        -re "Suspend to RAM and standby.*SUSPEND.*\\\[.*]" {
             send "N\r"
         }
 
@@ -146,6 +146,10 @@ while 1 {
         }
 
         -re "tone.*USER_PLAY_TONE.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "Trap tests.*USER_BLACKFIN_TRAPSTEST.*\\\[.*]" {
             send "N\r"
         }
 
