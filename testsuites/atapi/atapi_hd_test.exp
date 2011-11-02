@@ -288,7 +288,7 @@ while 1 {
 
 set timeout 60
 incr case_num
-send "time dd conv=fsync if=/dev/zero of=/mnt/hd1/test.bin bs=1M count=100\r"
+send "time dd conv=fsync if=/dev/zero of=/mnt/hd1/test.bin bs=1M count=10\r"
 while 1 {
     expect {
         -re "records in.*records out.*real.*user.*sys.*$kernel_prompt" {
@@ -322,7 +322,7 @@ while 1 {
 
 set timeout 60
 incr case_num
-send "time dd conv=fsync if=/dev/zero of=/mnt/hd2/test.bin bs=1M count=100\r"
+send "time dd conv=fsync if=/dev/zero of=/mnt/hd2/test.bin bs=1M count=10\r"
 while 1 {
     expect {
         -re "records in.*records out.*real.*user.*sys.*$kernel_prompt" {
@@ -460,9 +460,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n" 
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
