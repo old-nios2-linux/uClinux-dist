@@ -91,7 +91,7 @@ proc standby_test_case1 {} {
 
     incr case_num
     set timeout 10
-    send -s "arecord -t wav -c 2 -f S32_LE -r 48000 -d 5 |aplay\n"
+    send -s "arecord -t wav -c 2 -f S32_LE -r 44100 -d 5 |aplay\n"
     while 1 {
         expect {
             -re "\[fF]ail|\[eE]rror" {
@@ -198,7 +198,7 @@ while 1 {
 
 incr case_num
 set timeout 10
-send -s "arecord -t wav -c 2 -f S32_LE -r 48000 -d 5 |aplay\n"
+send -s "arecord -t wav -c 2 -f S32_LE -r 44100 -d 5 |aplay\n"
 while 1 {
     expect {
         -re "\[fF]ail|\[eE]rror" {

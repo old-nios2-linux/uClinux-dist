@@ -36,7 +36,6 @@ if { $audio_dev == "audio_ad1836" } {
     set modprobe_cmd "modprobe snd_soc_ad193x; sleep 1; modprobe snd_soc_bf5xx_tdm; sleep 1; modprobe snd-ad193x"
     set channel_num 8
 }
-set format S32_LE
 
 sleep 5
 set timeout 30
@@ -64,7 +63,7 @@ sleep 10
 set count_under_run 0
 set timeout 120
 incr case_num
-send "speaker-test -c $channel_num -F $format\r"
+send "speaker-test -c $channel_num\r"
 while 1 {
     expect {
         -re "TUV|UVF|TU|UV|VF" {
