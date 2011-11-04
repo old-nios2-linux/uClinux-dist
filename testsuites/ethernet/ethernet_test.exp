@@ -177,51 +177,36 @@ while 1 {
      }
 }
 
-if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
-
-	if { $TransRate > 4000 && $Throughput > 85 } {
-	
-                case_pass $case_num
-	
-	} else {
-                case_fail $case_num
-		exit
-	}
-	
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" } {
+    if { $TransRate > 4000 && $Throughput > 85 } {
+        case_pass $case_num
+    } else {
+        case_fail $case_num
+    }
+} elseif { [string match "BF527-EZKIT*" $board_type] } {
+    if { $TransRate > 3500 && $Throughput > 85 } {
+        case_pass $case_num
+    } else {
+        case_fail $case_num
+    }
 } elseif { $board_type == "BF533-STAMP" } {
-
-	if { $TransRate > 3500 && $Throughput > 50 } {
-	
-                case_pass $case_num
-	
-	} else {
-                case_fail $case_num
-		exit
-		
-	}
-
+    if { $TransRate > 3500 && $Throughput > 50 } {
+        case_pass $case_num
+    } else {
+        case_fail $case_num
+    }
 } elseif { $board_type == "BF526-EZKIT" } {
-
-	if { $TransRate > 3000 && $Throughput > 60 } {
-	
-                case_pass $case_num
-	
-	} else {
-                case_fail $case_num
-		exit
-		
-	}
+    if { $TransRate > 3000 && $Throughput > 60 } {
+        case_pass $case_num
+    } else {
+        case_fail $case_num
+    }
 } else {
-	if { $TransRate > 2500 && $Throughput > 50 } {
-	
-                case_pass $case_num
-	
-	} else {
-                case_fail $case_num
-		exit
-		
-	}
-
+    if { $TransRate > 2500 && $Throughput > 50 } {
+        case_pass $case_num
+    } else {
+        case_fail $case_num
+    }
 }
 
 set spawn_id $netserver_id
