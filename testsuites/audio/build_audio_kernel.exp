@@ -33,6 +33,16 @@ if { $audio_dev == "audio_ad73322" } {
     }
 }
 
+if { $audio_dev == "audio_adau1361" } {
+    set board_file $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf537/boards/stamp.c
+    if [ catch {exec sed -i "/I2C_BOARD_INFO.*adau1761/ s/1761/1361/" $board_file} ] {
+        send_user "\nfail to modify board file\n"
+        send_user "$errorInfo\n"
+        exit
+    }
+}
+
+
 cd $uclinux_path/testsuites
 step "Make config"
 source make_default_config.exp
@@ -165,7 +175,7 @@ while 1 {
             }
         }
 
-        -re "SoC ADAU1361 Audio support.*SND_BF5XX_SOC_ADAU1361.*\\\[.*]" {
+        -re "Support for the EVAL-ADAU1X61.*SND_SOC_BFIN_EVAL_ADAU1X61.*\\\[.*]" {
             if { $audio_dev == "audio_adau1361" } {
                 send "Y\r"
             } else {
