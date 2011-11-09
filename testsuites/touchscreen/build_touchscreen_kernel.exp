@@ -23,6 +23,9 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
 
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
@@ -148,7 +151,15 @@ while 1 {
             }
         }
 
-        -re "AD7879 based touchscreens: AD7879 SPI Interface.*TOUCHSCREEN_AD7879_SPI.*\\\[.*]" {
+        -re "Analog Devices.*touchscreen interface.*TOUCHSCREEN_AD7879.*\\\[.*]" {
+            if { $board_type == "BF526-EZBRD" } {
+                send "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "support SPI bus connection.*TOUCHSCREEN_AD7879_SPI.*\\\[.*]" {
             if { $board_type == "BF526-EZBRD" } {
                 send "Y\r"
             } else {
@@ -173,10 +184,6 @@ while 1 {
             send "Y\r"
         }
 
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
         "\\\(*) \\\[*]" {
             sleep .01
             send "\r"
@@ -199,16 +206,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
