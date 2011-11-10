@@ -18,10 +18,11 @@ set timeout 8
 
 #set allcases {scl1  pkt2 }
 set allcases {msg1  msg2  pkt1 pkt2 pkt3  scl1  scl2}
-set bin_num [llength $allcases]
+
+set all_bin_num [llength $allcases]
 set test_round 100
 
-send_user "bin_num=$bin_num\n"
+send_user "all_bin_num=$all_bin_num\n"
 
 set case_num 0
 
@@ -68,11 +69,21 @@ expect {
        }
 }
 
+for {set t 0} {$t < $all_bin_num + 1} {incr t} {
+
+if { $t < $all_bin_num } {
+set runcases [lindex $allcases $t]
+} else {
+set runcases $allcases 
+}
+
+set bin_num [llength $runcases]
+
 for {set i 0} {$i < $bin_num*$test_round} {incr i} {
 
 set test_case_num [ expr $i % $bin_num ] 
 
-set case_name [lindex $allcases $test_case_num ]
+set case_name [lindex $runcases $test_case_num ]
 
 send_log "\n!!!!!##### Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num + 1 ] time testing!\n"
 
@@ -172,6 +183,7 @@ set spawn_id $kermit_spawn_id
 send -s "date\r"
 expect "root:/bin>"
 sleep 4
+}
 }
 send_log "\n"
 send_log "\n$TITLE ............\[PASS\]\n"
