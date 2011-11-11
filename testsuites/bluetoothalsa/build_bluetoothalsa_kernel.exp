@@ -65,10 +65,6 @@ while 1 {
             send "Y\r"
         }
 
-        -re "SCO.*voice.*support.*BT_HCIUSB_SCO.*\\\[.*]" {
-            send "Y\r"
-        }
-
 #Bellow is the config for USB host driver
         -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
             #CONFIG_MTD_PHYSMAP claims the entire Async. Memory Space
