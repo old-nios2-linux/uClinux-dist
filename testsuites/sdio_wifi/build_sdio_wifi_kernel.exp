@@ -9,11 +9,7 @@ cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
 
-if [catch "exec mkdir $uclinux_path/romfs/lib" msg] {
-    send_user "\nFAIL: mkdir $uclinux_path/romfs/lib\n"
-    send_user "$errorInfo\n"
-}
-if [catch "exec mkdir $uclinux_path/romfs/lib/firmware" msg] {
+if [catch "exec mkdir -p $uclinux_path/romfs/lib/firmware" msg] {
     send_user "\nFAIL: mkdir $uclinux_path/romfs/lib/firmware\n"
     send_user "$errorInfo\n"
 }
