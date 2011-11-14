@@ -10,15 +10,15 @@ step "Make config."
 source  make_default_config.exp
 
 if [catch "exec mkdir -p $uclinux_path/romfs/lib/firmware" msg] {
-    send_user "\nFAIL: mkdir $uclinux_path/romfs/lib/firmware\n"
+    send_user "\nFAIL: mkdir -p $uclinux_path/romfs/lib/firmware\n"
     send_user "$errorInfo\n"
 }
-if [catch "exec cp $uclinux_path/download/sd8686.bin $uclinux_path/romfs/lib/firmware" msg] {
-    send_user "\nFAIL: cp $uclinux_path/download/sd8686.bin $uclinux_path/romfs/lib/firmware\n"
+if [catch "exec cp $uclinux_path/download/sd8686.bin $uclinux_path/romfs/lib/firmware/" msg] {
+    send_user "\nFAIL: cp $uclinux_path/download/sd8686.bin $uclinux_path/romfs/lib/firmware/\n"
     send_user "$errorInfo\n"
 }
-if [catch "exec cp $uclinux_path/download/sd8686_helper.bin $uclinux_path/romfs/lib/firmware" msg] {
-    send_user "\nFAIL: cp $uclinux_path/download/sd8686_helper.bin $uclinux_path/romfs/lib/firmware\n"
+if [catch "exec cp $uclinux_path/download/sd8686_helper.bin $uclinux_path/romfs/lib/firmware/" msg] {
+    send_user "\nFAIL: cp $uclinux_path/download/sd8686_helper.bin $uclinux_path/romfs/lib/firmware/\n"
     send_user "$errorInfo\n"
 }
 
