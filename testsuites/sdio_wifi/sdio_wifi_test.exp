@@ -11,9 +11,8 @@ if { $argc < 2} {
    puts ""
    exit
 }
-set ping_ipaddr [lindex $argv 0]
-set essid [lindex $argv 1]
-set local_ip "192.168.1.120" 
+set ping_ipaddr [lindex $argv 1]
+set essid [lindex $argv 2]
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -24,6 +23,21 @@ source ../reboot_kernel.exp
 set case_num 0
 sleep 10
 step "Start testing."
+
+#send "mkdir -p /lib/firmware/\r"
+#expect -re $kernel_prompt
+
+#if [catch "exec rcp $uclinux_path/download/sd8686.bin root@$targetip:/lib/firmware/" msg] {
+#    send_user "\nFAIL: rcp $uclinux_path/download/sd8686.bin root@$targetip:/lib/firmware/\n"
+#    send_user "$errorInfo\n"
+#    case_fail $case_num
+#}
+
+#if [catch "exec rcp $uclinux_path/download/sd8686_helper.bin root@$targetip:/lib/firmware/" msg] {
+#    send_user "\nFAIL: rcp $uclinux_path/download/sd8686_helper.bin root@$targetip:/lib/firmware/\n"
+#    send_user "$errorInfo\n"
+#    case_fail $case_num
+#}
 
 incr case_num
 set timeout 5
@@ -63,7 +77,7 @@ set timeout 10
 send "modprobe libertas_sdio helper_name=sd8686_helper.bin fw_name=sd8686.bin\r"
 while 1 {
     expect {
-        -re "Libertas SDIO driver.*requesting sd8686_helper\.bin.*sd8686\.bin.*Marvell WLAN 802\.11 adapter" {
+        -re "Libertas SDIO driver.*Marvell WLAN 802\.11 adapter" {
             case_pass $case_num
             break
         }
@@ -74,10 +88,12 @@ while 1 {
     }
 }
 
+expect -re $kernel_prompt
+
 step "Setup wifi configuration"
 incr case_num
 set timeout 5
-send "ifconfig eth1 up\r"
+send "ifconfig wlan0 up\r"
 while 1 {
    expect {
        -re $kernel_prompt {
@@ -85,7 +101,7 @@ while 1 {
          break
       }
       timeout {
-         send_user "\ntimeout: eth1 up\n"
+         send_user "\ntimeout: wlan0 up\n"
          case_fail $case_num
       }
    }
@@ -93,7 +109,39 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "iwconfig eth1 essid $essid\r"
+send "ifconfig\r"
+while 1 {
+   expect {
+       -re "wlan0.*$kernel_prompt" {
+         case_pass $case_num
+         break
+      }
+      timeout {
+         send_user "\ntimeout: wlan0 up\n"
+         case_fail $case_num
+      }
+   }
+}
+
+incr case_num
+set timeout 5
+send "iwlist wlan0 scan\r"
+while 1 {
+   expect {
+       -re "$essid.*$kernel_prompt" {
+         case_pass $case_num
+         break
+      }
+      timeout {
+         send_user "\ntimeout: wlan scan\n"
+         case_fail $case_num
+      }
+   }
+}
+
+incr case_num
+set timeout 5
+send "iwconfig wlan0 essid $essid\r"
 while 1 {
    expect {
        -re $kernel_prompt {
@@ -109,25 +157,7 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "ifconfig eth1 $local_ip up\r"
-while 1 {
-   expect {
-       -re $kernel_prompt {
-         case_pass $case_num
-         break
-      }
-      timeout {
-         send_user "\ntimeout: set local ip\n"
-         case_fail $case_num
-      }
-   }
-}
-
-sleep 5
-
-incr case_num
-set timeout 5
-send "iwconfig eth1\r"
+send "iwconfig wlan0\r"
 while 1 {
    expect {
        -re "ESSID:\"$essid\".*$kernel_prompt" {
@@ -141,14 +171,47 @@ while 1 {
    }
 }
 
-step "ping to target"
 incr case_num
-send "ping $ping_ipaddr\r"
-sleep 5
-send "\03\r"
+set timeout 5
+send "dhcpcd wlan0 &\r"
 while 1 {
    expect {
-      -re ".* 0% packet loss.*>" {
+       -re "dhcpcd wlan0\r\n$kernel_prompt" {
+         case_pass $case_num
+         break
+      }
+      timeout {
+         send_user "\ntimeout: get wlan ip\n"
+         case_fail $case_num
+      }
+   }
+}
+
+sleep 5
+
+incr case_num
+set timeout 5
+send "ifconfig wlan0\r"
+while 1 {
+   expect {
+       -re "inet addr:(\[0-9]+\.)+.*$kernel_prompt" {
+         case_pass $case_num
+         break
+      }
+      timeout {
+         send_user "\nCan not find $essid\n"
+         case_fail $case_num
+      }
+   }
+}
+
+step "ping to target"
+incr case_num
+set timeout 60
+send "ping -c 50 $ping_ipaddr\r"
+while 1 {
+   expect {
+      -re ", 0% packet loss.*$kernel_prompt" {
          send_user "\nping remote host: pass\n"
          case_pass $case_num
          break
