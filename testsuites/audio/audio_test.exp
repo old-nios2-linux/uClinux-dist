@@ -205,6 +205,23 @@ while 1 {
     }
 }
 
+if { $audio_dev == "audio_adau1361" } {
+    incr case_num
+    set timeout 15
+    send "amixer cset name='Headphone Playback Switch' on; amixer cset name='Headphone Playback Volume' 40; amixer cset name='Left Playback Mixer Left DAC Switch' on; amixer cset name='Right Playback Mixer Left DAC Switch' on; amixer cset name='Lineout Playback Switch' on; amixer cset name='Lineout Playback Volume' 40; amixer cset name='Left LR Playback Mixer Left Volume' 2; amixer cset name='Right LR Playback Mixer Right Volume' 2; amixer cset name='Aux Capture Volume' 7; amixer cset name='Digital Capture Volume' 255; amixer cset name='Input 1 Capture Volume' 7; amixer cset name='Input 2 Capture Volume' 7; amixer cset name='Input 3 Capture Volume' 7; amixer cset name='Input 4 Capture Volume' 7\r"
+    while 1 {
+        expect {
+            -re $kernel_prompt {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+}
+
 incr case_num
 set timeout 5
 send "free\n"
