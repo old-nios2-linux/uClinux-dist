@@ -52,7 +52,7 @@ while 1 {
 sleep 8
 incr case_num
 set timeout 30
-send -s "mount -o nolock,rsize=1024,wsize=1024 -t nfs $serverip:$uclinux_path/romfs /mnt\r"
+send -s "mount -o nolock,rsize=1024,wsize=1024,tcp,nfsvers=3 -t nfs $serverip:/tftpboot/romfs /mnt\r"
 while 1 {
     expect {
         -re "(\[fF]ail|mount:).*$kernel_prompt" {
