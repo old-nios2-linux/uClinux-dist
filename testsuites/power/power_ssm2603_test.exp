@@ -68,23 +68,7 @@ proc standby_test_case1 {} {
     set timeout 5
     expect -re "Full\r\n|lpa 0x41E1\r\n"
 
-    incr case_num
-    set timeout 10
-    send -s "vrec -w -S -b 32 -s 48000 -t 5|vplay\n"
-    while 1 {
-        expect {
-            -re "\[fF]ail|\[eE]rror" {
-                case_fail $case_num
-            }
-            -re "Stereo \.\.\.\r\n$kernel_prompt" {
-                case_pass $case_num
-                break
-            }
-            timeout {
-                case_fail $case_num
-            }
-        }
-    }
+    sleep 2
 
     incr case_num
     set timeout 10
@@ -194,23 +178,7 @@ while 1 {
     }
 }
 
-incr case_num
-set timeout 10
-send -s "vrec -w -S -b 32 -s 48000 -t 5|vplay\n"
-while 1 {
-    expect {
-        -re "\[fF]ail|\[eE]rror" {
-	    case_fail $case_num
-	}
-        -re "Stereo \.\.\.\r\n$kernel_prompt" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            case_fail $case_num
-        }
-    }
-}
+sleep 1
 
 incr case_num
 set timeout 10
@@ -262,6 +230,7 @@ while 1 {
 
 for {set count 1} {$count <= $Total_Count} {incr count} {
     standby_test_case1
+    sleep 1
     send_user "\nStandby test case 1 round $count pass\n\n"
 }
 

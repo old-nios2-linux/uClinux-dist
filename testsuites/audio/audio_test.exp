@@ -46,6 +46,7 @@ proc alsa_rec_play {format rate channel file_type other_args} {
         set channel_num 2
     }
 
+    sleep 1
     incr case_num
     set timeout 15
     send -s "arecord $other_args -f $format -r $rate -c $channel_num -t $file_type -d 5 $file_type\n"
@@ -75,6 +76,7 @@ proc alsa_rec_play {format rate channel file_type other_args} {
         }
     }
 
+    sleep 1
     send -s "aplay $other_args $file_type\n"
     while 1 {
         expect {
@@ -114,6 +116,7 @@ proc alsa_rec2play {format rate channel file_type other_args} {
         set channel_num 2
     }
 
+    sleep 1
     incr case_num
     set timeout 15
     send -s "arecord $other_args -f $format -r $rate -c $channel_num -t $file_type -d 5|aplay $other_args\n"
@@ -267,6 +270,7 @@ repeat alsa_rec2play $repeat_count
 while 1 {
     send_user "Duplex testing\n"
 
+    sleep 1
     incr case_num
     set timeout 30
     send -s "arecord -t $output_file_type -c 2 -f [lindex $alsa_format 0] -r [lindex $sample_rate 2] -d 15 aaa\n"
@@ -292,6 +296,7 @@ while 1 {
         }
     }
 
+    sleep 1
     send -s "aplay aaa &\n"
     while 1 {
         expect {
