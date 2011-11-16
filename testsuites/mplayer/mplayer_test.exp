@@ -112,6 +112,7 @@ if [ catch {exec rcp video.avi root@$targetip:/} ] {
     case_pass $case_num
 }
 
+sleep 5
 set timeout 300
 incr case_num
 send "mplayer video.avi\r"
