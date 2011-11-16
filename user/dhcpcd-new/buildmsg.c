@@ -422,6 +422,8 @@ void buildDhcpRelease(xid)
 unsigned xid;
 {
   register unsigned char *p = DhcpMsgSend->options + 4;
+  if (!DhcpOptions.val[dhcpServerIdentifier])
+	  return;
   memset(&UdpIpMsgSend,0,sizeof(udpipMessage));
   memcpy(UdpIpMsgSend.ethhdr.ether_dhost,DhcpIface.shaddr,ETH_ALEN);
   memcpy(UdpIpMsgSend.ethhdr.ether_shost,ClientHwAddr,ETH_ALEN);
