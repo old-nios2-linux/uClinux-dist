@@ -193,10 +193,6 @@ if { $audio_dev == "audio_ssm2603" } {
     send "amixer cget name='Capture Switch'\r"
     while 1 {
         expect {
-            -re "amixer: Cannot find the given element.*$kernel_prompt" {
-                case_pass $case_num
-                break
-            }
             -re "values=off.*$kernel_prompt" {
                 send "amixer cset name='Capture Switch' on\r"
                 continue

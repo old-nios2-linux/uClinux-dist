@@ -176,6 +176,25 @@ while 1 {
 sleep 5
 
 incr case_num
+set timeout 5
+send "amixer cget name='Capture Switch'\r"
+while 1 {
+    expect {
+        -re "values=off.*$kernel_prompt" {
+            send "amixer cset name='Capture Switch' on\r"
+            continue
+        }
+        -re "values=on.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
 set timeout 10
 send -s "vrec -w -S -b 32 -s 48000 -t 5|vplay\n"
 while 1 {
