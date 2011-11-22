@@ -160,11 +160,7 @@ proc repeat { test_proc total_count } {
             foreach FORMAT $alsa_format {
                 foreach CHANNEL $channel {
                     send_user "\n$test_proc Round $count: format $FORMAT; rate $RATE; channel $CHANNEL\n\n"
-                    if { $FORMAT=="S32_LE" && $RATE=="48000" && $CHANNEL=="Stereo" && ( $audio_dev=="audio_ad1836" || $audio_dev=="audio_ad1938" ) } {
-                        $test_proc $FORMAT $RATE $CHANNEL $output_file_type "-Dhw"
-                    } else {
-                        $test_proc $FORMAT $RATE $CHANNEL $output_file_type ""
-                    }
+                    $test_proc $FORMAT $RATE $CHANNEL $output_file_type ""
                     sleep 1
                     set count [expr $count+1]
                     if { $count > $total_count } {
@@ -273,7 +269,7 @@ while 1 {
     sleep 1
     incr case_num
     set timeout 30
-    send -s "arecord -t $output_file_type -c 2 -f [lindex $alsa_format 0] -r [lindex $sample_rate 2] -d 15 aaa\n"
+    send -s "arecord -t $output_file_type -c 2 -f [lindex $alsa_format 0] -r [lindex $sample_rate 0] -d 15 aaa\n"
     while 1 {
         expect {
             -re "TUV|UVF|TU|UV|VF|(Hardware Trace:)|dma" {
@@ -327,7 +323,7 @@ while 1 {
         }
     }
 
-    send -s "arecord -t $output_file_type -c 2 -f [lindex $alsa_format 0] -r [lindex $sample_rate 2] -d 5 bbb\n"
+    send -s "arecord -t $output_file_type -c 2 -f [lindex $alsa_format 0] -r [lindex $sample_rate 0] -d 5 bbb\n"
     while 1 {
         expect {
             -re "TUV|UVF|TU|UV|VF|(Hardware Trace:)|dma" {
