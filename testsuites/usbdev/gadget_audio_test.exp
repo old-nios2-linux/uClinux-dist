@@ -48,6 +48,9 @@ while 1 {
         }
     }
 }
+
+incr case_num
+set timeout 10
 send "lsmod\r"
 while 1 {
     expect {
@@ -108,6 +111,9 @@ set timeout 30
 send "aplay -D plug:hw:1 ../bluetoothalsa/test.wav\r"
 while 1 {
     expect {
+        -nocase -re "error|fail" {
+            case_fail $case_num
+        }
         -re "Playing WAVE.*Rate 44100 Hz, Stereo.*>" {
             case_pass $case_num
             break
@@ -118,8 +124,13 @@ while 1 {
     }
 }
 
+set timeout 5
+expect -nocase -re "error|fail"
 
 set spawn_id $kermit_spawn_id
+
+set timeout 5
+expect -nocase -re "error|fail"
 
 incr case_num
 set timeout 5
