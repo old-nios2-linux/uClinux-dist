@@ -9,42 +9,6 @@ cd $uclinux_path/testsuites
 step "Make config."
 source make_default_config.exp
 
-# Following make specific configuration for this case.
-
-#send_log "\n\n#### Set config under $uclinux_path/linux-2.6.x folder.\n\n"
-
-#cd $uclinux_path/linux-2.6.x
-#sleep 3
-# set timeout 2
-#      spawn ex .config
-#      expect {
-#         "Entering Ex mode*Normal mode." { }
-
-#         "already exists!" {
-#            send "e\r"
-#            sleep 1
-#         }
-#      }
-#      sleep 1
-#      send "/CONFIG_BFIN_KERNEL_CLOCK is not set\r"
-#      expect "CONFIG_BFIN_KERNEL_CLOCK is not set"
-#      send "d\r"
-#      sleep .5
-#      expect ":"
-#      send "i\r"
-#      sleep .5
-#      send "CONFIG_BFIN_KERNEL_CLOCK=y\r"
-#      send "CONFIG_VCO_MULT=20\r"
-#      send "CONFIG_CCLK_DIV=1\r"
-#      send "CONFIG_SCLK_DIV=8\r"
-#      send ".\r"
-#      expect ":"
-#      sleep .5
-
-#      send "wq\r"
-#      expect eof
-
-
 cd $uclinux_path
 set timeout 300
 set baud_rate_done_flag 0
@@ -127,6 +91,14 @@ while 1 {
 
         -re "Hermes chipset 802.11b support.*Orinoco.Prism2.Symbol.*HERMES.*\\\[.*]" {
             send "M\r"
+        }
+
+        -re "Support Prism.*HERMES_PRISM.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Cache Hermes firmware on driver initialisation.*HERMES_CACHE_FW_ON_INIT.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "Hermes PCMCIA card support.*PCMCIA_HERMES.*\\\[.*]" {
