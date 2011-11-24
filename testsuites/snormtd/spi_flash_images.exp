@@ -57,7 +57,7 @@ while 1 {
 set timeout 500
 expect {
 
-	"now current device" {
+	-re "(now current device)|Detected" {
         expect $uboot_prompt
 	set probe_sf_flag $TEST_PASS
 	break
