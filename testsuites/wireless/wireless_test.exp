@@ -1,4 +1,14 @@
 #!/usr/bin/expect
+#
+# Test script for CF interface wifi test.
+#
+# Usage:
+#   ./wireless_test.exp  board_type  essid  key  ping_ipaddr
+#
+# Example:
+#   ./wireless_test.exp  BF537-STAMP linksys 1234567890 192.168.1.100
+#
+
 
 source  ../kernel_config.exp
 log_file [log_file_name "$argv0"]
@@ -6,12 +16,14 @@ send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 
 set argc [llength $argv]
-if { $argc < 1} {
-   puts "Usage:  $argv0 ping_ipaddr"
+if { $argc < 3} {
+   puts "Usage:  $argv0  board_type  essid  key  ping_ipaddr"
    puts ""
    exit
 }
-set ping_ipaddr             [lindex $argv 0]
+set essid [lindex $argv 1]
+set key   [lindex $argv 2]
+set ping_ipaddr [lindex $argv 3]
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -28,7 +40,7 @@ step "Load orinoco_cs Module"
 send -s "modprobe orinoco_cs\r"
 while 1 {
     expect {
-        -re $kernel_prompt {
+        -re "orinoco_cs.*WEP supported.*$kernel_prompt" {
             case_pass $case_num
             break
         }
@@ -41,10 +53,10 @@ while 1 {
 
 incr case_num
 set timeout 20
-send -s "dmesg|grep eth1\r"
+send -s "ifconfig -a\r"
 while 1 {
     expect {
-        -re "eth1.*orinoco_cs at 0.0, irq 54, io 0x\[0-9a-f]+.*$kernel_prompt" {
+        -re "eth1.*$kernel_prompt" {
             send_user "Load orinoco_cs Module successfully\n"
             case_pass $case_num
             break
@@ -59,7 +71,7 @@ while 1 {
 incr case_num
 step "Set key in hex digits"
 set timeout 2
-send "iwconfig eth1 essid linksys-uclinux key 1234567890\r"
+send "iwconfig eth1 essid $essid key $key\r"
 while 1 {
    expect {
        -re $kernel_prompt {
@@ -80,19 +92,18 @@ set timeout 30
 send "dhcpcd eth1 &\r"
 while 1 {
    expect {
-
-      -re ".*Connected" {
-         send_user "\nNetwork is connected\n"
+      -re $kernel_prompt {
          case_pass $case_num
          break
       }
-
       timeout {
          send_user "\nStart dhcpcd timeout\n"
          case_fail $case_num
       }
    }
 }
+
+sleep 2
 
 step "iwconfig"
 incr case_num
@@ -101,15 +112,8 @@ send "iwconfig\r"
 sleep 2
 while 1 {
    expect {
-
-      -re ".*802\.11.*>" {
-         send_user "\niwconfig done\n"
-         break
-      }
-
-      -re ".* ESSID:\"\".*>" {
-         send_user "\nNot reached WLAN\n"
-         case_fail $case_num
+      -re "ESSID:\"$essid\".*$kernel_prompt" {
+         case_pass $case_num
       }
       timeout {
          break
@@ -122,22 +126,6 @@ send_user "\nWaiting for network up\n"
 
 step "ifconfig"
 set timeout 10
-
-#send "ifconfig eth1 192.168.1.2\r"
-#while 1 {
-#   expect {
-#      -re $kernel_prompt {
-#         send_log "\nSet IP address done\n"
-#         case_pass $case_num
-#         break
-#      }
-
-#      timeout {
-#         send_log "\nifconfig timeout\n"
-#         case_fail $case_num
-#      }
-#   }
-#}
 incr case_num
 send "ifconfig eth1\r"
 while 1 {
@@ -175,7 +163,5 @@ while 1 {
 }
 
 all_pass
-
 send_user "Ending $argv0\n"
-
 log_file
