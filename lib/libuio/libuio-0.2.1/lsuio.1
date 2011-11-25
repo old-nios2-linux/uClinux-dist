@@ -1,7 +1,8 @@
 .\"                              hey, Emacs:   -*- nroff -*-
 .\" lsuio is free software; you can redistribute it and/or modify
-.\" it under the terms of the GNU General Public License version 2 as
-.\" published by the Free Software Foundation.
+.\" it under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation; either version 2 of the License, or
+.\" (at your option) any later version.
 .\"
 .\" This program is distributed in the hope that it will be useful,
 .\" but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -12,7 +13,7 @@
 .\" along with this program; see the file COPYING.  If not, write to
 .\" the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
 .\"
-.TH LSUIO 1 "February 22, 2007"
+.TH LSUIO 1 "April 17, 2011"
 .\" Please update the above date whenever this man page is modified.
 .\"
 .\" Some roff macros, for reference:
@@ -26,46 +27,32 @@
 .\" .sp <n>    insert n+1 empty lines
 .\" for manpage-specific macros, see man(7)
 .SH NAME
-lsuio \- List UIO devices.
+lsuio \- list all UIO devices.
 .SH SYNOPSIS
 .B lsuio
 .RI [ options ]
 .SH DESCRIPTION
-\fBlsuio\fP lists the Userspace IO devices registered in your system.
+\fBlsuio\fP lists all UIO devices in your system.
 .PP
 .SH OPTIONS
 \fBlsuio\fP accepts the following options:
 .TP
-.B \-h, \-\-help
+.BR  -a ", " --access
+open and close all UIO devices
+.TP
+.BR  -v ", " --verbose
+Print more information.
+.TP
+.BR  -? ", " --help
+List all available options and their meanings.
+.TP
+.B  --usage
 Show summary of options.
 .TP
-.B \-v, \-\-verbose
-Extended output, also shows custom attributes registered by each device. To be
-more precise, it shows any readable attribute in /sys/class/uio/uioX/device/.
-It will neither display nor follow symlinks. Subdirectories are ignored.
-.TP
-.B \-m, \-\-mmap
-Test if device memory can be mapped without problems. This is mainly useful for
-UIO device driver authors.
-.TP
-.B \-u \fInum\fB, \-\-uiodev\fI=num\fP
-.RI=num
-Show one UIO device only.
-.TP
-.B \-V, \-\-version
+.BR  -V ", " --version
 Show version of program.
-.SH EXAMPLES
-In its simplest form, \fBlsuio\fP can be used without options:
-.TP
-\fBlsuio\fP
-Brief list of UIO devices with their standard attributes.
-.TP
-\fBlsuio -v -m\fP
-Verbose list of UIO devices, mmap() test is performed for each device.
-.TP
-\fBlsuio -v -u 2\fP
-Show information for /dev/uio2 only.
-.SH SEE ALSO
-Kernel UIO docs: Documentation/DocBook/uio-howto.tmpl
+.\" .SH "SEE ALSO"
+.\" .BR foo (1),
+.\" .BR bar (1).
 .SH AUTHOR
-Hans J. Koch <hjk@linutronix.de>.
+Benedikt Spranger <b.spranger@linutronix.de>.

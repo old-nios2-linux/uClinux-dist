@@ -1,0 +1,43 @@
+#
+# Normal rules
+#
+.*
+
+#
+# git files that we don't want to ignore even it they are dot-files
+#
+!.gitignore
+!.mailmap
+
+#
+# gnu global files
+#
+GPATH
+GRTAGS
+GSYMS
+GTAGS
+
+*.orig
+*~
+\#*#
+
+#
+# autotools generated files and directories
+#
+ChangeLog
+INSTALL
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile
+config.guess
+config.h.in
+config.sub
+configure
+depcomp
+install-sh
+ltmain.sh
+lsuio.info
+m4/
+missing
+texinfo.tex

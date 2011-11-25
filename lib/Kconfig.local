@@ -264,6 +264,13 @@ config LIB_LIBTOOL
 	  interface.
 	  http://www.gnu.org/software/libtool/
 
+config LIB_LIBUIO
+	bool "Build libuio"
+	help
+	  Libuio is a lightweight library written in C to provide access to
+	  UIO devices from user level applications.
+	  git://git.linutronix.de/projects/libUIO.git
+
 config LIB_LIBUSB
 	bool "Build libusb"
 	help

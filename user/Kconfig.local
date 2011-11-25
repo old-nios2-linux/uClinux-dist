@@ -297,8 +297,9 @@ config USER_I2C_TOOLS
 	bool "I2C Tools"
 config USER_LSUIO
 	bool "lsuio"
+	select LIB_LIBUIO
 	help
-	  List user space i/o drivers:
+	  lsuio is based on libuio and lists UIO devices and their attributes.
 	  http://docs.blackfin.uclinux.org/doku.php?id=auto_generated_kernel_docs:uio-howto
 config USER_NANO
 	bool "nano"
