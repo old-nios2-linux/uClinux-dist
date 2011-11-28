@@ -1,4 +1,4 @@
-#!/usr/bin/expec
+#!/usr/bin/expect
 
 source ../kernel_config.exp
 source ../board_info.exp
