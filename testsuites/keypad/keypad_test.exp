@@ -12,134 +12,266 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 step "Starting test."
-set timeout 8
-
 set case_num 0
+sleep 5
 
+set timeout 8
 incr case_num
-                       
-expect  -re $kernel_prompt
 send -s "modprobe bf54x-keys\r"
 while 1 {
-expect {
--re "registered IRQ" {
-
-	puts "\nmodule insert success.\n"
-                case_pass $case_num
-	break
+    expect {
+        -re "input.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
-timeout {
-                case_fail $case_num
-	exit
-	}
-}
-}
-
+set timeout 5
 incr case_num
-
-expect  -re $kernel_prompt
 send -s "lsmod\r"
 while 1 {
-expect {
-"bf54x_keys" {
-
-	puts "\nmodule ls success.\n"
-                case_pass $case_num
-	break
-}
-
-timeout {
-                case_fail $case_num
-	exit
-	}
-}
-}
-
-incr case_num
-
-send -s "cd /bin\r" 
-while 1 {
-   expect {
-      "root:/bin>" { 
+    expect {
+        -re "bf54x_keys.*$kernel_prompt" {
+            case_pass $case_num
             break
-      }
-
-      timeout {                           
-         break
-         }
-     }
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
-expect "root:/bin>"
-send -s "event_test /dev/input/event0\r" 
+sleep 2
+set timeout 10
+incr case_num
+send -s "event_test /dev/input/event0\r"
 while 1 {
-   expect {
-     -re "Input device name.*Testing" { 
-         puts "\nPlease touch the keypad...\n"	 
-	 expect {
-		-re "Event: time .* type .* code .* value " { 
-                case_pass $case_num
-			}
-		
-		timeout {                           
-                case_fail $case_num
-			exit
-			}
-		}
-	 sleep 5
-	 send "\003"
-         break
-      }
+    expect {
+        -re "Input device name.*bf54x-keys.*Testing" {
+            send_user "\nPlease hit button \"1\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(1\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
 
-      timeout {                           
-                case_fail $case_num
-	exit
-         }
-     }
+            incr case_num
+            send_user "\nPlease hit button \"2\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(2\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"3\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(3\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"4\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(4\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"5\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(5\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"6\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(6\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"7\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(7\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"8\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(8\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"9\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(9\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"0\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(0\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"UP ARROW\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(Up\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"DOWN ARROW\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(Down\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"2ND\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(Tab\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"CLEAR\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(Backspace\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"HELP\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(Help\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            incr case_num
+            send_user "\nPlease hit button \"ENTER\" on keyboard...\n"
+            expect {
+                -re "Event: time .* type .* code.*\\\(Enter\\\).*value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                    case_pass $case_num
+                }
+                timeout {
+                    case_fail $case_num
+                }
+            }
+
+            send "\003"
+            expect -re $kernel_prompt
+            break
+        }
+
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
-
-expect "root:/bin>"
-set timeout 50
 
 incr case_num
-
-send -s "rmmod bf54x_keys\r" 
+send -s "rmmod bf54x_keys\r"
 while 1 {
-   expect {
-      "root:/bin>" {
-                case_pass $case_num
-         break
-      }
-
-      timeout { 
-                case_fail $case_num
-	exit
-         }
-     }
+    expect {
+        -nocase -re "(fail|error|rmmod:).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
 incr case_num
-
-send -s "lsmod\r" 
+send -s "lsmod\r"
 while 1 {
-   expect {
-      "root:/bin>" {
-                case_pass $case_num
-         break
-      }
-
-      timeout { 
-                case_fail $case_num
-	exit
-         }
-     }
+    expect {
+        -re "bf54x_keys.*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
 log_file
- 
-
