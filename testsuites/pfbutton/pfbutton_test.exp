@@ -13,102 +13,71 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 step "Starting test"
-set timeout 8
-
 set case_num 0
 
 incr case_num
-
-send -s "cd /bin\r"
+set timeout 15
+send "event_test /dev/input/event0\r"
 while 1 {
    expect {
-      "root:/bin>" {
-            break
-      }
+       -re "Input device name.*gpio-keys.*Testing" {
+           send_user "\nPlease hit the PB1 buttons on the board...\n"
+           expect {
+               -re  "Event: time .* type .* code 256.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                   case_pass $case_num
+               }
+               timeout {
+                   case_fail $case_num
+               }
+           }
 
-      timeout {
-         break
-         }
-     }
+           incr case_num
+           send_user "\nPlease hit the PB2 buttons on the board...\n"
+           expect {
+               -re "Event: time .* type .* code 257.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                   case_pass $case_num
+               }
+               timeout {
+                   case_fail $case_num
+               }
+           }
+
+           incr case_num
+           send_user "\nPlease hit the PB3 buttons on the board...\n"
+           expect {
+               -re "Event: time .* type .* code 258.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                   case_pass $case_num
+               }
+               timeout {
+                   case_fail $case_num
+               }
+           }
+
+           if { $board_type == "BF537-STAMP" } {
+               incr case_num
+               send_user "\nPlease hit the PB4 buttons on the board...\n"
+               expect {
+                   -re "Event: time .* type .* code 259.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
+                       case_pass $case_num
+                   }
+                   timeout {
+                       case_fail $case_num
+                   }
+               }
+           }
+
+           break
+       }
+
+       timeout {
+           case_fail $case_num
+       }
+   }
 }
 
-expect "root:/bin>"
-send -s "event_test /dev/input/event0\r"
-while 1 {
-   expect {
-     -re "Input device name.*gpio-keys.*Testing" {
-         puts "\nPlease hit the PB1 buttons on the board...\n"
-         expect {
-                -re  "Event: time .* type .* code 256.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
-                case_pass $case_num
-                        }
-
-                timeout {
-                case_fail $case_num
-                        exit
-                        }
-                }
-
-         incr case_num
-         puts "\nPlease hit the PB2 buttons on the board...\n"
-         expect {
-                -re "Event: time .* type .* code 257.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
-                case_pass $case_num
-                        }
-
-                timeout {
-                case_fail $case_num
-                        exit
-                        }
-                }
-          
-         incr case_num
-         puts "\nPlease hit the PB3 buttons on the board...\n"
-         expect {
-                -re "Event: time .* type .* code 258.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
-                case_pass $case_num
-                        }
-
-                timeout {
-                case_fail $case_num
-                        exit
-                        }
-                }
-         
-         if { $board_type == "BF537-STAMP" } {
-         
-         incr case_num
-         puts "\nPlease hit the PB4 buttons on the board...\n"
-         expect {
-                -re "Event: time .* type .* code 259.* value.*\r\n.*\r\n.*\r\n.*\r\n" {
-                case_pass $case_num
-                        }
-
-                timeout {
-                case_fail $case_num
-                        exit
-                        }
-                }
-            }
-
-         break
-      }
-
-      timeout {
-                case_fail $case_num
-      exit
-         }
-     }
-}
-sleep 3
 send -s "\3"
-expect -re "root.*>"
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+expect ">"
+ 
+all_pass
 send_user "Ending $argv0\n"
 log_file
-
-
-
-
