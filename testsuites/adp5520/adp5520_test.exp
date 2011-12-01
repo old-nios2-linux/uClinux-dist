@@ -245,7 +245,7 @@ while 1 {
 incr case_num
                        
 expect  -re $kernel_prompt
-send -s "modprobe adp5520-gpio\r"
+send -s "modprobe gpio-adp5520\r"
 while 1 {
 expect {
 -re $kernel_prompt {
@@ -268,7 +268,7 @@ timeout {
 
 incr case_num
 
-send -s "cd sys/class/gpio/gpiochip50/\r"
+send -s "cd sys/class/gpio/gpiochip0/\r"
 while 1 {
 expect {
 -re $kernel_prompt {
@@ -291,7 +291,7 @@ timeout {
 
 incr case_num
 
-send -s "rmmod adp5520-gpio;cd /\r" 
+send -s "rmmod gpio-adp5520;cd /\r" 
 while 1 {
    expect {
       -re $kernel_prompt {

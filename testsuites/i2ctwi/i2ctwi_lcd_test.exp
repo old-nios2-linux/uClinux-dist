@@ -29,125 +29,8 @@ expect ">"
 set timeout 8
 set flag 0
 
-send "modprobe bfin_twi_lcd\r"
-while 1 {
-   expect {
-      "TWI" {
-         case_pass $case_num
-         break
-      }
-
-      timeout {
-         case_fail $case_num
-         exit
-         }
-     }
-}
 incr case_num
-send "lsmod\r"
-while 1 {
-   expect {
-      "bfin_twi_lcd" {
-         puts "insert module success."
-         case_pass $case_num
-         break
-      }
-
-      timeout {
-         case_fail $case_num
-         exit
-         }
-     }
-}
-
-incr case_num
-send "cd sys/bus/i2c/devices\r" 
-while 1 {
-   expect {
-      ">" {
-         
-         case_pass $case_num
-         break
-      }
-
-      timeout {
-         case_fail $case_num
-         exit
-         }
-     }
-}
-
-incr case_num
-send "ls\r" 
-while 1 {
-   expect {
-     -re "0022.*(\[0-9]-002f)" {
-         set subfolder $expect_out(1,string) 
-         case_pass $case_num
-         break
-      }
-
-      timeout {
-         case_fail $case_num
-         exit
-         }
-     }
-}
-
-incr case_num
-expect ">"
-send "cd $subfolder\r" 
-while 1 {
-   expect {
-      ">" {
-         
-         case_pass $case_num
-         break
-      }
-
-      timeout {
-         case_fail $case_num
-         exit
-         }
-     }
-}
-
-incr case_num
-send "echo 4 > write_w1\r" 
-while 1 {
-   expect {
-      ">" {
-         
-         case_pass $case_num
-         break
-      }
-
-      timeout {
-         case_fail $case_num
-         exit
-         }
-     }
-}
-
-incr case_num
-send "cat  read_w1\r" 
-while 1 {
-   expect {
-      ">" {
-         
-         case_pass $case_num
-         break
-      }
-
-      timeout {
-         case_fail $case_num
-         exit
-         }
-     }
-}
-
-incr case_num
-send "twilcd_test -h\r" 
+send "twilcd_userspace_test -h\r" 
 while 1 {
    expect {
      -re "Usage.*>" {         
@@ -163,7 +46,7 @@ while 1 {
 }
 
 incr case_num
-send "twilcd_test -p 0 \"Hello World! \"\r"
+send "twilcd_userspace_test -p 0 \"Hello World! \"\r"
 while 1 {
    expect {
      "Message" {
@@ -180,7 +63,7 @@ while 1 {
 
 incr case_num
 sleep 5
-send "twilcd_test -p 0 \"\`date\`\"\r" 
+send "twilcd_userspace_test -p 0 \"\`date\`\"\r" 
 while 1 {
    expect {
      "Message" {
