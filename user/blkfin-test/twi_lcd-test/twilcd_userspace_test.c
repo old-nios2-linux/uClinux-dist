@@ -87,7 +87,7 @@ static int currController = 0x2;
 #define CONTROLLER_2	0x2
 #define CONTROLLER_BOTH	0x3
 
-#define BFIN_LCD_TWI_PORT "/dev/i2c-0"
+static unsigned char *port_id;
 
 static int twi_fd;
 
@@ -197,6 +197,7 @@ usage (FILE * fp, int rc)
   fprintf (fp, "        -v             print version info\n");
   fprintf (fp, "        -c             Clear Display\n");
   fprintf (fp, "        -d Number      use 1,2,3 for CONTROLLER 1,2,BOTH\n");
+  fprintf (fp, "        -n Number      select I2C 0 and 1, use 0 for 537, 1 for 548/527\n");
   fprintf (fp, "        -p Char POS    Position where to put the string \n");
   fprintf (fp, "\nExample: twilcd_test -p 0 \"Hello World !\"\n");
   exit (rc);
@@ -211,13 +212,15 @@ int main (int argc, char *argv[])
   int pos = 0;
   int contr = 0;
   int cont_num = 0;
+  int id = 0;
+  int i2c_port = 0;
   char *string;
 
   printf (" TWI LCD Test Application\n\n");
 
   /* Check the passed arg */
 
-  while ((c = getopt (argc, argv, "vch?d:p:")) > 0)
+  while ((c = getopt (argc, argv, "vch?d:p:n:")) > 0)
     {
       switch (c)
 	{
@@ -235,6 +238,10 @@ int main (int argc, char *argv[])
 	  setpos++;
 	  pos = atoi (optarg);
 	  break;
+	case 'n':
+	  id++;
+	  i2c_port = atoi (optarg);
+	  break;
 	case 'h':
 	case '?':
 	  usage (stdout, 0);
@@ -246,7 +253,13 @@ int main (int argc, char *argv[])
 	}
     }
 
-  twi_fd = open (BFIN_LCD_TWI_PORT, O_RDWR);
+  if(i2c_port == 0)
+  	port_id = "/dev/i2c-0";
+  if(i2c_port == 1)
+	port_id = "/dev/i2c-1";
+
+  printf("port id = %s\n", port_id); 
+  twi_fd = open (port_id, O_RDWR);
   if (twi_fd < 0){
 	printf ("Can't open /dev/i2c-%d\n", cont_num);
 	return -1;
