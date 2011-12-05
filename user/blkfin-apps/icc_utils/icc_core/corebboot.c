@@ -40,6 +40,129 @@ static inline void coreb_idle(void)
 			);
 }
 
+bool get_mem16(unsigned short *val, unsigned short *address)
+{
+	unsigned long addr = (unsigned long)address;
+
+	*val = *address;
+	return true;
+}
+
+bool get_instruction(unsigned int *val, unsigned short *address)
+{
+	unsigned long addr = (unsigned long)address;
+	unsigned short opcode0, opcode1;
+
+	/* Check for odd addresses */
+	if (addr & 0x1)
+		return false; 
+
+	/* MMR region will never have instructions */
+	if (addr >= SYSMMR_BASE) {
+		return false;
+	}
+
+	if (addr < COREB_TASK_START) {
+		return false;
+	}
+
+	if ((addr >= COREB_L1_CODE_START) && (addr <= COREB_L1_CODE_START + L1_CODE_LENGTH))
+		return false;
+
+	if (!get_mem16(&opcode0, address))
+		return false;
+
+	/* was this a 32-bit instruction? If so, get the next 16 bits */
+	if ((opcode0 & 0xc000) == 0xc000) {
+		if (!get_mem16(&opcode1, address + 1))
+			return false;
+		*val = (opcode0 << 16) + opcode1;
+	} else
+		*val = opcode0;
+
+	return true;
+}
+
+static bool is_bfin_call(unsigned short *addr)
+{
+	unsigned int opcode;
+
+	if (!get_instruction(&opcode, addr))
+		return false;
+
+	if ((opcode >= 0x0060 && opcode <= 0x0067) ||
+			(opcode >= 0x0070 && opcode <= 0x0077) ||
+			(opcode >= 0xE3000000 && opcode <= 0xE3FFFFFF))
+		return true;
+
+	return false;
+}
+
+static inline void *get_sp(void)
+{
+	void *sp;
+	__asm__("%0 = sp;" : "=da"(sp));
+	return sp;
+}
+
+#define INITIAL_STACK   (COREB_L1_SCRATCH_START + L1_SCRATCH_LENGTH - 12)
+void dump_stack(void)
+{
+	void *stack, *stackend;
+	unsigned int *p, *fp = 0;
+	unsigned short *ins, *ret_addr;
+	int frame_no = 0;
+	stack = get_sp();
+	stackend = INITIAL_STACK;
+	coreb_msg("coreb dump stack\n");
+	for (p = stack; p <= stackend; p++) {
+		if (*p & 0x1)
+			continue;
+		ins = (unsigned short *)*p;
+		ins--;
+		if (is_bfin_call(ins)) {
+			fp = p - 1;
+			coreb_msg("found fp: %08x\n", fp);
+			while (fp < stackend && fp) {
+				fp = (unsigned int *)*fp;
+			}
+			if (fp == stackend) {
+				fp = p - 1;
+				break;
+			}
+
+		}
+
+	}
+
+	if (!fp) {
+		coreb_msg("no frame found!!\n");
+		return;
+	}
+
+	ret_addr = 0;
+	for (p = stack; p <= stackend; p++) {
+		if (*p & 0x1)
+			continue;
+
+		ins = (unsigned short *)*p;
+		ins--;
+		if (is_bfin_call(ins)) {
+			coreb_msg("call function [%08x]\n", ins);
+			coreb_msg("call ret address %08x\n", *p);
+		} else if (p == fp){
+			if (fp == stackend) {
+				fp = p - 1;
+				break;
+			}
+			frame_no++;
+			coreb_msg("call frame %d\n", frame_no);
+			fp = *fp;
+		} else
+			coreb_msg(" call frame %d +%d %08x\n", frame_no, (fp - p), *p);
+
+	}
+}
 
 extern void evt_evt7(void );
 extern void evt_evt6(void );
@@ -89,6 +212,10 @@ void *memcpy(void *dest, const void *src, size_t count)
 {
 	char *tmp = dest;
 	const char *s = src;
+	if (!dest || !src) {
+		coreb_msg("BUG dst %08x src %08x\n", dest, src);
+		return NULL;
+	}
 
 	while (count--)
 		*tmp++ = *s++;
@@ -204,6 +331,7 @@ void coreb_msg(char *fmt, ...)
 void dump_execption(unsigned int errno, unsigned int addr)
 {
 	coreb_msg("execption %x addr %x\n", errno, addr);
+	dump_stack();
 }
 
 void init_exception_vectors(void)
@@ -359,14 +487,14 @@ void icc_init(void)
 	if (!pool)
 		coreb_msg("@@@ create 4k pool failed\n");
 	coreb_info.pool = pool;
-	if (gen_pool_add(pool, COREB_MEMPOOL_START, (1 << 12) * 64))
+	if (gen_pool_add(pool, COREB_MEMPOOL_START, (1 << 12) * 256))
 		coreb_msg("@@@add chunk fail\n");
 
 	pool = gen_pool_create(6);
 	if (!pool)
 		coreb_msg("@@@ create msg pool failed\n");
 	coreb_info.msg_pool = pool;
-	if (gen_pool_add(pool, COREB_MEMPOOL_START + (1 << 12) * 64 , (1 << 6) * 64))
+	if (gen_pool_add(pool, COREB_MEMPOOL_START + (1 << 12) * 256 , (1 << 6) * 64))
 		coreb_msg("@@@add chunk fail\n");
 
 

@@ -169,7 +169,7 @@ int gen_pool_add(struct gen_pool *pool, unsigned long addr, size_t size)
 	int chunkid = find_next_zero_bit(pool->chunk_bits, BITS_PER_LONG, 0);
 
 //	coreb_msg("@@@ gen pool nbits%d \n", nbits);
-	if (nbits > 64)
+	if (nbits > 256)
 		return -1;
 
 	chunk = &pool->chunks[chunkid];
@@ -243,6 +243,8 @@ unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
 		bitmap_set(chunk->bits, start_bit, nbits);
 		return addr;
 	}
+	coreb_msg("@@@bug gen pool full\n");
+	dump_stack();
 	return 0;
 }
 

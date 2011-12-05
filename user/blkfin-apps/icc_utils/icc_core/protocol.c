@@ -1174,7 +1174,7 @@ uint32_t msg_handle(void)
 
 	session = sm_index_to_session(index);
 	if (!session) {
-		coreb_msg("error messag type %08xe\n", msg->type);
+		coreb_msg("error messag type %08x\n", msg->type);
 		sm_message_dequeue(cpu, msg);
 		return;
 	}
