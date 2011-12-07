@@ -6,10 +6,8 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
-source  make_default_config.exp
+source make_default_config.exp
 
 # Following make specific configuration for this case.
 
@@ -21,22 +19,25 @@ spawn make config
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" { 
+        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {   
+        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
         }
 
         -re "Blackfin serial port support.*SERIAL_BFIN.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Enable UART0.*SERIAL_BFIN_UART0.*\\\[.*]" {
            if { $board_type == "BF537-STAMP" } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
@@ -44,7 +45,7 @@ while 1 {
 
         -re "Enable UART0 hardware flow control.*BFIN_UART0_CTSRTS.*\\\[.*]" {
            if { $board_type == "BF537-STAMP" } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
@@ -52,7 +53,7 @@ while 1 {
 
         -re "Enable UART1.*SERIAL_BFIN_UART1.*\\\[.*]" {
            if { $board_type == "BF548-EZKIT" } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
@@ -60,18 +61,14 @@ while 1 {
 
         -re "Enable UART1 hardware flow control.*BFIN_UART1_CTSRTS.*\\\[.*]" {
            if { $board_type == "BF548-EZKIT" } {
-                send "y\r"
+                send "Y\r"
             } else {
                 send "\r"
             }
         }
 
         -re "RTS/CTS test program.*USER_BLACKFIN_RTSCTSTEST.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
+            send "Y\r"
         }
 
         "\\\(*) \\\[*]" {
@@ -96,16 +93,12 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
