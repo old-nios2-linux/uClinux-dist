@@ -451,6 +451,8 @@ step "Convert the console to the extend UART."
 set spawn_id $target_default_id
 append bootargs_param6 " console=$ext_uart_port,57600n$bits_number"
 set bootargs             $bootargs_param6
+send_user "console=$ext_uart_port,57600n$bits_number\n"
+send_user "bootargs=$bootargs_param6\n\n\n"
 source ../reboot_kernel.exp
 
 incr case_num
@@ -484,10 +486,10 @@ source ../spawn_kermit.exp
 
 set timeout 8
 incr case_num
-send -s "ls\r"
+send -s "cat /proc/cmdline\r"
 while 1 {
     expect {
-        -re $kernel_prompt {
+        -re "console=$ext_uart_port,57600n$bits_number.*$kernel_prompt" {
             case_pass $case_num
             break
         }

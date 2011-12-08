@@ -2,7 +2,6 @@
 
 source ../kernel_config.exp
 source  ../board_info.exp
-send_user "Starting $argv0\n"
 
 if { $argc < 2} {
     puts "Please input: board_type, port_type"
@@ -12,6 +11,7 @@ if { $argc < 2} {
 
 set port_type [lindex $argv 1]
 log_file build_${port_type}_kernel_log
+send_user "Starting $argv0 to build $port_type\n"
 
 cd $uclinux_path/testsuites
 step "Make config."
