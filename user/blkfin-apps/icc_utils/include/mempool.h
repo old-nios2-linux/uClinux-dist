@@ -28,7 +28,7 @@ struct gen_pool {
 struct gen_pool_chunk {
 	unsigned long start_addr;	/* starting address of memory chunk */
 	unsigned long end_addr;		/* ending address of memory chunk */
-	unsigned long bits[2];		/* bitmap for allocating memory chunk */
+	unsigned long bits[8];		/* bitmap for allocating memory chunk */
 };
 
 extern struct gen_pool *gen_pool_create(int);
