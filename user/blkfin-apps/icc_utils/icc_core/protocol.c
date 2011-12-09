@@ -415,6 +415,8 @@ void sm_handle_control_message(sm_uint32_t cpu)
 			break;
 		}
 		sm_message_dequeue(cpu, msg);
+		if (reinit)
+			memset(&coreb_info.icc_info.icc_queue[cpu], 0, sizeof(struct sm_message_queue));
 		coreb_msg("finish1 %s task status %d\n", __func__, sm_task1_status);
 		return;
 	}

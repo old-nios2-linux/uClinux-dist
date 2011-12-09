@@ -159,7 +159,7 @@ void dump_stack(void)
 			coreb_msg("call frame %d\n", frame_no);
 			fp = *fp;
 		} else
-			coreb_msg(" call frame %d +%d %08x\n", frame_no, (fp - p), *p);
+			coreb_msg(" call frame %d -%d %08x\n", frame_no, (fp - p), *p);
 
 	}
 }
@@ -331,7 +331,16 @@ void coreb_msg(char *fmt, ...)
 void dump_execption(unsigned int errno, unsigned int addr)
 {
 	coreb_msg("execption %x addr %x\n", errno, addr);
-	dump_stack();
+	if (errno == 0x26) {
+		unsigned long fault_addr = bfin_read_DCPLB_FAULT_ADDR();
+		_disable_dcplb();
+		fault_addr &= 0x400000;
+		bfin_write32(DCPLB_ADDR0 + 4, fault_addr);
+		bfin_write32(DCPLB_DATA0 + 4, (CPLB_COMMON | PAGE_SIZE_4MB));
+		_enable_dcplb();
+	} else {
+		dump_stack();
+	}
 }
 
 void init_exception_vectors(void)
