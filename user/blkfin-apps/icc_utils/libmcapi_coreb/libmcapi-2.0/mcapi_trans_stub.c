@@ -82,8 +82,12 @@ mcapi_boolean_t transport_sm_unlock_semaphore(uint32_t semid)
 /* shared memory management */
 mcapi_boolean_t transport_sm_create_shared_mem(void** addr,uint32_t shmkey,uint32_t size) 
 {
-	/* 1M after mem pool start 0x3E00000 */
-	*addr = COREB_MEMPOOL_START + 0x100000 ;
+	void *buf = get_free_buffer(sizeof(mcapi_database));
+	if (!buf) {
+		coreb_msg("no mem\n");
+		return MCAPI_FALSE;
+	}
+	*addr = buf;
 	return MCAPI_TRUE;
 }
 
