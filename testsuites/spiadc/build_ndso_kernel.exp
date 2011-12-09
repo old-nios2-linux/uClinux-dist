@@ -27,11 +27,7 @@ while 1 {
             continue
         }
 
-        -re "User mode SPI device driver support.*SPI_SPIDEV.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "bfin spi adc test drvier.*USER_BLACKFIN_DRV_SPI_ADC.*\\\[.*]" {
+        -re "Blackfin SPORT driver for direct raw access.*BFIN_SPORT.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -43,7 +39,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Networked Software Defined Storage Oscilloscope.*USER_NDSO.*\\\[.*]" {
+        -re "Networked Software Defined Storage Oscilloscope.*\\\(USER_NDSO\\\).*\\\[.*]" {
             send "Y\r"
         }
 
