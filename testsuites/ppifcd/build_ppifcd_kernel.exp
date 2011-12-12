@@ -1,16 +1,29 @@
 #!/usr/bin/expect
-#Before building, make sure change sda_pin to 2 and scl_pin to 4 in stamp.c.
+#Before building for BF533-STAMP, make sure change sda_pin to 2 and scl_pin to 4 in stamp.c.
 
 source ../kernel_config.exp
 source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
+if { $board_type == "BF533-STAMP" } {
+    set board_file $uclinux_path/linux-2.6.x/arch/blackfin/mach-bf533/boards/stamp.c
+    if [ catch {exec sed -i "/sda_pin/ s/GPIO_PF2/2/" $board_file} ] {
+        send_user "\nfail to modify sda_pin in stamp.c\n"
+        send_user "$errorInfo\n"
+        exit
+    }
+
+    if [ catch {exec sed -i "/scl_pin/ s/GPIO_PF3/4/" $board_file} ] {
+        send_user "\nfail to modify scl_pin in stamp.c\n"
+        send_user "$errorInfo\n"
+        exit
+    }
+}
+
 cd $uclinux_path/testsuites
 step "Make config."
 source make_default_config.exp
-
-# Following make specific configuration for this case.
 
 cd $uclinux_path
 set timeout 300
@@ -55,22 +68,6 @@ while 1 {
                 send "N\r"
             }
         }
-# make sure use the right pin in the boards/stamp.c.
-#        -re "SDA GPIO pin number.*I2C_BLACKFIN_GPIO_SDA.*\\\[.*]" {
-#            if { $board_type == "BF533-STAMP" } {
-#                send "2\r"
-#            } else {
-#                send "\r"
-#            }
-#        }
-#
-#        -re "SCL GPIO pin number.*I2C_BLACKFIN_GPIO_SCL.*\\\[.*]" {
-#            if { $board_type == "BF533-STAMP" } {
-#                send "4\r"
-#            } else {
-#                send "\r"
-#            }
-#        }
 
         -re "Blackfin TWI I2C support.*I2C_BLACKFIN_TWI.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
