@@ -363,6 +363,8 @@ config USER_NDSO_IIO
 
 config USER_AWG 
 	bool "Networked Arbitrary Waveform Genertor"
+	select LIB_LIBPNG
+	select USER_GNUPLOT
 
 config USER_PPIFPGACGI 
 	bool "Networked PPI/FPGA Demo Project"
