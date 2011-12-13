@@ -6,8 +6,10 @@ set TITLE [title "$argv0"]
 
 if { $board_type == "BF533-STAMP" } {
     set board_num 533
+    set pack_mode 1
 } elseif { $board_type == "BF537-STAMP" } {
     set board_num 537
+    set pack_mode 0
 }
 
 step "Start kermit."
@@ -21,7 +23,7 @@ set case_num 0
 
 set timeout 10
 incr case_num
-send "ppifcd_test -b $board_num\r"
+send "ppifcd_test -p $pack_mode -b $board_num\r"
 while 1 {
     expect {
         -re "Total Frame Capture Time.*$kernel_prompt" {
@@ -35,7 +37,7 @@ while 1 {
 }
 
 incr case_num
-send "ppifcd_test -b $board_num -c3 -t\r"
+send "ppifcd_test -p $pack_mode -b $board_num -c3 -t\r"
 while 1 {
     expect {
         -re "Total Frame Capture Time.*Total Frame Capture Time.*Total Frame Capture Time.*$kernel_prompt" {
@@ -49,7 +51,7 @@ while 1 {
 }
 
 incr case_num
-send "ppifcd_test -b $board_num -c3 /var/ppifcd.bmp\r"
+send "ppifcd_test -p $pack_mode -b $board_num -c3 /var/ppifcd.bmp\r"
 while 1 {
     expect {
         -re "Saved.*$kernel_prompt" {
@@ -63,7 +65,7 @@ while 1 {
 }
 
 incr case_num
-send "time ppifcd_test -b $board_num -c100 \r"
+send "time ppifcd_test -p $pack_mode -b $board_num -c100 \r"
 while 1 {
     expect {
         -re "usec\r\n\r\nreal.*user.*sys.*$kernel_prompt" {
