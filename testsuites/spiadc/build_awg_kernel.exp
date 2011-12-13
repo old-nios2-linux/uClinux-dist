@@ -39,6 +39,10 @@ while 1 {
             send "Y\r"
         }
 
+        -re "gnuplot.*USER_GNUPLOT.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Networked Software Defined Storage Oscilloscope.*USER_NDSO.*\\\[.*]" {
             send "N\r"
         }
