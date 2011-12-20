@@ -172,7 +172,7 @@ while 1 {
             set underrun_test_status 1
             break
         }
-        "Underrun happened" {
+        -re "(Underrun happened)|(dma is already stopped)" {
             set underrun_test_status 1
             break
         }
