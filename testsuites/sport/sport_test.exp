@@ -41,8 +41,9 @@ while 1 {
     }
 }
 
+set timeout 500
 incr case_num
-send -s "sport_test -r another.wav\r"
+send -s "sport_test -r record.wav\r"
 while 1 {
     expect {
         -re "No|\[Uu]nable|\[Ff]ailed|not|error|ABRK|U-Boot" {
