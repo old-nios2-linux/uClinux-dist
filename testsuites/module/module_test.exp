@@ -13,168 +13,124 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 step "Starting test."
-
+set case_num 0
 set timeout 8
-set flag 0
+expect -re $kernel_prompt
 
 if { $board_type == "BF537-STAMP" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF518F-EZBRD" || $board_type == "BF526-EZBRD" } {
-   set module_name bfin_mac
+    set module_name bfin_mac
 } elseif { $board_type == "BF548-EZKIT" } {
-   set module_name smsc911x
+    set module_name smsc911x
 } elseif { $board_type == "BF533-STAMP" || $board_type == "BF533-EZKIT" || $board_type == "BF561-EZKIT" || $board_type == "BF538-EZKIT"  } {
-   set module_name smc91x
+    set module_name smc91x
 }
-                        
-set case_num 0
 
+set timeout 5
 incr case_num
-
-expect  -re $kernel_prompt
 send -s "modprobe $module_name\r"
 while 1 {
-expect {
--re "Blackfin on-chip Ethernet MAC driver" {
-        case_pass $case_num
-	puts "\nmodule insert success.\n"
-	break
+    expect {
+        -re "Blackfin on-chip Ethernet MAC driver.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        -re "eth0: Ethernet addr.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        -re "Driver.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
--re "eth0: Ethernet addr" {
-        case_pass $case_num
-        puts "\nmodule insert success.\n"
-        break
-}
-
-
--re "Driver" {
-        case_pass $case_num
-        puts "\nmodule insert success.\n"
-        break
-}
-
-
-timeout {
-        case_fail $case_num
-	exit
-	}
-}
-}
-
+set timeout 5
 incr case_num
-
-expect  -re $kernel_prompt
 send -s "lsmod\r"
 while 1 {
-expect {
-"$module_name" {
-        case_pass $case_num
-	puts "\nmodule ls success.\n"
-	break
-}
-
-timeout {
-        case_fail $case_num
-	exit
-	}
-}
-}
-
-
-incr case_num
-
-expect  -re $kernel_prompt
-send -s "ifconfig eth0 $targetip\r" 
-while 1 {
-   sleep 3
-   expect {
-      -re "$kernel_prompt" { 
-                case_pass $case_num
-         break
-      }
-
-      timeout {                           
-                case_fail $case_num
-	exit
-         }
-     }
-}
-
-
-send -s "ifconfig\r" 
-while 1 {
-   expect {
-      "$targetip" { 
-         break
-      }
-
-      timeout {                           
-         break
-         }
-     }
-}
-
-incr case_num
-
-expect  -re $kernel_prompt
-send -s "ping $serverip\r" 
-while 1 {
-   expect {
-      "seq" { 
-       sleep 10
-       send "\003"
-                case_pass $case_num
-         break
-      }
-
-      timeout {                           
-                case_fail $case_num
-	exit
-         }
-     }
-}
-
-incr case_num
-
-expect  -re $kernel_prompt
-set timeout 10
-
-send -s  "rmmod $module_name\r"
-while 1 {
-expect {
-       -re "No | error | failure" {
-                case_fail $case_num
-                exit
+    expect {
+        -re "$module_name.*$kernel_prompt" {
+            case_pass $case_num
+            break
         }
-
         timeout {
-                expect -re $kernel_prompt
-                case_pass $case_num
-                break
+            case_fail $case_num
         }
-}
+    }
 }
 
+set timeout 10
+send -s "ifconfig eth0 $targetip up\r"
+expect -re "Full|(lpa 0x41E1)"
+
+set timeout 5
 incr case_num
-
-send -s "lsmod\r" 
+send -s "ifconfig\r"
 while 1 {
-   expect {
-   
-      "$module_name" { 
-                case_fail $case_num
-	exit
-         }
-	 
-       -re $kernel_prompt {
-                case_pass $case_num
-         break
-      }
-      
-      timeout { 
-                case_fail $case_num
-	exit
-         }
-     }
+    expect {
+        -re "eth0.*inet addr:$targetip.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+set timeout 10
+incr case_num
+send -s "ping -c 5 $serverip\r"
+while 1 {
+    expect {
+        -re " 0% packet loss.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+set timeout 5
+incr case_num
+send -s "rmmod $module_name\r"
+while 1 {
+    expect {
+        -nocase -re "(no|error|failure).*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re $kernel_prompt {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+set timeout 5
+incr case_num
+send -s "lsmod\r"
+while 1 {
+    expect {
+        -re "$module_name.*$kernel_prompt" {
+            case_fail $case_num
+        }
+        -re "Used by\r\n$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
 
 all_pass
