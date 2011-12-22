@@ -1,21 +1,31 @@
 #!/usr/bin/expect
 
-## To test sport spi, it requires to config extra spi items for specific instance before this script.
+# Build script to test sport to spi add on board
+#
+# Usage:
+#   ./build_sport_spi_kernel.exp  board_type spi_type
+#
+
 
 source  ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
-step "Apply patch."
+set spi_type [lindex $argv 1]
+send_log "\n#### spi type is $spi_type\n"
 
+if { $argc < 2} {
+    puts "Please input: board_type, spi_type(spi_adc or spi_flash)"
+    exit
+}
+
+step "Apply patch."
 cd $uclinux_path/linux-2.6.x/
-exec patch -p0   < ../testsuites/sport_spi/stamp.diff
+set stamp_patch stamp.diff.$spi_type
+exec patch -p0 < ../testsuites/sport_spi/$stamp_patch
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
 source  make_default_config.exp
 
 cd $uclinux_path
@@ -24,7 +34,6 @@ spawn make config
 
 while 1 {
     expect {
-
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
         }
@@ -50,14 +59,13 @@ while 1 {
 }
 
 cd $uclinux_path
-set timeout 300 
+set timeout 300
 set baud_rate_done_flag 0
 spawn make config
 
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
         -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
@@ -100,21 +108,16 @@ while 1 {
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
 source  make_kernel.exp
 
-cd $uclinux_path/testsuites
-
-step "Copy linux"
-
-source   copy_image.exp
-
 step "Reverse  patch."
-
 cd $uclinux_path/linux-2.6.x/
-exec patch -p0 -R < ../testsuites/sport_spi/stamp.diff
+exec patch -p0 -R < ../testsuites/sport_spi/$stamp_patch
+
+cd $uclinux_path/testsuites
+step "Copy linux"
+source   copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file

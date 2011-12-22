@@ -228,7 +228,6 @@ send "connect\r"
 while 1 {
     expect {
         -re "login:" {
-            send "root\r"
             case_pass $case_num
             break
         }
@@ -238,8 +237,12 @@ while 1 {
     }
 }
 
+send "root\r"
+expect root
+
 set spawn_id $kermit_spawn_id
 expect "Password:"
+
 incr case_num
 set timeout 5
 send "uClinux\r"
