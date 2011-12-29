@@ -16,13 +16,37 @@ source ../reboot_kernel.exp
 step "Starting test"
 set timeout 8
 
-#set allcases {scl1  pkt2 }
-set allcases {msg1  msg2  pkt1 pkt2 pkt3  scl1  scl2}
+#set allcases { msg1 }
+set allcases {msg1  msg2  pkt1  pkt2  pkt3  scl1  scl2}
 
 set all_bin_num [llength $allcases]
+# Don't change this test_round. If you need to change the overall testing time, modify the next test_round below.
 set test_round 1
 
 send_user "all_bin_num=$all_bin_num\n"
+
+proc print_lastlog { } {
+
+global targetip
+sleep 5
+set timeout 10
+spawn  /bin/sh 
+expect ">"
+send -s "rsh -l root $targetip ' cat /tmp/* \; dmesg' \r"
+  while 1 {
+           expect {
+            -re "COREB" {
+            send_log "\nPrinting last log finished.\n"
+            break
+            }
+
+            timeout {
+            send_log "\nprint log time out!!\n"
+            break
+            }
+            }  
+  }
+}
 
 set case_num 0
 
@@ -68,26 +92,47 @@ expect {
                 exit
        }
 }
+# There are 3 parts of testcases testing rounds. 
+# 1 part: allcases run one time respectively.
+# 2 part: allcases run $test_round times respectively. case one, case one,... case two, case two,...
+# 3 part: allcases run $test_round times one by one continously. case one, case two,... case one, case two,...
 
-for {set t 0} {$t < $all_bin_num + 1} {incr t} {
+for {set t 0} {$t < 2*$all_bin_num + 1} {incr t} { 
 
-if { $t < $all_bin_num } {
-set runcases [lindex $allcases $t]
+if { $t < 2*$all_bin_num } {
+set bin_num 1 
 } else {
-set runcases $allcases 
+set bin_num $all_bin_num 
 }
 
-set bin_num [llength $runcases]
+if { $t >= $all_bin_num } {
+# Here is the test_round value that can be changed to control the test rounding.
+set test_round 100 
+}
 
 for {set i 0} {$i < $bin_num*$test_round} {incr i} {
 
-set test_case_num [ expr $i % $bin_num ] 
+set spawn_id $kermit_spawn_id 
 
-set case_name [lindex $runcases $test_case_num ]
+if { $bin_num == 1 } {
+set test_case_num [ expr $t % $all_bin_num ] 
+} else {
+set test_case_num [ expr $i % $all_bin_num ] 
+}
 
-send_log "\n!!!!!##### Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num + 1 ] time testing!\n"
+set case_name [lindex $allcases $test_case_num ]
 
-sleep 3
+if { $t < $all_bin_num } {
+send_log "\n!!!!!#####The first part. Case_name: $case_name, the [ expr $i + 1 ] time testing! t = $t, i = $i ! \n"
+} elseif { $t >= $all_bin_num && $t < 2*$all_bin_num } {
+send_log "\n!!!!!#####The second part. Case_name: $case_name, the [ expr $i + 1 ] time testing! t = $t, i = $i ! \n"
+} elseif { $t >= 2*$all_bin_num } {
+send_log "\n!!!!!#####The third part. Case_name: $case_name, the [ expr ($i - $test_case_num)/$bin_num + 1 ] time testing! t = $t, i = $i ! \n"
+}
+
+send -s "date\r"
+expect "root:/bin>"
+sleep 4
 incr case_num
 set timeout 60
 send -s "./icc_loader -f -e ./mcapi_$case_name \r"
@@ -136,8 +181,9 @@ expect "root:/bin>"
 
 set corea_case_status  0
 set coreb_case_status  0
+set execption_count  0
 #send -s "$case_name ; ls /tmp/* 2> /dev/null | xargs cat \r"
-spawn rsh -l root $targetip  $case_name \;  ls /tmp/*  2> /dev/null | xargs cat \;dmesg 
+spawn  /bin/sh -c "rsh -l root $targetip ' $case_name > /tmp/corea.log  2>&1 \; cat /tmp/* \; dmesg' "
 while 1 {
    expect {
      -re "CoreA Test PASSED" {
@@ -152,39 +198,42 @@ while 1 {
       }
 
      -re "Hardware Trace" {
-         case_fail $case_num
-         break
+         send_log "Hardware Trace!!!\n"
+         #case_fail $case_num
       }
 
      -re "execption" {
-         case_fail $case_num
-         break
+         send_log "execption!!!\n"
+         incr execption_count
       }
 
       timeout {
-         send_log "time out!!\n"
+         send_log "time out!!!\n"
+         print_lastlog
          case_fail $case_num
-         exit
+         #exit
       }
 
       eof {
-         send_log "The case is ending!! corea_case_status: $corea_case_status, coreb_case_status $coreb_case_status !!\n"
+         send_log "The case is ending!! corea_case_status: $corea_case_status, coreb_case_status $coreb_case_status , execption_count $execption_count!!\n"
          if { $corea_case_status != 1 || $coreb_case_status != 1 } { 
+         send_log "case fail!!!\n"
+         print_lastlog
          case_fail $case_num
          } else {
+        # print_lastlog
+         send_log "case pass!!!\n"
          case_pass $case_num
 	 }
          break
       }
       }
 }
+}
+}
+print_lastlog
 
-set spawn_id $kermit_spawn_id 
-send -s "date\r"
-expect "root:/bin>"
 sleep 4
-}
-}
 send_log "\n"
 send_log "\n$TITLE ............\[PASS\]\n"
 
