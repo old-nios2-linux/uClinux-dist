@@ -1,0 +1,115 @@
+#!/usr/bin/expect --
+
+#
+# Build Kernel for USB camera test
+#
+
+source ../kernel_config.exp
+source ../board_info.exp
+log_file [log_file_name "$argv0"]
+send_user "Starting $argv0\n"
+
+cd $uclinux_path/testsuites
+step "Make config."
+source  make_default_config.exp
+
+# Following make specific configuration for this case.
+cd $uclinux_path
+set timeout 300
+spawn make config
+while 1 {
+    expect {
+        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
+        -re "Virtual terminal.*VT.*\\\[.*]" {
+            send "N\r"
+        }
+
+#Multimedia support
+        -re "Video For Linux.*VIDEO_DEV.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Video capture adapters.*VIDEO_CAPTURE_DRIVERS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+# USB support
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Support for Host-side USB.*USB.*\\\[./././.]" {
+            send "Y\r"
+        }
+
+        -re "USB device class-devices.*USB_DEVICE_CLASS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Disable external hubs.*USB_OTG_BLACKLIST_HUB.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[./././.]" {
+            send "Y\r"
+        }
+
+        -re "Platform Glue Layer \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
+            send "Y\r"
+        }
+
+# Application used
+        -re "USB Video Class Driver and Test Application.*USER_UVC_VIDEO.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "MPlayer and mencode.*USER_MPLAYER.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        "\\\(*) \\\[*]" {
+            sleep .01
+            send "\r"
+        }
+
+        -re "\[cC]hoice\\\[.*]:" {
+            send "\r"
+        }
+
+        eof {
+            puts "End of configuration"
+            break
+        }
+
+        timeout {
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config"
+            break
+        }
+    }
+}
+
+cd $uclinux_path/testsuites
+step "Make"
+source make_kernel.exp
+
+cd $uclinux_path/testsuites
+step "Copy linux"
+source copy_image.exp
+
+send_user "Ending $argv0\n"
+log_file
