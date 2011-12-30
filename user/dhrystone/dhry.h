@@ -388,6 +388,7 @@
 /* General definitions: */
 
 #include <stdio.h>
+#include <stdlib.h>
                 /* for strcpy, strcmp */
 
 #define Null 0 
