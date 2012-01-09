@@ -49,6 +49,7 @@ compile.h: $(CONFIGURATION) version.h .version
 USER_DIST_VERSION = $(shell \
 	test -d $(ROOTDIR)/.svn \
 		&& (echo -n svn- ; svn info $(ROOTDIR) | sed -n '/^Last Changed Rev/s|^.*: ||p') \
+		|| (test -d $(ROOTDIR)/../.git && (echo -n git- ; git log --pretty=oneline | head -1| awk '{print $1}'| cut -b -7))\
 		|| grep '^Version:' $(ROOTDIR)/release_notes | awk '{print $$NF}' \
 )
 
