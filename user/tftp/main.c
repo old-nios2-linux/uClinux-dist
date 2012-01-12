@@ -593,7 +593,7 @@ command(int top)
 		putchar('\n');
 	for (;;) {
 		printf("%s> ", prompt);
-		if (fgets(&line[strlen(line)], sizeof(line), stdin) == 0) {
+		if (fgets(line, sizeof(line), stdin) == 0) {
 			if (feof(stdin)) {
 				quit(0, NULL);
 			} else {
