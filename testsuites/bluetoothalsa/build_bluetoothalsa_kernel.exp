@@ -119,6 +119,10 @@ while 1 {
         }
 
 #Bellow is the config for audio driver
+        -re "I2C support \\\(I2C\\\).*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Sound card support.*SOUND.*\\\[.*]" {
             send "Y\r"
         }

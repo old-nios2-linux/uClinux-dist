@@ -42,6 +42,10 @@ while 1 {
             send "2\r"
         }
 
+        -re "I2C support \\\(I2C\\\).*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Sound card support.*SOUND.*\\\[.*]" {
             send "Y\r"
         }
