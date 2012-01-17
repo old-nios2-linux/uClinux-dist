@@ -231,7 +231,7 @@ while 1 {
 		}
 	}
         incr case_num
-        send -s "hbreak 59\r"
+        send -s "hbreak 58\r"
         expect {
                 "Hardware assisted breakpoint 2*(gdb) " {
                 case_pass $case_num
