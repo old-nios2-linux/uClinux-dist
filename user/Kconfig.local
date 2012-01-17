@@ -98,6 +98,8 @@ config NMI_WDT_TEST
 	bool "nmi_wdt test"
 config AD7160_RAW_TEST
 	bool "AD7160-RAW interface test"
+config GPTIMER_TEST
+	bool "gptimer simple test"
 endmenu
 
 

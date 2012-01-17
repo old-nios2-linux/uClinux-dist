@@ -41,6 +41,7 @@ dir_$(CONFIG_XIP_TEST)                      += xip_test
 dir_$(CONFIG_BOUNDARY_ANOMALY_TEST)         += boundary_anomaly_test
 dir_$(CONFIG_NMI_WDT_TEST)                  += nmi_wdt_test
 dir_$(CONFIG_AD7160_RAW_TEST)               += ad7160_raw
+dir_$(CONFIG_GPTIMER_TEST)                  += gptimer_test
 
 all romfs:
 	for i in $(dir_y)   ; do $(MAKE) -C $$i $@ || exit $$? ; done
