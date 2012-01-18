@@ -25,6 +25,66 @@ while 1 {
         }
 
         -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
+            send "n\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
+        # Select PM_RUNTIME to enable USB_SUSPEND
+        -re "Run-time PM core functionality.*PM_RUNTIME.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        # Select USB_GADGET to enable USB_MUSB_HDRC
+        -re "USB Gadget Support \\\(USB_GADGET\\\) \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Peripheral Controller \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Gadget Drivers \\\[.*]" {
+            send "M\r"
+        }
+
+        "\\\(*) \\\[*]" {
+            sleep .01
+            send "\r"
+        }
+
+        -re "\[cC]hoice\\\[.*]:" {
+            send "\r"
+        }
+
+        eof {
+            send_user "End of configuration"
+            break
+        }
+
+        timeout {
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config"
+            break
+        }
+    }
+}
+
+cd $uclinux_path
+set timeout 300
+spawn make config
+while 1 {
+    expect {
+        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
         }
 
@@ -41,12 +101,21 @@ while 1 {
             send "Y\r"
         }
 
-#USB
+#Config USB
         -re "USB support.*USB_SUPPORT.*\\\[.*]" {
             send "Y\r"
         }
 
         -re "Support for Host-side USB.*USB.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        # Select USB_SUSPEND to enable USB_OTG
+        -re "USB runtime power management.*USB_SUSPEND.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "OTG support.*USB_OTG.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -63,15 +132,23 @@ while 1 {
         }
 
         -re "Platform Glue Layer \\\[.*]" {
+            send "\r"
+        }
+
+        -re "USB Mass Storage support.*USB_STORAGE.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "USB Mass Storage support.*USB_STORAGE.*\\\[./././.]" {
+        -re "USB Gadget Support \\\(USB_GADGET\\\) \\\[.*]" {
             send "Y\r"
         }
 
-        -re "USB Gadget Support.*USB_GADGET.*\\\[.*]" {
+        -re "USB Peripheral Controller \\\[.*]" {
             send "Y\r"
+        }
+
+        -re "USB Peripheral Controller.*(\[0-9]+). Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\[cC]hoice\\\[.*]" {
+            send "$expect_out(1,string)\r"
         }
 
         -re "USB Gadget Drivers \\\[.*]" {
@@ -127,6 +204,7 @@ while 1 {
             send "Y\r"
         }
 
+#Config applications
         -re "fdisk.*USER_FDISK_FDISK.*\\\[.*]" {
             send "Y\r"
         }
@@ -149,60 +227,6 @@ while 1 {
 
         -re "bonnie\\\+\\\+.*USER_BONNIE.*\\\[.*]" {
             send "y\r"
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .01
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
-cd $uclinux_path
-set timeout 300
-spawn make config
-while 1 {
-    expect {
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        -re "Platform Glue Layer \\\[.*]" {
-            send "\r"
-        }
-
-        -re "USB Peripheral Controller.*(\[0-9]+). Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\[cC]hoice\\\[.*]" {
-            send "$expect_out(1,string)\r"
-        }
-
-        -re "USB Gadget Drivers \\\[.*]" {
-            send "M\r"
-        }
-
-        -re "Driver Mode.*(\[0-9])\. Both host and peripheral.*USB_MUSB_OTG.*\[cC]hoice\\\[.*]" {
-            send "$expect_out(1,string)\r"
         }
 
         "\\\(*) \\\[*]" {

@@ -41,6 +41,52 @@ while 1 {
             continue
         }
 
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Gadget Support \\\(USB_GADGET\\\) \\\[.*]" {
+            send "Y\r"
+        }
+
+        "\\\(*) \\\[*]" {
+            sleep .01
+            send "\r"
+        }
+
+        -re "\[cC]hoice\\\[.*]:" {
+            send "\r"
+        }
+
+        eof {
+            send_user "End of configuration"
+            break
+        }
+
+        timeout {
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config"
+            break
+        }
+    }
+}
+
+cd $uclinux_path
+set timeout 300
+spawn make config
+while 1 {
+    expect {
+        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
 #Power Management
         -re "Suspend to RAM and standby \\\(SUSPEND\\\) \\\[.*]" {
             send "Y\r"
