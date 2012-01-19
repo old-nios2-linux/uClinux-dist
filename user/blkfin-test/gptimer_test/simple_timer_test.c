@@ -25,7 +25,15 @@
 
 #include <asm/bfin_simple_timer.h>
 
+/* test mode  */
+#define TIMER_MODE_PWM_DISOUT 0
+#define TIMER_MODE_PWMOUT 1
+#define TIMER_MODE_WDTH_CAP 2
+
+#define TIMER_LOOP_TEST 5
+
 char *timer_dev = "/dev/timer0";
+char *timer_dev1 = "/dev/timer1";
 
 static int timer_test(int fd, unsigned long period, unsigned long width, unsigned long mode)
 {
@@ -36,6 +44,22 @@ static int timer_test(int fd, unsigned long period, unsigned long width, unsigne
 	ioctl(fd, BFIN_SIMPLE_TIMER_SET_MODE, mode);
 
 	ioctl(fd, BFIN_SIMPLE_TIMER_START, 0);
+
+	return 0;
+}
+
+static int loop_test(int fd, int fd1, unsigned long period, unsigned long width)
+{
+	ioctl(fd, BFIN_SIMPLE_TIMER_SET_PERIOD, period);
+
+	ioctl(fd, BFIN_SIMPLE_TIMER_SET_WIDTH, width);
+
+	ioctl(fd, BFIN_SIMPLE_TIMER_SET_MODE, TIMER_MODE_PWMOUT);
+
+	ioctl(fd1, BFIN_SIMPLE_TIMER_SET_MODE, TIMER_MODE_WDTH_CAP);
+
+	ioctl(fd, BFIN_SIMPLE_TIMER_START, 0);
+	ioctl(fd1, BFIN_SIMPLE_TIMER_START, 0);
 
 	return 0;
 }
@@ -79,10 +103,10 @@ static void show_usage(int exit_status)
 int main(int argc, char *argv[])
 {
 	int i;
-	int timer_fd;
-	unsigned long period = 1000000;
+	int timer_fd, timer_fd1;
+	unsigned long period = 10000000;
 	unsigned long width = (period >> 1);
-	int mode = 1;
+	int mode = TIMER_MODE_PWMOUT;
 
 	while ((i=getopt_long(argc, argv, GETOPT_FLAGS, long_opts, NULL)) != -1) {
 		switch (i) {
@@ -118,10 +142,21 @@ int main(int argc, char *argv[])
 		exit(10);
 	}
 
-	timer_test(timer_fd, period, width, mode);
+	if (mode == TIMER_LOOP_TEST) {
+		timer_fd1 = open(timer_dev1, O_RDWR);
+		if (timer_fd1 < 0) {
+			perror("unable to open timer dev\n");
+			exit(10);
+		}
 
-	sleep(2);
+		loop_test(timer_fd, timer_fd1, period, width);
+	} else
+		timer_test(timer_fd, period, width, mode);
 
+	sleep(5);
+
+	if (mode == TIMER_LOOP_TEST)
+		close(timer_fd1);
 	close(timer_fd);
 
 	return 0;
