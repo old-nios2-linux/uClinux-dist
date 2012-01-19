@@ -1838,8 +1838,10 @@ if [ ${AUTO_RUN_STATUS[$((n+2))]} -eq 1 ] ; then
       fi
       echo "ltp copy build_ltp_kernel_log done"
       mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/summary.new $THIS_LOG/ltp-summary_test_log_${ltp_suf[i]}
+      mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/ltp_auto_test*summary-log $THIS_LOG/
       echo "ltp copy summary done"
       mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/detailed.new $THIS_LOG/ltp-detailed_test_log_${ltp_suf[i]}
+      mv $UCLINUX_DIST_TESTSUITES/ltp/test/logs/ltp_auto_test*detailed-log $THIS_LOG/
       echo "ltp copy detailed done"
       mv $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_log $THIS_LOG/build_ltp_log_${ltp_suf[i]}
       mv $UCLINUX_DIST_TESTSUITES/ltp/ltp_test_log $THIS_LOG/ltp_test_log_${ltp_suf[i]}
