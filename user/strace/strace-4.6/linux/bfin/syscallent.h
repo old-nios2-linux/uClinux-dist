@@ -409,3 +409,6 @@
 	{ 1,	TD,	printargs,		"syncfs"	}, /* 378 */
 	{ 5,	TN,	printargs,              "setns"         }, /* 379 */
 	{ 2, 	TD, 	printargs,           "sendmmsg"      }, /* 380 */
+	{ 6,   TD,     sys_process_vm_readv,   "process_vm_readv"}, /* 381 */
+	{ 6,   TD,     sys_process_vm_writev,  "process_vm_writev"}, /* 382 */
+
