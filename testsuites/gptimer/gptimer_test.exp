@@ -82,7 +82,7 @@ expect {
        }
 }
 }
-if { [ expr $SCLK/10000000.0*5 - $ISR0 ] >= 0 &&  [ expr $SCLK/10000000.0*5 - $ISR0 ] < 10 } {
+if { [ expr $SCLK/10000000.0*5 - $ISR0 ] >= 0 &&  [ expr $SCLK/10000000.0*5 - $ISR0 ] < 10 && [ expr $ISR0 - $ISR1 ] < 3 } {
     send_user "\n"
     send_user "\n$TITLE ............\[PASS\]\n"
 } else {
