@@ -11,7 +11,9 @@
 
 #define passert(expr) ({ if (!(expr)) { perror(#expr); exit(1); } })
 
-struct dmasg {
+static int mmr32_style_dma;
+
+struct dmasg16 {
 	void *next_desc_addr;
 	void *start_addr;
 	unsigned short cfg;
@@ -21,25 +23,60 @@ struct dmasg {
 	short y_modify;
 } __attribute__((packed));
 
-struct dma_state {
+struct dma16_state {
 	unsigned int channel;
 	volatile int done;
-	struct dmasg dsc_src, dsc_dst;
+	struct dmasg16 dsc_src, dsc_dst;
 };
 
-#define BF_DMA_REQUEST _IOW('D', 0x00, struct dma_state)
-#define BF_DMA_FREE    _IOW('D', 0x01, struct dma_state)
-#define BF_DMA_RUN     _IOW('D', 0x02, struct dma_state)
-#define BF_DMA_ARUN    _IOW('D', 0x03, struct dma_state)
+#define BF_DMA16_REQUEST _IOW('D', 0x00, struct dma16_state)
+#define BF_DMA16_FREE    _IOW('D', 0x01, struct dma16_state)
+#define BF_DMA16_RUN     _IOW('D', 0x02, struct dma16_state)
+#define BF_DMA16_ARUN    _IOW('D', 0x03, struct dma16_state)
+
+struct dmasg32 {
+	void *next_desc_addr;
+	void *start_addr;
+	unsigned long cfg;
+	unsigned long x_count;
+	long x_modify;
+	unsigned long y_count;
+	long y_modify;
+} __attribute__((packed));
+
+struct dma32_state {
+	unsigned int channel;
+	volatile int done;
+	struct dmasg32 dsc_src, dsc_dst;
+};
+
+
+#define BF_DMA32_REQUEST _IOW('D', 0x00, struct dma32_state)
+#define BF_DMA32_FREE    _IOW('D', 0x01, struct dma32_state)
+#define BF_DMA32_RUN     _IOW('D', 0x02, struct dma32_state)
+#define BF_DMA32_ARUN    _IOW('D', 0x03, struct dma32_state)
+
+#define BF_DMA_REQUEST mmr32_style_dma?BF_DMA32_REQUEST:BF_DMA16_REQUEST
+#define BF_DMA_FREE    mmr32_style_dma?BF_DMA32_FREE:BF_DMA16_FREE
+#define BF_DMA_RUN     mmr32_style_dma?BF_DMA32_RUN:BF_DMA16_RUN
+#define BF_DMA_ARUN    mmr32_style_dma?BF_DMA32_ARUN:BF_DMA16_ARUN
+
+#define BF_DMA_DI_EN		(mmr32_style_dma?0x100000:0x80)
+#define BF_DMA_EN		0x1
+#define BF_DMA_WNR		0x2
+#define BF_DMA_MSIZE		(mmr32_style_dma?0x700:0xC)
+#define BF_DMA_MSIZE_OFFSET	(mmr32_style_dma?8:2)
+#define BF_DMA_MSIZE_8		0
+#define BF_DMA_MSIZE_16		1
+#define BF_DMA_MSIZE_32		2
 
 #define SIZE 1024
 char src[SIZE], dst[SIZE];
-char src2[SIZE*2], dst2[SIZE*2];
 
 #define ioctl(fd, cmd, arg) \
 ({ \
 	int ret; \
-	printf("ioctl(%i, %i: "#cmd", %p) = ", fd, cmd, arg); \
+	printf("ioctl(%i, %i, %p) = ", fd, cmd, arg); \
 	ret = ioctl(fd, cmd, arg); \
 	printf("%i", ret); \
 	if (ret) \
@@ -135,12 +172,47 @@ void decode_state(const char *prefix)
 #define ds_1()
 #endif
 
+#define INIT_USER_DMA(type, name, msize)\
+	unsigned long name##_cfg = BF_DMA_DI_EN | BF_DMA_EN |	\
+				(msize << BF_DMA_MSIZE_OFFSET);	\
+	struct type name = {		\
+		.channel = 1,		\
+		.dsc_src = {		\
+			.next_desc_addr = NULL,			\
+			.start_addr = src,			\
+			.cfg = name##_cfg,			\
+			.x_count = sizeof(src) >> msize,	\
+			.x_modify = 1 << msize,			\
+		},			\
+		.dsc_dst = {		\
+			.next_desc_addr = NULL,			\
+			.start_addr = dst,			\
+			.cfg = name##_cfg | BF_DMA_WNR,		\
+			.x_count = sizeof(dst) >> msize,	\
+			.x_modify = 1 << msize,			\
+		},			\
+	};
+
+#define BF_DMA_IOCTL(fd, cmd, name)		\
+	if (mmr32_style_dma)			\
+		ioctl(fd, cmd, &name##_32);	\
+	else					\
+		ioctl(fd, cmd, &name##_16);
+
 int main(int argc, char *argv[])
 {
 	int i, fd;
 
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
+
+	if (system("cat /proc/cpuinfo | grep 0x27fe") == 0) {
+		mmr32_style_dma = 1;
+		printf("Test 32-bit MMR DMA copy.\n");
+	} else {
+		mmr32_style_dma = 0;
+		printf("Test 16-bit MMR DMA copy.\n");
+	}
 
 	fd = open("/dev/bfin-dma", O_WRONLY);
 	passert(fd != -1);
@@ -153,37 +225,25 @@ int main(int argc, char *argv[])
 			return 0;
 		} else if (!strcmp(argv[1], "-f")) {
 			/* -f = force free dma channel */
-			struct dma_state state = { .channel = 1 };
-			ioctl(fd, BF_DMA_FREE, &state);
+			struct dma16_state state_16 = { .channel = 1 };
+			struct dma32_state state_32 = { .channel = 1 };
+			BF_DMA_IOCTL(fd, BF_DMA_FREE, state);
 			return 0;
 		}
 	}
 
+	i = mmr32_style_dma?8:2;
+
 	/* Do a synchronous transfer (8bit) first */
-	struct dma_state state = {
-		.channel = 1,
-		.dsc_src = {
-			.next_desc_addr = NULL,
-			.start_addr = src,
-			.cfg = 0x81,
-			.x_count = sizeof(src),
-			.x_modify = 1,
-		},
-		.dsc_dst = {
-			.next_desc_addr = NULL,
-			.start_addr = dst,
-			.cfg = 0x83,
-			.x_count = sizeof(dst),
-			.x_modify = 1,
-		},
-	};
-	ioctl(fd, BF_DMA_REQUEST, &state);
+	INIT_USER_DMA(dma16_state, state_16, BF_DMA_MSIZE_8)
+	INIT_USER_DMA(dma32_state, state_32, BF_DMA_MSIZE_8)
+	BF_DMA_IOCTL(fd, BF_DMA_REQUEST, state);
 
 	ds_1();
 
 	memset(src, 's', sizeof(src));
 	memset(dst, 'd', sizeof(dst));
-	ioctl(fd, BF_DMA_RUN, &state);
+	BF_DMA_IOCTL(fd, BF_DMA_RUN, state);
 	i = memcmp(src, dst, sizeof(src));
 	printf("memcmp = %i\n", i);
 	if (i) {
@@ -191,43 +251,32 @@ int main(int argc, char *argv[])
 		dump(dst, sizeof(dst));
 	}
 
-	ioctl(fd, BF_DMA_FREE, &state);
+	BF_DMA_IOCTL(fd, BF_DMA_FREE, state);
 
 	/* Do an asynchronous transfer (16bit) next */
-	struct dma_state state2 = {
-		.channel = 1,
-		.dsc_src = {
-			.next_desc_addr = NULL,
-			.start_addr = src2,
-			.cfg = 0x85,
-			.x_count = sizeof(src2) / 2,
-			.x_modify = 2,
-		},
-		.dsc_dst = {
-			.next_desc_addr = NULL,
-			.start_addr = dst2,
-			.cfg = 0x87,
-			.x_count = sizeof(dst2) / 2,
-			.x_modify = 2,
-		},
-	};
-	ioctl(fd, BF_DMA_REQUEST, &state2);
+	INIT_USER_DMA(dma16_state, state2_16, BF_DMA_MSIZE_16)
+	INIT_USER_DMA(dma32_state, state2_32, BF_DMA_MSIZE_16)
+	BF_DMA_IOCTL(fd, BF_DMA_REQUEST, state2);
 
-	memset(src, 's', sizeof(src2));
-	memset(dst, 'd', sizeof(dst2));
-	ioctl(fd, BF_DMA_ARUN, &state2);
+	memset(src, 's', sizeof(src));
+	memset(dst, 'd', sizeof(dst));
+	BF_DMA_IOCTL(fd, BF_DMA_ARUN, state2);
 	i = 0;
-	while (!state2.done)
-		++i;
+	if (mmr32_style_dma)			\
+		while (!state2_32.done)
+			++i;
+	else
+		while (!state2_16.done)
+			++i;
 	printf("slept for %i loads\n", i);
-	i = memcmp(src2, dst2, sizeof(src2));
+	i = memcmp(src, dst, sizeof(src));
 	printf("memcmp = %i\n", i);
 	if (i) {
-		dump(src2, sizeof(src2));
-		dump(dst2, sizeof(dst2));
+		dump(src, sizeof(src));
+		dump(dst, sizeof(dst));
 	}
 
-	ioctl(fd, BF_DMA_FREE, &state2);
+	BF_DMA_IOCTL(fd, BF_DMA_FREE, state2);
 
 	return 0;
 }
