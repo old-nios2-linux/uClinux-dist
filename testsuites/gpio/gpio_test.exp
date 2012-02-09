@@ -24,7 +24,7 @@ expect -re  "$sh_prompt"
 send -s "cd $uclinux_path/linux-2.6.x/arch/ \r"
 expect -re  "$sh_prompt"
 while 1 { 
-send -s "egrep -nr 'bfin_read_PORT|bfin_write_PORT'  * | grep -v svn\r"
+send -s "egrep -nr 'bfin_read_PORT|bfin_write_PORT'  * \r"
 expect "\r"
 expect {
          -re "bfin_write_PORT.*$sh_prompt" {
@@ -56,7 +56,7 @@ incr case_num
 send -s "cd $uclinux_path/linux-2.6.x/drivers/ \r"
 expect -re  "$sh_prompt"
 while 1 {
-send -s "egrep -nr 'bfin_read_PORT|bfin_write_PORT'  * | grep -v svn\r"
+send -s "egrep -nr 'bfin_read_PORT|bfin_write_PORT'  * \r"
 expect "\r"
 expect {
         -re "bfin_write_PORT.*$sh_prompt" {
@@ -87,7 +87,7 @@ incr case_num
 send -s "cd $uclinux_path/linux-2.6.x/sound/ \r"
 expect -re  "$sh_prompt"
 while 1 {
-send -s "egrep -nr 'bfin_read_PORT|bfin_write_PORT'  * | grep -v svn\r"
+send -s "egrep -nr 'bfin_read_PORT|bfin_write_PORT'  * \r"
 expect "\r"
 expect {
         -re "bfin_write_PORT.*$sh_prompt" {

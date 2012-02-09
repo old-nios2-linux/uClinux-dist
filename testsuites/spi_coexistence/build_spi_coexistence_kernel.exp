@@ -15,7 +15,7 @@ if [ catch {exec sed -i "/modalias.*mmc_spi/,/chip_select/ s/4/1/" $board_file} 
     exit
 }
 
-exec svn diff $board_file > spi_coexistence_diff_log
+exec git diff $board_file > spi_coexistence_diff_log
 
 set env(EXT2_BLOCKS) "10240"
 

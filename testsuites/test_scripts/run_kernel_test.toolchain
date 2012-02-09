@@ -56,11 +56,11 @@ cat <<EOF
 echo "************* Update toolchain *************"
 `cd $TOOLCHAIN_SRC;svn up;svn info`
 echo "************* Update u-boot ********************"
-`cd $UBOOT_SRC;svn up;svn info`
+`cd $UBOOT_SRC;git pull; git log -1 | head -3`
 echo "************* Update uclinux-dist *************"
 `cd $UCLINUX_DIST_PATH; svn up ; svn info`
 echo "************* Update linux ********************"
-`cd $UCLINUX_DIST_PATH/linux-2.6.x ; svn up ; svn info`
+`cd $UCLINUX_DIST_PATH/linux-2.6.x ; git pull; git log -1 | head -3`
 EOF
 
 UBOOT_VER=$(cd $UBOOT_SRC; ls -d u-boot-* | sort -n | tail -n 1)
@@ -89,12 +89,13 @@ if [ "`cat $BUILD/toolchain_test_log* |grep -c "\*\*\* Done"`" -eq 0 ] ; then
     mv $BUILD/toolchain_test_log* $BUILD/..
     rm -fr $BUILD
 fi
-echo -n "u-boot svn " >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
-svn info $CHECKOUT/u-boot |grep Revision >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
+echo -n "u-boot git " >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
+git log -1|grep "^commit" >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
 echo -n "uclinux-dist svn " >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
 svn info $CHECKOUT/uclinux-dist |grep Revision >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
-echo -n "linux kernel svn " >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
-svn info $CHECKOUT/uclinux-dist/linux-2.6.x |grep Revision >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
+echo -n "linux kernel git " >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
+cd $CHECKOUT/uclinux-dist/linux-2.6.x
+git log -1|grep "^commit" >> $UCLINUX_DIST_SCRIPTS/toolchain_ver
 
 ## build and run kernel tests
 THIS_LOG=$LOG_DIR/$TIMESTAMP
