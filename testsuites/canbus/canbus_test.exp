@@ -47,8 +47,16 @@ while 1 {
      }
 }
 
+for {set i 0} {$i < 2 } {incr i} {
+
+if { $i == 0 } {
+set can_freq 125000
+} elseif { $i == 1 } {
+set can_freq 1000000
+}
+
 expect  -re $kernel_prompt
-send -s "ip link set can0 type can bitrate 125000\r" 
+send -s "ip link set can0 type can bitrate $can_freq\r" 
 while 1 {
    expect {
      -re "bfin_can.*set" {
@@ -159,8 +167,9 @@ while 1 {
       }
      }
 }
+}
 
-if { $flag == 6 } {
+if { $flag == 6 *[ expr i + 1 ]  } {
    all_pass
 } else {
    puts "canbus test failed.\n"
