@@ -120,10 +120,11 @@ fi
 cat <<EOF
 echo "************* Tested uclinux-dist svn info *************"
 `cd $UCLINUX_DIST_PATH ; svn up ; svn info`
-echo "************* Tested linux svn info ********************"
+echo "************* Tested linux git info ********************"
 `cd $UCLINUX_DIST_PATH/linux-2.6.x ; git pull ; git log -1 | head -3`
 EOF
 
+echo "********************************************************"
 echo "Testing on $BOARD_CONFIG ($CPU) $BINARY_FORMAT $ALLOCATOR ICACHE($ICACHE) DCACHE($DCACHE) $POLICY $UART_MODE SMP($SMP) MPU($MPU) XENOMAI($XENOMAI)"
 
 ###### See if uclinux-dist has been checked out.##################################################
