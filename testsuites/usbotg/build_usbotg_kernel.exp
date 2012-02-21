@@ -41,6 +41,10 @@ while 1 {
             send "Y\r"
         }
 
+        -re "Platform Glue Layer \\\[.*]" {
+            send "Y\r"
+        }
+
         # Select USB_GADGET to enable USB_MUSB_HDRC
         -re "USB Gadget Support \\\(USB_GADGET\\\) \\\[.*]" {
             send "Y\r"
@@ -132,7 +136,11 @@ while 1 {
         }
 
         -re "Platform Glue Layer \\\[.*]" {
-            send "\r"
+            send "Y\r"
+        }
+
+        -re "Blackfin.*USB_MUSB_BLACKFIN.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "USB Mass Storage support.*USB_STORAGE.*\\\[.*]" {
