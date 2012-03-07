@@ -64,10 +64,11 @@ static int loop_test(int fd, int fd1, unsigned long period, unsigned long width)
 	return 0;
 }
 
-#define GETOPT_FLAGS "d:p:w:m:sthV"
+#define GETOPT_FLAGS "d:b:p:w:m:sthV"
 #define a_argument required_argument
 static struct option const long_opts[] = {
 	{"timer_dev",	no_argument, NULL, 'd'},
+	{"board",	no_argument, NULL, 'b'},
 	{"period",	no_argument, NULL, 'p'},
 	{"width",	no_argument, NULL, 'w'},
 	{"mode",	no_argument, NULL, 'm'},
@@ -93,6 +94,7 @@ static void show_usage(int exit_status)
 		"Options:\n"
 		"-p period\n"
 		"-w width\n"
+		"-b board\n"
 		"-m mode\n"
 		"-s start timer\n"
 		"-t stop_timer\n"
@@ -107,6 +109,7 @@ int main(int argc, char *argv[])
 	unsigned long period = 10000000;
 	unsigned long width = (period >> 1);
 	int mode = TIMER_MODE_PWMOUT;
+	int board = 0;
 
 	while ((i=getopt_long(argc, argv, GETOPT_FLAGS, long_opts, NULL)) != -1) {
 		switch (i) {
@@ -119,6 +122,9 @@ int main(int argc, char *argv[])
 		case 'w':
 			width = atol(optarg);
 			break;
+                case 'b':
+                        board = atoi(optarg);
+                        break;
 		case 'm':
 			mode = atol(optarg);
 			break;
@@ -134,6 +140,17 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Unhandled option '%c'; please report this", i);
 			return EXIT_FAILURE;
 		}
+	}
+
+	if (board == 537) {
+		char *timer_dev = "/dev/timer0";
+		char *timer_dev1 = "/dev/timer1";
+	} else if (board == 609) {
+                char *timer_dev = "/dev/timer1";
+                char *timer_dev1 = "/dev/timer3";
+	} else {
+		show_usage(EXIT_FAILURE);
+		exit(1);
 	}
 
 	timer_fd = open(timer_dev, O_RDWR);
