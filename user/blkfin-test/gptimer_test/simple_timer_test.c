@@ -37,11 +37,11 @@ char *timer_dev1 = "/dev/timer1";
 
 static int timer_test(int fd, unsigned long period, unsigned long width, unsigned long mode)
 {
+	ioctl(fd, BFIN_SIMPLE_TIMER_SET_MODE, mode);
+
 	ioctl(fd, BFIN_SIMPLE_TIMER_SET_PERIOD, period);
 
 	ioctl(fd, BFIN_SIMPLE_TIMER_SET_WIDTH, width);
-
-	ioctl(fd, BFIN_SIMPLE_TIMER_SET_MODE, mode);
 
 	ioctl(fd, BFIN_SIMPLE_TIMER_START, 0);
 
