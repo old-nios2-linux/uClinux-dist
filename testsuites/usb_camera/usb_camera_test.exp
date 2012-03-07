@@ -1,0 +1,73 @@
+#!/usr/bin/expect
+
+source  ../kernel_config.exp
+log_file [log_file_name "$argv0"]
+send_user "Starting $argv0\n"
+set TITLE [title "$argv0"]
+
+step "Start kermit."
+source ../spawn_kermit.exp
+
+step "Reboot the kernel."
+# To add following line here to indicate that if the bootargs is different,
+# it could be set here. If the bootargs value is 0, it needn't be stated,
+# for it is the default value.
+# set bootargs  $bootargs_param0
+source ../reboot_kernel.exp
+sleep 5
+set timeout 5
+send "\r"
+expect -re $kernel_prompt
+
+step "Start testing"
+set case_num 0
+
+incr case_num
+set timeout 20
+send "ffmpeg -r 20 -f video4linux2 -s 320x240 -i /dev/video0 -vcodec mpeg4 -f mp4 /usb_camera.mp4\r"
+while 1 {
+    expect {
+        -re "\[eE]rror|\[fF]ail|Hardware Trace|SIGSEGV" {
+            case_fail $case_num
+        }
+        -re "Stream mapping.*kbits/s" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+sleep 10
+
+incr case_num
+set timeout 10
+send "q"
+while 1 {
+    expect {
+        -re "\[eE]rror|\[fF]ail|Hardware Trace|SIGSEGV" {
+            case_fail $case_num
+        }
+        -re "video.*audio.*global headers.*muxing overhead.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+if [ catch {exec rcp root@$targetip:/usb_camera.mp4 ./} ] {
+    send_user "FAIL: rcp usb_camera.mp4 to host PC\n"
+    send_user "$errorInfo\n"
+    case_fail $case_num
+} else {
+    send_user "PASS: rcp usb_camera.mp4 to host PC\n"
+}
+
+all_pass
+send_user "Ending $argv0\n"
+log_file
