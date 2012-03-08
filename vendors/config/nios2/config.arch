@@ -78,8 +78,11 @@ ifneq ($(findstring s,$(MAKEFLAGS)),)
 CONFIGURE_OPTS += --quiet
 endif
 
-# FIXME: add config for hardware multiply options
-CPUFLAGS = -mhw-mul -mno-hw-mulx
+# Take configuration for MUL/MULX/DIV instructions from kernel
+CPUFLAGS =
+CPUFLAGS += $(if $(CONFIG_NIOS2_HW_MUL_SUPPORT),-mhw-mul,-mno-hw-mul)
+CPUFLAGS += $(if $(CONFIG_NIOS2_HW_MULX_SUPPORT),-mhw-mulx,-mno-hw-mulx)
+CPUFLAGS += $(if $(CONFIG_NIOS2_HW_DIV_SUPPORT),-mhw-div,-mno-hw-div)
 
 ############################################################################
 #
