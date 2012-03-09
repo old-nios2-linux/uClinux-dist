@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (test_mode == 0 || test_mode == 3) {
-		printf("Start successful verify value:\n");
+		printf("Start verify with right value:\n");
 		info.crc_compare = 0x55555555; 
 		memset(info.in_addr, 0x55, buf_len);
 		ret = ioctl(crc_fd, CRC_IOC_VERIFY_VAL, &info);
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
 		
 		printf("\n");
 
-		printf("Start failed verify value:\n");
+		printf("Start verify with wrong value:\n");
 		*(char *)(info.in_addr + (buf_len >> 1)) = 0xaa;
 		ret = ioctl(crc_fd, CRC_IOC_VERIFY_VAL, &info);
 		if (ret < 0) {
@@ -163,9 +163,9 @@ int main(int argc, char *argv[])
 			goto out;
 		}
 		if (info.pos_verify)
-			printf("End verify value: fail at position %d\n", info.pos_verify);
+			printf("End verify value: detect wrong value at position %d, pass\n", info.pos_verify);
 		else
-			printf("End verify value: pass\n");
+			printf("End verify value: fail\n");
 
 		printf("\n");
 	}
