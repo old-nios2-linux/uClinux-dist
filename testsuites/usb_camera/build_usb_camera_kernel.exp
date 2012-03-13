@@ -10,6 +10,7 @@ log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 set env(EXT2_BLOCKS) "16384"
+set HAVE_KERNEL_ONLY_IMAGE 1
 
 cd $uclinux_path/testsuites
 step "Make clean."
@@ -24,6 +25,57 @@ source  make_default_config.exp
 
 cd $uclinux_path/testsuites
 source  make_config_reserve_mem.exp
+
+# Following make specific configuration for this case.
+cd $uclinux_path
+set timeout 300
+spawn make config
+while 1 {
+    expect {
+        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
+            send "y\r"
+        }
+
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+            continue
+        }
+
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Gadget Support \\\(USB_GADGET\\\) \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "($anomalous_option) \\\[\[^\]]+/.]" {
+            send "\r"
+        }
+
+        "\\\(*) \\\[*]" {
+            sleep .01
+            send "\r"
+        }
+
+        -re "\[cC]hoice\\\[.*]:" {
+            send "\r"
+        }
+
+        eof {
+            send_user "End of configuration"
+            break
+        }
+
+        timeout {
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config"
+            break
+        }
+    }
+}
 
 # Following make specific configuration for this case.
 cd $uclinux_path
@@ -89,7 +141,37 @@ while 1 {
             send "Y\r"
         }
 
+        -re "Blackfin.*USB_MUSB_BLACKFIN.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
+            send "Y\r"
+        }
+
+#Virtual terminal & frame buffer
+#Set SW5.1-SW5.3 to off, or no display on screen.
+        -re "I2C support \\\(I2C\\\) \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Blackfin TWI I2C support.*I2C_BLACKFIN_TWI.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Virtual terminal.*VT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Framebuffer Console support.*FRAMEBUFFER_CONSOLE.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Select compiled-in fonts.*FONTS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Mac console 6x11 font.*FONT_6x11.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -99,8 +181,17 @@ while 1 {
             send "4\r"
         }
 
+        -re "Build libSDL.*LIB_LIBSDL.*\\\[.*]" {
+            # libsdl is required for ffplayer
+            send "Y\r"
+        }
+
         -re "FFmpeg and FFserver.*USER_FFMPEG_APPS.*\\\[.*]" {
             send "Y\r"
+        }
+
+        -re "($anomalous_option) \\\[\[^\]]+/.]" {
+            send "\r"
         }
 
         "\\\(*) \\\[*]" {
