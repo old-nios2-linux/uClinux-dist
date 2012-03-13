@@ -18,6 +18,11 @@ set sh_prompt "\[-@].*\[$>#]"
 set uboot_prompt "bfin>"
 set kernel_prompt "root:\[^>].*>"
 
+# Some kernel options are not conform to basic pattern of "xxx (xxx) [x/x/x/?]"
+# And it looks like "xxx [x/x/x/?]".
+# Add this variable to handle these anomalous options.
+set anomalous_option "(USB Gadget Drivers|Platform Glue Layer|USB Peripheral Controller) \\\[\[^\]]+/.]"
+
 set targetip 10.100.4.50
 set serverip 10.100.4.174
 set count  30
