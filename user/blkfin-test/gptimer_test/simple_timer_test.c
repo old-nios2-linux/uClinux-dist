@@ -50,13 +50,14 @@ static int timer_test(int fd, unsigned long period, unsigned long width, unsigne
 
 static int loop_test(int fd, int fd1, unsigned long period, unsigned long width)
 {
+	ioctl(fd, BFIN_SIMPLE_TIMER_SET_MODE, TIMER_MODE_PWMOUT);
+
+	ioctl(fd1, BFIN_SIMPLE_TIMER_SET_MODE, TIMER_MODE_WDTH_CAP);
+
 	ioctl(fd, BFIN_SIMPLE_TIMER_SET_PERIOD, period);
 
 	ioctl(fd, BFIN_SIMPLE_TIMER_SET_WIDTH, width);
 
-	ioctl(fd, BFIN_SIMPLE_TIMER_SET_MODE, TIMER_MODE_PWMOUT);
-
-	ioctl(fd1, BFIN_SIMPLE_TIMER_SET_MODE, TIMER_MODE_WDTH_CAP);
 
 	ioctl(fd, BFIN_SIMPLE_TIMER_START, 0);
 	ioctl(fd1, BFIN_SIMPLE_TIMER_START, 0);
@@ -142,12 +143,14 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	printf("board %d\n", board);
+
 	if (board == 537) {
-		char *timer_dev = "/dev/timer0";
-		char *timer_dev1 = "/dev/timer1";
+		timer_dev = "/dev/timer0";
+		timer_dev1 = "/dev/timer1";
 	} else if (board == 609) {
-                char *timer_dev = "/dev/timer1";
-                char *timer_dev1 = "/dev/timer3";
+                timer_dev = "/dev/timer1";
+                timer_dev1 = "/dev/timer3";
 	} else {
 		show_usage(EXIT_FAILURE);
 		exit(1);
