@@ -16,9 +16,7 @@ step "Start tetsting."
 set case_num 0
 
 set timeout 8
-set flag 0
 send "ifconfig eth0 $targetip\r" 
-
 while 1 {
     sleep 3
     expect {
@@ -37,6 +35,7 @@ send "ifconfig\r"
 while 1 {
     expect {
         -re "$targetip" {        
+            expect -re $kernel_prompt
             break
         }
         timeout {
@@ -45,25 +44,33 @@ while 1 {
         }
     }
 }
-expect  -re $kernel_prompt
-incr case_num
 
+set timeout 20
+incr case_num
 send -s "mount.cifs //$serverip/users /mnt rw -o user=$name,pass=$name\r" 
 while 1 {
     expect  {
+        -nocase -re "(mount:|error|fail).*$kernel_prompt" {
+            case_fail $case_num
+        }
         -re $kernel_prompt {
+            case_pass $case_num
             break
         }
         timeout {
-            break
+            case_fail $case_num
         }
     }
 }
 
+set timeout 5
 incr case_num
 send -s "cp /bin/version /mnt/$name\r"
 while 1 {
     expect {
+        -nocase -re "(cp:|error|fail).*$kernel_prompt" {
+            case_fail $case_num
+        }
         -re $kernel_prompt {
             case_pass $case_num
             break
@@ -74,12 +81,12 @@ while 1 {
     }
 }
 
+set timeout 5
 incr case_num
 send -s "ls /mnt/$name\r" 
 while 1 {
     expect {
-        "version" {         
-            puts "******* samba mount  success.\n"
+        -re "version.*$kernel_prompt" {         
             case_pass $case_num
             break
         }
@@ -89,12 +96,14 @@ while 1 {
     }
 }
 
-incr case_num
-expect -re $kernel_prompt
 set timeout 5
+incr case_num
 send -s "rm -f /mnt/$name/version\r"
 while 1 {
     expect {
+        -nocase -re "(rm:|error|fail).*$kernel_prompt" {
+            case_fail $case_num
+        }
         -re $kernel_prompt {
             case_pass $case_num
             break
@@ -105,12 +114,15 @@ while 1 {
     }
 }
 
+set timeout 20
 incr case_num
 send -s "umount.cifs /mnt\r" 
 while 1 {
     expect {
+        -nocase -re "(umount:|error|fail).*$kernel_prompt" {
+            case_fail $case_num
+        }
         -re $kernel_prompt {         
-            puts "smbfs umount.\n"
             case_pass $case_num
             break
         }
@@ -125,12 +137,15 @@ set timeout 3
 send -s "ls /mnt\r"
 while 1 {
     expect {
-        "home" {
+        -re "home.*$kernel_prompt" {
             case_fail $case_num
         }
-        timeout {
+        -re $kernel_prompt {         
             case_pass $case_num
             break
+        }
+        timeout {
+            case_fail $case_num
         }
     }
 }
