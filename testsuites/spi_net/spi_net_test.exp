@@ -1,14 +1,9 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
-
-puts "\n##### TITLE $TITLE."
-
-cd $uclinux_path/testsuites/ethernet/
 
 step "Start kermit."
 source ../spawn_kermit.exp
@@ -17,183 +12,184 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 step "Start testing."
-
-set TransRate  0
-set Throughput  0
+set TransRate 0
+set Throughput 0
 set case_num 0
+set timeout 10
 
 set test_time 10
 set serverip 192.168.0.175
 set spi_net_ip 192.168.0.51
 
+expect -re "Link is Up.*Full"
+
+set timeout 10
 incr case_num
-
-send "ifconfig eth0 down\r" 
+send "ifconfig eth0 down\r"
 while 1 {
-   sleep 3
-   expect {
-      ">" {
-         puts "ifconfig eth0 down.\n"
-         break
-      }
-
-      timeout {
-            puts "Fail ifconfig. "
+    expect {
+        -re "Down" {
+            case_pass $case_num
             break
-         }
-     }
+        }
+        timeout {
+            send_user "Fail: disable network\n"
+            case_fail $case_num
+        }
+    }
 }
-set timeout 8
-send "ifconfig eth1 $spi_net_ip\r" 
+
+set timeout 10
+incr case_num
+send "ifconfig eth1 $spi_net_ip\r"
 while 1 {
-   sleep 3
-   expect {
-      ">" {
-         puts "ifconfig set success.\n"
-         break
-      }
-
-      timeout {
-            puts "Fail ifconfig. "
+    expect {
+        -re "link up" {
+            expect "duplex"
+            case_pass $case_num
             break
-         }
-     }
+        }
+        -re "ifconfig:.*$kernel_prompt" {
+            send_user "Fail: config spi network\n"
+            case_fail $case_num
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
 }
+
 
 step "Untar netperf."
-
-cd  $uclinux_path/testsuites/ethernet/
+cd $uclinux_path/testsuites/ethernet/
 exec tar zxvf netperf.tar.gz
 
 spawn /bin/sh
-expect -re  $sh_prompt
-send -s "sudo ./netserver_x86 \r"
-while 1 {
-   expect {
-      -re "\[Pp\]assword" {
-         send -s "$password\r" 
-         expect "Starting netserver"
-         break
-      }
-
-      timeout {
-            break
-         }
-     }
-}
-
-expect -re  $sh_prompt 
-send -s  "ps aux| grep netserver_x86 | head -1 \r"
-expect "\r"
-while 1 {
-   expect {
-      "netserver" {
-         break
-      }
-
-      timeout {
-            break
-         }
-     }
-}
-
-expect -re  $sh_prompt
 set netserver_id $spawn_id
+expect -re $sh_prompt
+
+set timeout 20
+incr case_num
+send -s "sudo ./netserver_x86\r"
+while 1 {
+    expect {
+        -re "\[Pp\]assword" {
+            send -s "$password\r"
+            continue
+        }
+        -re "Starting netserver.*$sh_prompt" {
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+send -s "ps aux| grep netserver_x86 | head -1\r"
+while 1 {
+    expect {
+        -re "netserver.*$sh_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
 
 set spawn_id $kermit_spawn_id
 
-send "cd /\r"
-expect    -re $kernel_prompt
-send  "netperf -H $serverip -t TCP_RR -l $test_time > netperf_tcp_rr \r"
-set timeout 2000
-while 1 {
-   expect {
-       -re $kernel_prompt {
-         break
-      }
+set timeout 5
+expect -re $kernel_prompt
 
-      timeout {
-            puts "Failed ethernet tcp_rr test."
+set timeout 2000
+incr case_num
+send "netperf -H $serverip -t TCP_RR -l $test_time > netperf_tcp_rr\r"
+while 1 {
+    expect {
+        -re $kernel_prompt {
+            case_pass $case_num
             break
-         }
-     }
+        }
+        timeout {
+            break
+        }
+    }
 }
 
-send  "netperf -H $serverip -t TCP_STREAM -l $test_time  > netperf_tcp_stream \r"
 set timeout 2000
+incr case_num
+send "netperf -H $serverip -t TCP_STREAM -l $test_time > netperf_tcp_stream\r"
 while 1 {
-   expect {
-       -re $kernel_prompt {
-         break
-      }
-
-      timeout {
-            puts "Failed ethernet tcp_rr test."
+    expect {
+        -re $kernel_prompt {
+            case_pass $case_num
             break
-         }
-     }
+        }
+        timeout {
+            break
+        }
+    }
 }
 
 set spawn_id $netserver_id
 set timeout 3
-send -s "sudo pkill netserver_x86 \r"
+send -s "sudo pkill netserver_x86\r"
 while 1 {
-   expect {
-     -re "\[Pp\]assword" {
-	send -s "$password\r" 
-        expect -re  $sh_prompt
-         break
-      }
-
-      timeout {
+    expect {
+        -re "\[Pp\]assword" {
+            send -s "$password\r"
+            continue
+        }
+        -re $sh_prompt {
             break
-         }
-     }
+        }
+        timeout {
+            break
+        }
+    }
 }
 
 set spawn_id $kermit_spawn_id
 
-send  "cat netperf_tcp_rr\r"
+send "cat netperf_tcp_rr\r"
 set timeout 10
 while 1 {
-   expect {
-      -re "$test_time\\\.\[0-9]{2} +(\[0-9]+\\\.\[0-9]{2})" {
-         set TransRate $expect_out(1,string)
-         expect -re $kernel_prompt
-         send_log "TransRate $expect_out(1,string)\n"
-         break
-      }
+    expect {
+        -re "$test_time\\\.\[0-9]{2} +(\[0-9]+\\\.\[0-9]{2})" {
+            set TransRate $expect_out(1,string)
+            expect -re $kernel_prompt
+            send_log "TransRate $expect_out(1,string)\n"
+            break
+        }
 
-      timeout {
-           case_fail $case_num
-           break
-         }
-     }
+        timeout {
+            case_fail $case_num
+            break
+        }
+    }
 }
 
-send  "cat netperf_tcp_stream\r"
+send "cat netperf_tcp_stream\r"
 set timeout 10
 while 1 {
-   expect {
-     -re "$test_time\\\.\[0-9]{2} +(\[0-9]+\\\.\[0-9]{2})" {
-         set Throughput $expect_out(1,string)
-         expect -re $kernel_prompt
-         send_log "Throughput $expect_out(1,string)\n"
-         break
-      }
-
-      timeout {
-           case_fail $case_num
-           break
-         }
-     }
+    expect {
+        -re "$test_time\\\.\[0-9]{2} +(\[0-9]+\\\.\[0-9]{2})" {
+            set Throughput $expect_out(1,string)
+            expect -re $kernel_prompt
+            send_log "Throughput $expect_out(1,string)\n"
+            break
+        }
+        timeout {
+            case_fail $case_num
+            break
+        }
+    }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
 log_file
-
-
-
