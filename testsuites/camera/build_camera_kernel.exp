@@ -111,6 +111,10 @@ while 1 {
             }
         }
 
+        -re "V4L platform devices.*V4L_PLATFORM_DRIVERS.*\\\[.*]" {
+            send "Y\r"
+        }
+
         -re "Blackfin Video Capture Driver.*VIDEO_BLACKFIN_CAPTURE.*\\\[.*]" {
             if { $driver == "ADV7183" } {
                 send "Y\r"
