@@ -1,3 +1,7 @@
+	{"asm/bfin_crc.h",	"CRC_IOC_CALC_CRC",	0x4301},
+	{"asm/bfin_crc.h",	"CRC_IOC_MEMCPY_CRC",	0x4302},
+	{"asm/bfin_crc.h",	"CRC_IOC_VERIFY_VAL",	0x4303},
+	{"asm/bfin_crc.h",	"CRC_IOC_FILL_VAL",	0x4304},
 	{"asm/bfin_sport.h",	"SPORT_IOC_CONFIG",	0x5001},
 	{"asm/bfin_sport.h",	"SPORT_IOC_GET_SYSTEMCLOCK",	0x5002},
 	{"asm/bfin_sport.h",	"SPORT_IOC_SET_BAUDRATE",	0x5003},
