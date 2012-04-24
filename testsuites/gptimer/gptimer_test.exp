@@ -16,6 +16,15 @@ source ../reboot_kernel.exp
 step "Starting test"
 set timeout 8
 
+if { $board_type == "BF609-EZKIT" } {
+    set board_num 609
+    set timer_in 1
+    set timer_out 3
+} elseif { $board_type == "BF537-STAMP" } {
+    set board_num 537
+    set timer_in 0
+    set timer_out 1
+}
 set case_num 0
 
 incr case_num
@@ -34,7 +43,7 @@ while 1 {
 }
 
 expect "root:/bin>"
-send -s "./simple_timer_test -m 5 \r"
+send -s "./simple_timer_test -m 5 -b $board_num\r"
 while 1 {
    expect {
      -re "root:/bin" {
