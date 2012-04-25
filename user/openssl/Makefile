@@ -2,9 +2,11 @@
 #  apps/Makefile
 #
 
+VERSION=openssl-0.9.8k
+
 VPATH= $(TOP)/$(DIR)
 DIR=		apps
-TOP=		../../lib/libssl
+TOP=		../../lib/libssl/$(VERSION)
 #CC=		cc
 INCLUDES=	-I$(TOP) -I$(TOP)
 #CFLAG=		-O

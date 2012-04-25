@@ -2762,7 +2762,7 @@ static int do_multi(int multi)
 		pipe(fd);
 		fflush(stdout);
 		fflush(stderr);
-		if(fork())
+		if(vfork())
 			{
 			close(fd[1]);
 			fds[n]=fd[0];
