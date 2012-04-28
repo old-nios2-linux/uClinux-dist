@@ -239,6 +239,10 @@ while 1 {
             send "N\r"
         }
 
+        -re "$anomalous_option" {
+            send "\r"
+        }
+
         "\\\(*) \\\[*]" {
             sleep .05
             send "\r"
