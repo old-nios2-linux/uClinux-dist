@@ -5,7 +5,6 @@
 #
 
 source ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -19,10 +18,13 @@ if { $argc < 2} {
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
+
+cd $uclinux_path/testsuites
+step "Config musb driver"
+source make_config_musb.exp
 
 # Following make specific configuration for this case.
-
 cd $uclinux_path
 set timeout 300
 spawn make config
@@ -44,81 +46,7 @@ while 1 {
             send "N\r"
         }
 
-        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Support for Host-side USB.*USB.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB device filesystem.*USB_DEVICEFS.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB device class-devices.*USB_DEVICE_CLASS.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB Gadget Support.*USB_GADGET.*\\\[.*]" {
-            send "Y\r"
-        }
-
         -re "USB Peripheral Controller \\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB Gadget Drivers \\\[.*]" {
-            send "M\r"
-        }
-
-        -re "USB testing driver.*USB_TEST.*\\\[.*]" {
-            send "M\r"
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .05
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
-cd $uclinux_path
-set timeout 300
-spawn make config
-while 1 {
-    expect {
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        -re "USB Peripheral Controller \\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -126,22 +54,14 @@ while 1 {
             send "Y\r"
         }
 
-        -re "Driver Mode.*(\[0-9]+). USB Peripheral.*USB_MUSB_PERIPHERAL.*\[cC]hoice\\\[.*]" {
-            send "$expect_out(1,string)\r"
-        }
-
-        -re "Disable DMA.*always use PIO.*MUSB_PIO_ONLY.*\\\[.*]" {
-	    if { $musb_mode == "pio" } {
-                send "Y\r"
-	    } elseif { $musb_mode == "dma" }  {
-                send "N\r"
-	    } else {
+        -re " (\[0-9]+). Inventra.*USB_INVENTRA_DMA.* (\[0-9]+). Disable DMA.*MUSB_PIO_ONLY.*\[cC]hoice.*\\\[.*]" {
+            if { $musb_mode == "dma" } {
+                send "$expect_out(1,string)\r"
+            } elseif { $musb_mode == "pio" } {
+                send "$expect_out(2,string)\r"
+            } else {
                 send "\r"
             }
-        }
-
-        -re "USB Peripheral Controller.*(\[0-9]+). Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\[cC]hoice\\\[.*]" {
-            send "$expect_out(1,string)\r"
         }
 
         -re "USB Gadget Drivers \\\[.*]" {
@@ -195,13 +115,13 @@ while 1 {
         }
 
         eof {
-            puts "End of configuration"
+            send_user "\nEnd of configuration\n"
             break
         }
 
         timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config\n\n"
+            exit
         }
     }
 }
