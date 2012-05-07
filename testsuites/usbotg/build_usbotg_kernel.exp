@@ -12,72 +12,11 @@ set env(EXT2_BLOCKS) "16384"
 
 cd $uclinux_path/testsuites
 step "Make config."
-source  make_default_config.exp
+source make_default_config.exp
 
-# Following make specific configuration for this case.
-cd $uclinux_path
-set timeout 300
-spawn make config
-while 1 {
-    expect {
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
-            send "n\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        # Select PM_RUNTIME to enable USB_SUSPEND
-        -re "Run-time PM core functionality.*PM_RUNTIME.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Platform Glue Layer \\\[.*]" {
-            send "Y\r"
-        }
-
-        # Select USB_GADGET to enable USB_MUSB_HDRC
-        -re "USB Gadget Support \\\(USB_GADGET\\\) \\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB Peripheral Controller \\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB Gadget Drivers \\\[.*]" {
-            send "M\r"
-        }
-
-        "\\\(*) \\\[*]" {
-            sleep .01
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            send_user "End of configuration"
-            break
-        }
-
-        timeout {
-            send_user "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
+cd $uclinux_path/testsuites
+step "Config musb driver"
+source make_config_musb.exp
 
 cd $uclinux_path
 set timeout 300
@@ -105,49 +44,13 @@ while 1 {
             send "Y\r"
         }
 
+        # Select PM_RUNTIME to enable USB_SUSPEND
+        -re "Run-time PM core functionality.*PM_RUNTIME.*\\\[.*]" {
+            send "Y\r"
+        }
+
 #Config USB
-        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Support for Host-side USB.*USB.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        # Select USB_SUSPEND to enable USB_OTG
-        -re "USB runtime power management.*USB_SUSPEND.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "OTG support.*USB_OTG.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB device filesystem.*USB_DEVICEFS.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB device class-devices.*USB_DEVICE_CLASS.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Platform Glue Layer \\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Blackfin.*USB_MUSB_BLACKFIN.*\\\[.*]" {
-            send "Y\r"
-        }
-
         -re "USB Mass Storage support.*USB_STORAGE.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "USB Gadget Support \\\(USB_GADGET\\\) \\\[.*]" {
             send "Y\r"
         }
 
@@ -155,8 +58,12 @@ while 1 {
             send "Y\r"
         }
 
-        -re "USB Peripheral Controller.*(\[0-9]+). Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\[cC]hoice\\\[.*]" {
-            send "$expect_out(1,string)\r"
+        -re "Platform Glue Layer \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re " (\[0-9]+). Inventra.*USB_INVENTRA_DMA.* (\[0-9]+). Disable DMA.*MUSB_PIO_ONLY.*\[cC]hoice.*\\\[.*]" {
+            send "\r"
         }
 
         -re "USB Gadget Drivers \\\[.*]" {
@@ -247,13 +154,13 @@ while 1 {
         }
 
         eof {
-            puts "End of configuration"
+            send_user "\nEnd of configuration\n"
             break
         }
 
         timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config\n\n"
+            exit
         }
     }
 }
