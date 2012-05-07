@@ -38,6 +38,7 @@ static void usage(int status)
 		"  -s <words>  buffer size to run the test\n"
 		"  -c <crc>    expected CRC\n"
 		"  -v <val>    fill val\n"
+		"  -b <val>    set buffer to val before test\n"
 		"  -h          This help.\n"
 	);
 	exit(status);
@@ -46,7 +47,7 @@ static void usage(int status)
 int main(int argc, char *argv[])
 {
 	char *crc_device;
-	char c;
+	char c, c_val;
 	unsigned long *data;
 	struct crc_info info;
 	int crc_fd;
@@ -57,8 +58,9 @@ int main(int argc, char *argv[])
 	int test_mode = 0;
 
 	crc_device = DEFAULT_CRC;
+	c_val = 'C';
 
-	while ((c = getopt(argc, argv, "m:s:c:v:")) != EOF)
+	while ((c = getopt(argc, argv, "m:s:c:v:b:")) != EOF)
 		switch (c) {
 		case 'm':
 			test_mode = atoi(optarg);
@@ -71,6 +73,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			fill_val = strtoul(optarg, NULL, 16);
+			break;
+		case 'b':
+			c_val = *optarg;
 			break;
 		case 'h':
 			usage(0);
@@ -95,8 +100,8 @@ int main(int argc, char *argv[])
 	info.crc_poly = 0x10101010;
 
 	if (test_mode == 0 || test_mode == 1) {
-		printf("Start calculate CRC:\n");
-		memset(info.in_addr, 'C', buf_len);
+		printf("Start calculate CRC: set buffer by '%c'\n", c_val);
+		memset(info.in_addr, c_val, buf_len);
 		ret = ioctl(crc_fd, CRC_IOC_CALC_CRC, &info);
 		if (ret < 0) {
 			printf("crc: ioctl fail with %d\n", ret);
@@ -123,9 +128,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (test_mode == 0 || test_mode == 2) {
-		printf("Start memory copy with CRC:\n");
-		memset(info.in_addr, 'R', buf_len);
-		memset(info.out_addr, 'C', buf_len);
+		printf("Start memory copy with CRC: set buffer by '%c'\n", c_val);
+		memset(info.in_addr, c_val, buf_len);
+		memset(info.out_addr, 'R', buf_len);
 		ret = ioctl(crc_fd, CRC_IOC_MEMCPY_CRC, &info);
 		if (ret < 0) {
 			printf("crc: ioctl fail with %d\n", ret);
