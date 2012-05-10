@@ -4,8 +4,8 @@
 # This is a usb device control trafic test for Gadget Zero on BF548-EZKIT/BF527-EZKIT
 #
 
-source  ../kernel_config.exp
-source  configs/config.exp
+source ../kernel_config.exp
+source configs/config.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
@@ -183,7 +183,7 @@ while 1 {
         -re "(modprobe:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "Gadget Zero.*zero ready.*(high|full) speed config.*source/sink" {
+        -re "Gadget Zero.*zero ready.*(high|full)-speed config.*source/sink" {
             break
         }
         timeout {
@@ -207,6 +207,7 @@ while 1 {
     }
 }
 
+
 set spawn_id $host_spawn_id
 
 sleep 2
@@ -228,7 +229,7 @@ while 1 {
 
 incr case_num
 set timeout 5
-send "lsusb|grep \"Gadget Zero\"|awk '{print \$2\" \"\$4}'\r"
+send "lsusb|grep -i \"Gadget Zero\"|awk '{print \$2\" \"\$4}'\r"
 while 1 {
     expect {
         -re "(\[0-9]+)( )(\[0-9]+)" {
@@ -369,13 +370,14 @@ while 1 {
         }
         -re "#" {
             case_pass $case_num
-                break
+            break
         }
         timeout {
             case_fail $case_num
         }
     }
 }
+
 
 set spawn_id $kermit_spawn_id
 
@@ -427,9 +429,6 @@ if { $fail_count_t9 == 0 && $fail_count_t14 == 0 } {
     case_fail $case_num
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file

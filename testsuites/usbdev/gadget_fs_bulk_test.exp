@@ -4,8 +4,8 @@
 # This is bulk traffic test for Gadget FS on BF548-EZKIT/BF527-EZKIT
 #
 
-source  ../kernel_config.exp
-source  configs/config.exp
+source ../kernel_config.exp
+source configs/config.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
@@ -62,7 +62,7 @@ if [ catch {exec make clean -f Makefile.usb -C src} ] {
 }
 
 if [ catch {exec make -f Makefile.usb -C src} ] {
-    send_user "FAIL: Build testusb\n"
+    send_user "FAIL: Build usb\n"
     send_user "$errorInfo\n"
     case_fail $case_num
 } else {
@@ -225,6 +225,10 @@ set timeout 5
 send "mount -t gadgetfs gadgetfs /dev/gadget\r"
 while 1 {
     expect {
+        -re "nop musb-hdrc: " {
+            case_pass $case_num
+            break
+        }
         -re "mount:|\[eE]rror|\[fF]ail" {
             case_fail $case_num
         }

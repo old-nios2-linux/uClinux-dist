@@ -4,8 +4,8 @@
 # This is control test for Gadget FS on BF548-EZKIT/BF527-EZKIT
 #
 
-source  ../kernel_config.exp
-source  configs/config.exp
+source ../kernel_config.exp
+source configs/config.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
@@ -225,6 +225,10 @@ set timeout 5
 send "mount -t gadgetfs gadgetfs /dev/gadget\r"
 while 1 {
     expect {
+        -re "nop musb-hdrc: " {
+            case_pass $case_num
+            break
+        }
         -re "mount:|\[eE]rror|\[fF]ail" {
             case_fail $case_num
         }
