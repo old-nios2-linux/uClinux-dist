@@ -1,86 +1,49 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
 cd $uclinux_path/testsuites
-
 step "Make config."
-
 source  make_default_config.exp
 
 cd $uclinux_path
 set timeout 300
 spawn make config
-
-while 1 {
-    expect {
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
-            continue
-        }
-
-        "\\\(*) \\\[*]" {
-            send "\r"
-        }
-
-        -re "\[cC]hoice\\\[.*]:" {
-            send "\r"
-        }
-
-        eof {
-            puts "End of configuration"
-            break
-        }
-
-        timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
-        }
-    }
-}
-
-cd $uclinux_path
-set timeout 300
-set baud_rate_done_flag 0
-spawn make config
-
 #puts "Begin the interactive process of configuration"
 while 1 {
     expect {
-
-        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" { 
+        -re "Customize Kernel Settings.*DEFAULTS_KERNEL.*\\\[.*]" {
             send "y\r"
         }
 
-        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {   
+        -re "Customize Application/Library Settings.*DEFAULTS_VENDOR.*\\\[.*]" {
             send "y\r"
         }
 
-       -re "Ethernet .*10 or 100Mbit.*NET_ETHERNET.*\\\[.*]" {
-            send -s "Y\r"
-        }
-
-       -re "ENC28J60 support.*ENC28J60.*\\\[.*]" {
-                send -s "Y\r"
-        }
-
-        -re "netperf.*USER_NETPERF_NETPERF.*\\\[.*]" {
-            send -s "Y\r"
-        }
-
-        -re "netserver.*USER_NETPERF_NETSERVER.*\\\[.*]" {
-            send -s "Y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+        -nocase -re "\\\[\[^\r]*] (\\\(NEW\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
         }
 
+        -re "Microchip devices.*NET_VENDOR_MICROCHIP.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "ENC28J60 support.*ENC28J60.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "netperf.*USER_NETPERF_NETPERF.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "netserver.*USER_NETPERF_NETSERVER.*\\\[.*]" {
+            send "Y\r"
+        }
+
         "\\\(*) \\\[*]" {
-            sleep .05
+            sleep .01
             send "\r"
         }
 
@@ -89,29 +52,24 @@ while 1 {
         }
 
         eof {
-            puts "End of configuration"
+            send_user "\nEnd of configuration\n"
             break
         }
 
         timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break        
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config\n\n"
+            exit
         }
     }
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
-
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
