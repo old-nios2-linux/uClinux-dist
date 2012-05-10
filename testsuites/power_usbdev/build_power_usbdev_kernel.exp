@@ -84,11 +84,11 @@ while 1 {
             send "M\r"
         }
 
-        -re "File-backed Storage Gadget \\\(USB_FILE_STORAGE.*\\\[.*]" {
+        -re "File-backed Storage Gadget.*\\\(USB_FILE_STORAGE\\\).*\\\[.*]" {
             send "M\r"
         }
 
-        -re "File-backed Storage Gadget.*USB_FILE_STORAGE_TEST.*\\\[.*]" {
+        -re "File-backed Storage Gadget testing version.*USB_FILE_STORAGE_TEST.*\\\[.*]" {
             send "Y\r"
         }
 
