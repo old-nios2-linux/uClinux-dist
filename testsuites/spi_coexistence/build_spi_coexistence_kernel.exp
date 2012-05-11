@@ -1,7 +1,6 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -14,8 +13,6 @@ if [ catch {exec sed -i "/modalias.*mmc_spi/,/chip_select/ s/4/1/" $board_file} 
     send_user "$errorInfo\n"
     exit
 }
-
-exec git diff $board_file > spi_coexistence_diff_log
 
 set env(EXT2_BLOCKS) "10240"
 
