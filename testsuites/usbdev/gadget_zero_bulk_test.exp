@@ -88,7 +88,7 @@ while 1 {
             break
         }
         -re "#" {
-            send "sudo insmod ./configs/usbtest.ko\r"
+            send "sudo insmod $uclinux_path/download/usbtest.ko\r"
             while 1 {
                 expect {
                     -re "insmod:|\[eE]rror|\[fF]ail" {
@@ -456,7 +456,7 @@ for {set count 1} {$cur_time <= $end_time} {incr count} {
 
 incr case_num
 set timeout 5
-send "sudo rmmod ./configs/usbtest.ko\r"
+send "sudo rmmod usbtest\r"
 while 1 {
     expect {
         -re "rmmod:|\[eE]rror|\[fF]ail" {
