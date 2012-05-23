@@ -4,17 +4,27 @@ LD := bfin-elf-ld
 # we have to clobber a bunch of flags as they are normally geared towards
 # running under linux, not a bare metal environment like core b
 PWD:= $(shell pwd)
-KERNELDIR := ${PWD}/../../../../linux-2.6.x
-ICC_INCLUDE := ${PWD}/../include
+KERNEL_DIR ?= ${PWD}/../../../../linux-2.6.x
+ICC_INCLUDE ?= ${PWD}/../include
+ICC_CFLAGS ?= -I${KERNEL_DIR}/arch/blackfin/include \
+	-I${KERNEL_DIR}/include \
+	-I${KERNEL_DIR}/arch/blackfin/mach-$(ICC_MACHINE)/include \
+	-I${KERNEL_DIR}/arch/blackfin/include/generated \
+	-I${KERNEL_DIR}/drivers/staging/icc/include
 
-CFLAGS  := -mcpu=bf561 -mlong-calls -mmulticore -mcoreb -L${ICC_INCLUDE} -I${ICC_INCLUDE} -I${KERNELDIR}/include -I${KERNELDIR}/arch/blackfin/include -I${KERNELDIR}/arch/blackfin/mach-bf561/include -I${KERNELDIR}/arch/blackfin/include/generated  -I${KERNELDIR}/drivers/staging/icc/include -DCONFIG_BF561 -D__KERNEL__
+CPU_TYPE ?= CONFIG_BF609
+
+CFLAGS  = -I${ICC_INCLUDE} $(ICC_CFLAGS) -D$(CPU_TYPE) -D__KERNEL__ -mlong-calls
 LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 all: icc
 
-ICC_OBJS = coreb_start.o test.o corebboot.o vsprintf.o mempool.o protocol.o
-icc: $(ICC_OBJS)
-	$(CC) -Wl,--verbose -Wl,-M -T coreb.lds -I${KERNELINCDIR} $(LDFLAGS) $(ICC_OBJS) -o $@ > $@.map
+coreb.lds: coreb.lds.S
+	$(CC) -E -ansi $(CFLAGS) -D__ASSEMBLY__ -P $^ -o $@
+
+ICC_OBJS = coreb_start.o test.o corebboot.o vsprintf.o mempool.o protocol.o platform.o
+icc: $(ICC_OBJS) coreb.lds
+	$(CC) -Wl,--verbose -Wl,-M -T coreb.lds -Wl,--nostdlib $(CFLAGS) $(ICC_OBJS) -o $@ > $@.map
 	bfin-elf-objdump -x -D $@ > $@.dump
 
 clean:

@@ -161,7 +161,7 @@ struct gen_pool *gen_pool_create(int min_alloc_order)
 	return pool;
 }
 
-int gen_pool_add(struct gen_pool *pool, unsigned long addr, size_t size)
+int gen_pool_add(struct gen_pool *pool, unsigned long addr, unsigned long size)
 {
 	struct gen_pool_chunk *chunk;
 	int nbits = size >> pool->min_alloc_order;
@@ -205,7 +205,7 @@ void gen_pool_destroy(struct gen_pool *pool)
 	return;
 }
 
-unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
+unsigned long gen_pool_alloc(struct gen_pool *pool, unsigned long size)
 {
 	int _chunk;
 	struct gen_pool_chunk *chunk;
@@ -256,7 +256,7 @@ unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
  *
  * Free previously allocated special memory back to the specified pool.
  */
-void gen_pool_free(struct gen_pool *pool, unsigned long addr, size_t size)
+void gen_pool_free(struct gen_pool *pool, unsigned long addr, unsigned long size)
 {
 	unsigned long _chunk;
 	struct gen_pool_chunk *chunk;
@@ -278,7 +278,7 @@ void gen_pool_free(struct gen_pool *pool, unsigned long addr, size_t size)
 	}
 }
 
-int gen_pool_check(struct gen_pool *pool, unsigned long addr, size_t size)
+int gen_pool_check(struct gen_pool *pool, unsigned long addr, unsigned long size)
 {
 	unsigned long _chunk;
 	struct gen_pool_chunk *chunk;

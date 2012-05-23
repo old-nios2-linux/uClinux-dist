@@ -147,22 +147,17 @@ ENTRY(_coreb_start)
 
 	[--sp] = reti;
 
-	p0.l = lo(WDOGB_CTL);
-	p0.h = hi(WDOGB_CTL);
+#ifdef CONIG_BF561
+	p0.l = LO(WDOGB_CTL);
+	p0.h = HI(WDOGB_CTL);
 	r0 = 0xAD6(z);
 	w[p0] = r0;	/* Clear the watchdog. */
 	ssync;
+#endif
 
 	/*
 	 * switch to IDLE stack.
 	 */
-#if 0	 
-	p0.l = LO(0xfeb1f000);       /* 0x1000 bytes stack size at the end of L2 */
-	p0.h = HI(0xfeb1f000);
-	sp = p0;
-	usp = sp;
-	fp = sp;
-#endif
 	call _secondary_start_kernel;
 .L_exit:
 	jump.s	.L_exit;
@@ -217,11 +212,6 @@ ENTRY(_evt_evt2)
 	[--sp] = R0;        /*orig_r0*/                                     
 	[--sp] = (R7:0,P5:0);                                               
 
-	P0.H = HI(0xFEB1FFFC);
-	P0.L = LO(0xFEB1FFFC);
-	R0 = 22;
-	[P0] = R0;
-
 	(R7:0,P5:0) = [SP++];
 	sp += 8;        /* Skip orig_r0/orig_p0 */
 	csync;
@@ -236,15 +226,11 @@ ENTRY(_evt_evt3)
 	[--sp] = R0;        /*orig_r0*/                                     
 	[--sp] = (R7:0,P5:0);                                               
 
-	P0.H = HI(0xFEB1FFFC);
-	P0.L = LO(0xFEB1FFFC);
-
 	r0 = SEQSTAT;
 	r0 <<= 26;
 	r0 >>= 26;
 	r1 = retx;
 	call _dump_execption;
-	[P0] = r0;
 
 	(R7:0,P5:0) = [SP++];
 	sp += 8;        /* Skip orig_r0/orig_p0 */

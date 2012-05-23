@@ -8,25 +8,24 @@
  */
 
 #include <generated/autoconf.h>
-
-#include <mach/defBF561.h>
-
+#include <linux/linkage.h>
 #include <linux/types.h>
-#include <mach/irq.h>
-#include <mach/bf561.h>
-#include <mach/cdefBF561.h>
-#include <icc.h>
-#include <blackfin.h>
+
+#include <asm/icc.h>
+
 #include <asm/cplb.h>
 #include <asm/irqflags.h>
 
-#include <stdarg.h>
 #include <asm/blackfin.h>
 
 #include <protocol.h>
 #include <debug.h>
 
 extern uint16_t pending;
+extern struct coreb_icc_node coreb_info;
+
+
+void coreb_msg(char *fmt, ...);
 
 static inline void coreb_idle(void)
 {
@@ -184,7 +183,7 @@ typedef enum irqreturn irqreturn_t;
 extern unsigned long mcc_arg;
 extern int iccq_should_stop;
 
-sm_uint16_t intcnt;
+uint16_t intcnt;
 
 #define BFIN_IPI_RESCHEDULE   0
 #define BFIN_IPI_CALL_FUNC    1
@@ -196,14 +195,14 @@ sm_uint16_t intcnt;
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 
 
-void udelay(sm_uint32_t count)
+void udelay(uint32_t count)
 {
 	while(count--);
 }
 
-void delay(sm_uint32_t count)
+void delay(uint32_t count)
 {
-	sm_uint32_t ncount = 30 * count;
+	uint32_t ncount = 30 * count;
 	while(ncount--)
 		udelay(10000);
 }
@@ -250,22 +249,6 @@ size_t strlen(const char *s)
 }
 
 
-void platform_send_ipi_cpu(unsigned int cpu, int irq)
-{
-	int offset = (irq == IRQ_SUPPLE_0) ? 6 : 8;
-	SSYNC();
-	bfin_write_SICB_SYSCR(bfin_read_SICB_SYSCR() | (1 << (offset + cpu)));
-	SSYNC();
-}
-
-void platform_clear_ipi(unsigned int cpu, int irq)
-{
-	int offset = (irq == IRQ_SUPPLE_0) ? 10 : 12;
-	SSYNC();
-	bfin_write_SICB_SYSCR(bfin_read_SICB_SYSCR() | (1 << (offset + cpu)));
-	SSYNC();
-}
-
 void bfin_coretmr_init(void)
 {
 	/* power up the timer, but don't enable it just yet */
@@ -300,7 +283,7 @@ void coreb_msg(char *fmt, ...)
 	char buf[MSG_LINE] = "COREB: ";
 	struct sm_message_queue *queue = (struct sm_message_queue *)MSGQ_START_ADDR;
 	struct sm_msg *msg = &queue->messages[0];
-	sm_atomic_t sent, received;
+	uint16_t sent, received;
 	sent = sm_atomic_read(&queue->sent);
 	received = sm_atomic_read(&queue->received);
 	void *p = (void *)DEBUG_MSG_BUF_ADDR + (sent % SM_MSGQ_LEN) * MSG_LINE;
@@ -323,7 +306,7 @@ void coreb_msg(char *fmt, ...)
 	sent++;
 	sm_atomic_write(&queue->sent, sent);
 	SSYNC();
-	platform_send_ipi_cpu(0, IRQ_SUPPLE_0);
+	platform_send_ipi_cpu(0, 49);
 	delay(1);
 }
 #endif
@@ -334,7 +317,7 @@ void dump_execption(unsigned int errno, unsigned int addr)
 	if (errno == 0x26) {
 		unsigned long fault_addr = bfin_read_DCPLB_FAULT_ADDR();
 		_disable_dcplb();
-		fault_addr &= 0x400000;
+		fault_addr &= ~(0x400000 - 1);
 		bfin_write32(DCPLB_ADDR0 + 4, fault_addr);
 		bfin_write32(DCPLB_DATA0 + 4, (CPLB_COMMON | PAGE_SIZE_4MB));
 		_enable_dcplb();
@@ -361,6 +344,7 @@ void init_exception_vectors(void)
 
 void platform_secondary_init(void)
 {
+#ifdef CONFIG_BF561
         bfin_write_SICB_IMASK0(bfin_read_SIC_IMASK0());
         bfin_write_SICB_IMASK1(bfin_read_SIC_IMASK1());
         SSYNC();
@@ -377,6 +361,7 @@ void platform_secondary_init(void)
         bfin_write_SICB_IWR0(IWR_DISABLE_ALL);
         bfin_write_SICB_IWR1(0xC0000000);
         SSYNC();
+#endif
 }
 
 
@@ -388,7 +373,7 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 	unsigned int cpu = blackfin_core_id();
 	++intcnt;
 
-	platform_clear_ipi(cpu, IRQ_SUPPLE_0);
+	platform_clear_ipi(cpu, 0);
 	pending = iccqueue_getpending(cpu);
 	sm_handle_control_message(cpu);
 	return IRQ_HANDLED;
@@ -396,16 +381,16 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 
 irqreturn_t ipi_handler_int1(int irq, void *dev_instance)
 {
-	sm_uint32_t cpu = blackfin_core_id();
+	uint32_t cpu = blackfin_core_id();
 
-	platform_clear_ipi(cpu, IRQ_SUPPLE_1);
+	platform_clear_ipi(cpu, 1);
 	pending = iccqueue_getpending(cpu);
 	return IRQ_HANDLED;
 }
 
 irqreturn_t timer_handle(int irq, void *dev_instance)
 {
-	sm_uint32_t cpu = blackfin_core_id();
+	uint32_t cpu = blackfin_core_id();
 
 	pending = iccqueue_getpending(cpu);
 	return IRQ_HANDLED;
