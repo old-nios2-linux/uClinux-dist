@@ -152,14 +152,14 @@ HAVE_XPM_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_XPM_SUPPORT))
 ####################################################################
 HAVE_JPEG_SUPPORT        = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_JPEG_SUPPORT))
 INCJPEG                  = .
-LIBJPEG                  = /usr/lib/libjpeg.so
+LIBJPEG                  = $(STAGEDIR)/usr/lib/libjpeg.so
 
 ####################################################################
 # PNG support via libpng and libz
 ####################################################################
 HAVE_PNG_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_PNG_SUPPORT))
 INCPNG                   = .
-LIBPNG                   = /usr/lib/libpng.a
+LIBPNG                   = $(STAGEDIR)/usr/lib/libpng.a
 LIBZ                     = -lz
 
 ####################################################################
@@ -167,7 +167,7 @@ LIBZ                     = -lz
 ####################################################################
 HAVE_TIFF_SUPPORT        = N
 INCTIFF                  = .
-LIBTIFF                  = /usr/lib/libtiff.a
+LIBTIFF                  = $(STAGEDIR)/usr/lib/libtiff.a
 
 ####################################################################
 # native .fnt loadable font support
@@ -180,15 +180,15 @@ FNT_FONT_DIR             = "fonts/bdf"
 # T1 adobe type1 font support thru t1lib
 ####################################################################
 HAVE_T1LIB_SUPPORT       = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_T1LIB_SUPPORT))
-INCT1LIB                 = /usr/include
-LIBT1LIB                 = /usr/local/lib/libt1.a
+INCT1LIB                 = $(STAGEDIR)/usr/include
+LIBT1LIB                 = $(STAGEDIR)/usr/local/lib/libt1.a
 
 ####################################################################
 # TrueType font support thru FreeType 1.x
 ####################################################################
 HAVE_FREETYPE_SUPPORT    = N
-INCFTLIB                 = /usr/include/freetype1
-LIBFTLIB                 = /usr/lib/libttf.so
+INCFTLIB                 = $(STAGEDIR)/usr/include/freetype1
+LIBFTLIB                 = $(STAGEDIR)/usr/lib/libttf.so
 FREETYPE_FONT_DIR        = "/usr/fonts/truetype"
 
 ####################################################################
