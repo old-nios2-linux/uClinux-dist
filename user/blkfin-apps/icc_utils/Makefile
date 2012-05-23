@@ -1,15 +1,15 @@
 ICC_TOP_DIR := $(shell pwd)
-all:    libmcapi icc  icc_loader  icc_example
+all:    icc icc_loader libmcapi icc_example
 icc_example: icc
 
 libmcapi:
-	$(MAKE) -C libmcapi_coreb
+	$(MAKE) -C libmcapi_coreb KERNEL_DIR=$(KERNEL_DIR) ICC_MACHINE=$(ICC_MACHINE) ICC_BUILDROOT=$(ICC_BUILDROOT)
 
 icc: icc_core
-	$(MAKE) -C  icc_core
+	$(MAKE) -C  icc_core KERNEL_DIR=$(KERNEL_DIR) ICC_MACHINE=$(ICC_MACHINE)
 
 icc_loader: 
-	$(MAKE) -C  $@ 
+	$(MAKE) -C  $@ KERNEL_DIR=$(KERNEL_DIR) ICC_MACHINE=$(ICC_MACHINE)
 
 icc_example: libmcapi
 	$(MAKE) -C example/task
