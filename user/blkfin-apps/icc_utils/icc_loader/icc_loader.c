@@ -98,6 +98,10 @@ struct {
 		.start = (void*)0xFEB00000,
 		.end   = (void*)0xFEB00000 + 0x20000,
 		.index = -1,
+	},{
+		.start = (void*)0xc8080000,
+		.end   = (void*)0xc8080000 + 0x40000,
+		.index = -1,
 	},{	/* SDRAM - just assume from 0 to top of ASYNC bank is OK */
 		.start = (void*)0x00000000,
 		.end   = (void*)0x30000000,
@@ -164,7 +168,7 @@ static int put_region(void *dst, size_t dst_size, const void *src, size_t src_si
 			/* should not load into async memory */
 			ret = 1;
 			MEM_ERR("It doesn't really make sense to try and load into async");
-		} else if (ldst >= total_mem() && ldst < 0xef000000) {
+		} else if (ldst >= total_mem() && ldst < 0x40000000) {
 			/* should not load into unavailable memory */
 			ret = 1;
 			MEM_ERR("The max mem available on your system seems to be 0x%08lx,\n"
