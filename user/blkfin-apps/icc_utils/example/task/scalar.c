@@ -4,11 +4,11 @@
 
 #define LOCAL_SESSION 5
 
-sm_uint32_t __icc_task_data session_index;
+uint32_t __icc_task_data session_index;
 void  __icc_task icc_task_init(int argc, char *argv[])
 {
 	struct sm_session *session;
-	sm_uint32_t scalar0 = 0, scalar1 = 0, size = 0;
+	uint32_t scalar0 = 0, scalar1 = 0, size = 0;
 	int ret;
 	int src_ep, src_cpu;
 	session_index = sm_create_session(LOCAL_SESSION, SP_SCALAR);

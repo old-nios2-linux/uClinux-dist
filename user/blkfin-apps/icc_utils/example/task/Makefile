@@ -17,7 +17,7 @@ CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I${ICC_INCLUDE} -I${KER
 endif
 
 ifeq ($(ICC_MACHINE),bf609)
-TASK_LOAD_BASE := 0x3c00000
+TASK_LOAD_BASE := 0x7c00000
 CFLAGS = -I$(ICC_INCLUDE) -I$(MCAPI_INCLUDE) -I$(MCAPI_TEST_INCLUDE) -I$(KERNEL_DIR)/include \
 		-I$(KERNEL_DIR)/arch/blackfin/include \
 		-I$(KERNEL_DIR)/arch/blackfin/include/generated \
