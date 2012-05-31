@@ -164,6 +164,7 @@ void dump_stack(void)
 }
 
 extern void evt_evt7(void );
+extern void evt_evt11(void );
 extern void evt_evt6(void );
 extern void evt_evt2(void );
 extern void evt_evt3(void );
@@ -318,9 +319,18 @@ void dump_execption(unsigned int errno, unsigned int addr)
 		unsigned long fault_addr = bfin_read_DCPLB_FAULT_ADDR();
 		_disable_dcplb();
 		fault_addr &= ~(0x400000 - 1);
-		bfin_write32(DCPLB_ADDR0 + 4, fault_addr);
-		bfin_write32(DCPLB_DATA0 + 4, (CPLB_COMMON | PAGE_SIZE_4MB));
+		bfin_write32(DCPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
+		bfin_write32(DCPLB_DATA1 + 4 * ((fault_addr/ 0x1000000) % 15), (CPLB_COMMON | PAGE_SIZE_4MB));
 		_enable_dcplb();
+		coreb_msg("fault addr %x dcplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
+	} else if (errno == 0x2c) {
+		unsigned long fault_addr = bfin_read_ICPLB_FAULT_ADDR();
+		_disable_icplb();
+		fault_addr &= ~(0x400000 - 1);
+		bfin_write32(ICPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
+		bfin_write32(ICPLB_DATA1 + 4 * ((fault_addr/ 0x1000000) % 15), ((SDRAM_IGENERIC & ~CPLB_L1_CHBL) | PAGE_SIZE_4MB));
+		_enable_icplb();
+		coreb_msg("fault addr %x icplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
 	} else {
 		dump_stack();
 	}
@@ -334,6 +344,7 @@ void init_exception_vectors(void)
          */
 	/* ipi evt */
 	bfin_write_EVT7(evt_evt7);
+	bfin_write_EVT11(evt_evt11);
 	bfin_write_EVT6(evt_evt6);
 	bfin_write_EVT2(evt_evt2);
 	bfin_write_EVT3(evt_evt3);
@@ -410,8 +421,11 @@ static void setup_secondary(unsigned int cpu)
 
 	/* Enable interrupt levels IVG7. IARs have been already
 	 * programmed by the boot CPU.  */
-//	bfin_irq_flags = IMASK_IVG7 | IMASK_IVGHW;
+#ifdef CONFIG_BF561
 	bfin_irq_flags = IMASK_IVG7| IMASK_IVGTMR;
+#else
+	bfin_irq_flags = IMASK_IVG11| IMASK_IVGTMR;
+#endif
 	bfin_sti(bfin_irq_flags);
 	SSYNC();
 }

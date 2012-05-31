@@ -206,6 +206,35 @@ ENTRY(_evt_evt7)
 	rti;
 ENDPROC(_evt_evt7)
 
+ENTRY(_evt_evt11)
+	[--sp] = SYSCFG;                                                    
+	[--sp] = P0;        /*orig_p0*/                                     
+	[--sp] = R0;        /*orig_r0*/                                     
+	[--sp] = (R7:0,P5:0);                                               
+	call _ipi_handler_int0;
+	p0.l = _sm_task1_status;
+	p0.l = _sm_task1_status;
+	r0 = [p0];
+	cc = r0 == SM_TASK_INIT;
+	if cc jump .L_reload_task1;
+	(R7:0,P5:0) = [SP++];
+	sp += 8;        /* Skip orig_r0/orig_p0 */
+	csync;
+	SYSCFG = [sp++];
+	csync;
+	rti;
+.L_reload_task1:
+	/* Initialize stack pointer */
+	sp.l = lo(INITIAL_STACK);
+	sp.h = hi(INITIAL_STACK);
+	fp = sp;
+	usp = sp;
+	p0.l = _coreb_icc_dispatcher;
+	p0.h = _coreb_icc_dispatcher;
+	reti = p0;
+	rti;
+ENDPROC(_evt_evt11)
+
 ENTRY(_evt_evt2)
 	[--sp] = SYSCFG;                                                    
 	[--sp] = P0;        /*orig_p0*/                                     

@@ -1152,8 +1152,7 @@ int icc_wait(int session_mask)
 	pending = iccqueue_getpending(cpu);
 	if (!pending) {
 		bfin_coretmr_set_next_event(4000000000);
-//		coreb_idle();
-		coreb_msg("idle\n");
+		coreb_idle();
 		return 0;
 	}
 	avail = msg_handle();
