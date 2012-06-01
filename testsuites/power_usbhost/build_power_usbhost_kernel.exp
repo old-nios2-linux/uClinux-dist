@@ -93,9 +93,14 @@ while 1 {
         }
 
         -re "USB Gadget Drivers \\\[.*]" {
-            send "M\r"
+            send "Y\r"
         }
 
+        -re "USB Gadget Drivers.* (\[0-9]+). Gadget Zero.*USB_ZERO.*\[cC]hoice\\\[.*]" {
+            send "$expect_out(1,string)\r"
+        }
+
+# File system config
         -re "Second extended fs support.*EXT2_FS.*\\\[.*]" {
             send "Y\r"
         }
@@ -116,6 +121,7 @@ while 1 {
             send "iso8859-1\r"
         }
 
+# Native language support
         -re "Default NLS Option \\\(NLS_DEFAULT\\\).*\\\[.*]" {
             send "iso8859-1\r"
         }
