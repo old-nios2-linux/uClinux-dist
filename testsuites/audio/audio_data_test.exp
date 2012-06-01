@@ -263,6 +263,8 @@ rec_at_pc 1000  255
 rec_at_pc 2000  255
 rec_at_pc 3000  255
 
+sleep 5
+
 rec_from_pc 100   255
 rec_from_pc 250   255
 rec_from_pc 440   255
