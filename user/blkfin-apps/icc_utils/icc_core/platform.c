@@ -32,16 +32,12 @@ void platform_send_ipi_cpu(unsigned int cpu, int irq)
 
 void platform_unmask_ipi(unsigned int cpu, int irq)
 {
-	unsigned int sid = SIC_SYSIRQ(irq);
-
-	bfin_sec_unmask_irq(sid);
+	bfin_sec_unmask_irq(irq);
 }
 
 void platform_clear_ipi(unsigned int cpu, int irq)
 {
-	unsigned int sid = SIC_SYSIRQ(irq);
-
-	bfin_sec_mask_ack_irq(cpu, sid);
+	bfin_sec_mask_ack_irq(cpu, irq);
 }
 #endif
 
