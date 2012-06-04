@@ -82,6 +82,43 @@ while 1 {
             send "\r"
         }
 
+# enable ATAPI hard disk
+        -re "Serial ATA \\\(prod\\\) and Parallel ATA \\\(experimental\\\) drivers.*ATA.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Blackfin 54x ATAPI support.*PATA_BF54X.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SCSI target support.*SCSI_TGT.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "SCSI disk support.*BLK_DEV_SD.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SCSI CDROM support.*BLK_DEV_SR.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Second extended fs support.*EXT2_FS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "MSDOS fs support.*MSDOS_FS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "VFAT \\\(Windows-95\\\) fs support.*VFAT_FS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Codepage 437 \\\(United States, Canada\\\).*NLS_CODEPAGE_437.*\\\[.*]" {
+            send "Y\r"
+        }
+
 #Virtual terminal & frame buffer
 #Set SW5.1-SW5.3 to off, or no display on screen.
         -re "I2C support \\\(I2C\\\) \\\[.*]" {
@@ -120,6 +157,18 @@ while 1 {
         }
 
         -re "FFmpeg and FFserver.*USER_FFMPEG_APPS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "fdisk.*USER_FDISK_FDISK.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "fdisk.*USER_BUSYBOX_FDISK.*\\\[.*]" {
+            send "N\r"
+        }
+
+        -re "mke2fs.*USER_E2FSPROGS_MISC_MKE2FS.*\\\[.*]" {
             send "Y\r"
         }
 
