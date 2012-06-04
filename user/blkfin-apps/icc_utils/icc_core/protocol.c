@@ -159,7 +159,7 @@ static int sm_send_message_internal(struct sm_msg *msg, int dstcpu, int srccpu)
 	coreb_msg("%s() dst %d src %d %x\n", __func__, dstcpu, srccpu, msg->type);
 	ret = sm_message_enqueue(dstcpu, srccpu, msg);
 	if (!ret)
-		platform_send_ipi_cpu(dstcpu, 49);
+		platform_send_ipi_cpu(dstcpu, COREB_ICC_LOW_SEND);
 	return ret;
 }
 

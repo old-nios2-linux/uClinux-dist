@@ -307,7 +307,7 @@ void coreb_msg(char *fmt, ...)
 	sent++;
 	sm_atomic_write(&queue->sent, sent);
 	SSYNC();
-	platform_send_ipi_cpu(0, 49);
+	platform_send_ipi_cpu(0, COREB_ICC_LOW_SEND);
 	delay(1);
 }
 #endif
@@ -384,9 +384,10 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 	unsigned int cpu = blackfin_core_id();
 	++intcnt;
 
-	platform_clear_ipi(cpu, 0);
+	platform_clear_ipi(cpu, COREB_ICC_LOW_RECV);
 	pending = iccqueue_getpending(cpu);
 	sm_handle_control_message(cpu);
+	platform_unmask_ipi(cpu, COREB_ICC_LOW_RECV);
 	return IRQ_HANDLED;
 }
 
@@ -394,8 +395,9 @@ irqreturn_t ipi_handler_int1(int irq, void *dev_instance)
 {
 	uint32_t cpu = blackfin_core_id();
 
-	platform_clear_ipi(cpu, 1);
+	platform_clear_ipi(cpu, COREB_ICC_HIGH_RECV);
 	pending = iccqueue_getpending(cpu);
+	platform_unmask_ipi(cpu, COREB_ICC_HIGH_RECV);
 	return IRQ_HANDLED;
 }
 

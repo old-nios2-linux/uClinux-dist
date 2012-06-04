@@ -30,7 +30,7 @@ void platform_send_ipi_cpu(unsigned int cpu, int irq)
 	bfin_sec_raise_irq(sid);
 }
 
-void platform_ack_ipi(unsigned int cpu, int irq)
+void platform_unmask_ipi(unsigned int cpu, int irq)
 {
 	unsigned int sid = SIC_SYSIRQ(irq);
 
@@ -55,7 +55,7 @@ void platform_send_ipi_cpu(unsigned int cpu, int irq)
 	SSYNC();
 }
 
-void platform_ack_ipi(unsigned int cpu, int irq)
+void platform_unmask_ipi(unsigned int cpu, int irq)
 {
 }
 
