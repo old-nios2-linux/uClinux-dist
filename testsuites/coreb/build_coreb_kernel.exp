@@ -34,20 +34,12 @@ while 1 {
             send "y\r"
         }
 
-        -re "Enable Core B support.*BF561_COREB.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "Enable Core B reset support.*BF561_COREB_RESET.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -re "BF561 Core B support tools.*USER_BF561_COREBLD.*\\\[.*]" {
-            send "y\r"
-        }
-
-        -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {
+        -nocase -re "\\\[\[^\r]*] (\\\(new\\\) )?(\[ymn])|choice\\\[.*]: \[0-9]+\r" {
             continue
+        }
+
+        -re "Enable Core B loader.*BFIN_COREB.*\\\[.*]" {
+            send "y\r"
         }
 
         "\\\(*) \\\[*]" {
@@ -60,28 +52,24 @@ while 1 {
         }
 
         eof {
-            puts "End of configuration"
+            send_user "\n\nEnd of configuration\n\n"
             break
         }
 
         timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config\n\n"
+            exit
         }
     }
 }
 
 cd $uclinux_path/testsuites
-
 step "Make"
-
-source  make_kernel.exp
+source make_kernel.exp
 
 cd $uclinux_path/testsuites
-
 step "Copy linux"
-
-source   copy_image.exp
+source copy_image.exp
 
 send_user "Ending $argv0\n"
 log_file
