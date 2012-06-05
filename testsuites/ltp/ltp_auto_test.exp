@@ -1770,7 +1770,7 @@ set result_matrix {
        { lstat03_64    	     {lstat03_64}                     	 notrun		UCLINUX }
        { mallopt01     	     {mallopt01}                     	 notrun		UCLINUX }
        { mbind01     	     {mbind01}                     	 notrun		UCLINUX }
-       { mem03     	     {mem03}                     	 notrun		UCLINUX }
+       { mem03     	     {mem03}                     	 notrun		NA }
        { memcmp01     	     {memcmp01}                     	 notrun		UCLINUX }
        { memcpy01     	     {memcpy01}                     	 notrun		UCLINUX }
        { memset01     	     {memset01}                     	 notrun		UCLINUX }
