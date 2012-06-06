@@ -28,8 +28,6 @@
 
 #include <icc.h>
 
-static bool force = false;
-
 #ifndef ARRAY_SIZE
 # define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
@@ -159,25 +157,23 @@ static int put_region(void *dst, size_t dst_size, const void *src, size_t src_si
 		" (re-run with --force to skip this check)\n\n", dst, ## args)
 
 	ret = 0;
-	if (!force) {
-		if (ldst >= 0xff800000) {
-			/* should not load into Core A L1 */
-			ret = 1;
-			MEM_ERR("This seems to be Core A L1 memory");
-		} else if (ldst >= ASYNC_BASE && ldst < ASYNC_BASE + ASYNC_LEN) {
-			/* should not load into async memory */
-			ret = 1;
-			MEM_ERR("It doesn't really make sense to try and load into async");
-		} else if (ldst >= total_mem() && ldst < 0x40000000) {
-			/* should not load into unavailable memory */
-			ret = 1;
-			MEM_ERR("The max mem available on your system seems to be 0x%08lx,\n"
-			        "but the destination is above that", total_mem());
-		} else if (ldst <= 0x4000) {
-			/* should not load into start of memory */
-			ret = 1;
-			MEM_ERR("The start of memory is reserved (NULL/fixed_code/kernel)");
-		}
+	if (ldst >= 0xff800000) {
+		/* should not load into Core A L1 */
+		ret = 1;
+		MEM_ERR("This seems to be Core A L1 memory");
+	} else if (ldst >= ASYNC_BASE && ldst < ASYNC_BASE + ASYNC_LEN) {
+		/* should not load into async memory */
+		ret = 1;
+		MEM_ERR("It doesn't really make sense to try and load into async");
+	} else if (ldst <= total_mem()) {
+		/* should not load into unavailable memory */
+		ret = 1;
+		MEM_ERR("The max mem available on your system seems to be 0x%08lx,\n"
+		        "but the destination is above that", total_mem());
+	} else if (ldst <= 0x4000) {
+		/* should not load into start of memory */
+		ret = 1;
+		MEM_ERR("The start of memory is reserved (NULL/fixed_code/kernel)");
 	}
 
 	if (ret == 0) {
@@ -395,7 +391,6 @@ static struct option const long_opts[] = {
 	{"load",	no_argument, NULL, 'l'},
 	{"exec",	no_argument, NULL, 'e'},
 	{"kill",	no_argument, NULL, 'k'},
-	{"force",	no_argument, NULL, 'f'},
 	{"help",	no_argument, NULL, 'h'},
 	{"version",	no_argument, NULL, 'V'},
 	{NULL,		no_argument, NULL, 0x0}
@@ -414,6 +409,11 @@ static void show_usage(int exit_status)
 		"\nUsage: icc_loader [options] \n"
 		"\n"
 		"Options:\n"
+			"-l load icc core\n"
+			"-e exec icc task\n"
+			"-k kill icc task\n"
+			"-h help\n"
+			"-V version\n"
 	);
 	exit(exit_status);
 }
@@ -429,9 +429,6 @@ int main(int argc, char *argv[])
 
 	while ((i=getopt_long(argc, argv, GETOPT_FLAGS, long_opts, NULL)) != -1) {
 		switch (i) {
-		case 'f':
-			force = true;
-			break;
 		case 'l':
 			buf = map_elf(optarg, &stat);
 			if (!buf)
