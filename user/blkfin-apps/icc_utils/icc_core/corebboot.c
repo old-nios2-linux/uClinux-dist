@@ -25,8 +25,6 @@ extern uint16_t pending;
 extern struct coreb_icc_node coreb_info;
 
 
-void coreb_msg(char *fmt, ...);
-
 static inline void coreb_idle(void)
 {
 	__asm__ __volatile__( \
@@ -308,7 +306,6 @@ void coreb_msg(char *fmt, ...)
 	sm_atomic_write(&queue->sent, sent);
 	SSYNC();
 	platform_send_ipi_cpu(0, COREB_ICC_LOW_SEND);
-	delay(1);
 }
 #endif
 
