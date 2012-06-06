@@ -33,7 +33,7 @@ ASFLAGS  =
 INSTALL_TASK_SRC := $(notdir $(wildcard mcapi_*.c))
 INSTALL_TASK := $(patsubst %.c,%,$(INSTALL_TASK_SRC))
 
-all: task1 task2 scalar $(INSTALL_TASK)
+all: task1 task2 scalar icc_latency $(INSTALL_TASK)
 
 coreb_task.lds: coreb_task.lds.S
 	$(CC) -E -ansi $(CFLAGS) -D__ASSEMBLY__ -P $^ -o $@
@@ -49,6 +49,9 @@ task2: task2.o $(ICC_CORE) coreb_task.lds
 
 scalar: scalar.o $(ICC_CORE) coreb_task.lds
 	$(LD) $(LDFLAGS) -o scalar -T coreb_task.lds --just-symbol $(ICC_CORE) scalar.o -Ttext $(TASK_LOAD_BASE)
+
+icc_latency: icc_latency.o $(ICC_CORE) coreb_task.lds
+	$(LD) $(LDFLAGS) -o icc_latency -T coreb_task.lds --just-symbol $(ICC_CORE) icc_latency.o -Ttext $(TASK_LOAD_BASE)
 
 clean:
 	rm -rf *.o task1 task2 scalar $(INSTALL_TASK) 

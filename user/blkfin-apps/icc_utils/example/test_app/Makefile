@@ -6,17 +6,20 @@ CC := bfin-uclinux-gcc
 KERNEL_DIR ?= ${PWD}/../../../../../linux-2.6.x
 ICC_INCLUDE ?= ${pwd}/../icc_core
 CFLAGS  ?=
-CFLAGS  += -I$(KERNEL_DIR)/arch/blackfin/mach-$(ICC_MACHINE)/include -I$(KERNEL_DIR)/drivers/staging/icc/include -I$(ICC_INCLUDE) -g
+CFLAGS  += -I$(KERNEL_DIR)/arch/blackfin/include -I$(KERNEL_DIR)/arch/blackfin/mach-$(ICC_MACHINE)/include -I$(KERNEL_DIR)/drivers/staging/icc/include -I$(ICC_INCLUDE) -g
 LDFLAGS  = $(CFLAGS)
 ASFLAGS  = $(CFLAGS)
 PWD:= $(shell pwd)
 
-all: scalar_test packet_test session_packet_test
+all: scalar_test packet_test session_packet_test icc_latency_test
 
 packet_test: packet.o
 	$(CC) $(CFLAGS) $< -o $@ > $@.map
 
 scalar_test: scalar.o
+	$(CC) $(CFLAGS) $< -o $@ > $@.map
+
+icc_latency_test: icc_latency.o
 	$(CC) $(CFLAGS) $< -o $@ > $@.map
 
 mcapi_cmd_test: mcapi_cmd.o
