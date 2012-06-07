@@ -105,8 +105,8 @@ static void send_recv_test(int fd, const char *optarg)
 	scalar1 = pkt.buf_len;
 	printf("ret = %x scalar received %d %d\n", ret, scalar0, scalar1);
 
-	printf("icc latency core0 -> core1 %d ms\n", (scalar1 - stamp_start) / 100);
-	printf("icc latency core1 -> core0 %d ms\n", (get_timer() - scalar1) / 100);
+	printf("icc latency core0 -> core1 %d us\n", (scalar1 - stamp_start) / 100);
+	printf("icc latency core1 -> core0 %d us\n", (get_timer() - scalar1) / 100);
 
 	sleep(4);
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
