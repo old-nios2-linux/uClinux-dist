@@ -221,6 +221,21 @@ while 1 {
 
 incr case_num
 set timeout 5
+send "mdev -s\r"
+while 1 {
+    expect {
+        -re "$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+incr case_num
+set timeout 5
 send "ls /dev/$mmc_dev*\r"
 while 1 {
     expect {

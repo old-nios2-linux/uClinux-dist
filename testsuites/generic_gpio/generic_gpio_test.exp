@@ -26,6 +26,9 @@ if { $board_type == "BF537-STAMP" } {
 } elseif { [string match "BF527-EZKIT*" $board_type] } {
    set led1_gpio_number 8
    set btn1_gpio_number 16
+} elseif { $board_type == "BF609-EZKIT" } {
+   set led1_gpio_number 110
+   set btn1_gpio_number 26
 }
 
 step "Starting test"
@@ -89,8 +92,8 @@ send "echo 0 > value\r"
 expect  ">"
 send_user "Check if the following happens as expected: \n "
 
-if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
-    send_user "the LED1 is going OFF for BF537-STAMP,BF548-EZKIT,BF527-EZKIT.\n "
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF609-EZKIT" } {
+    send_user "the LED1 is going OFF for BF537-STAMP,BF548-EZKIT,BF527-EZKIT, BF609-EZKIT.\n "
 } elseif { $board_type == "BF533-STAMP" } {
     send_user "the LED1 is going ON  for BF533-STAMP.\n "
 }
@@ -100,13 +103,24 @@ send "echo 1 > value\r"
 expect  ">"
 send_user "Check if the following happens as expected: \n "
 
-if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
-    send_user "the LED1 is going ON for BF537-STAMP,BF548-EZKIT,BF527-EZKIT. \n "
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF609-EZKIT" } {
+    send_user "the LED1 is going ON for BF537-STAMP,BF548-EZKIT,BF527-EZKIT, BF609-EZKIT. \n "
 } elseif { $board_type == "BF533-STAMP" } {
     send_user "the LED1 is going OFF  for BF533-STAMP.\n "
 }
 sleep 5
 
+send "echo 0 > value\r"
+expect  ">"
+send_user "Check if the following happens as expected: \n "
+
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF609-EZKIT" } {
+    send_user "the LED1 is going OFF again for BF537-STAMP,BF548-EZKIT,BF527-EZKIT, BF609-EZKIT.\n "
+} elseif { $board_type == "BF533-STAMP" } {
+    send_user "the LED1 is going ON again for BF533-STAMP.\n "
+}
+
+sleep 5
 
 incr case_num
 send "cd /sys/class/gpio/\r"
@@ -164,7 +178,7 @@ incr case_num
 send_user "Please push the BTN1.\n "
 sleep 5 
 send "cat value\r"
-if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF609-EZKIT" } {
 while 1 {
    expect {
       -re "1.*>" {
@@ -197,7 +211,7 @@ while 1 {
 send_user "Please release the BTN1.\n "
 sleep 5 
 send "cat value\r"
-if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
+if { $board_type == "BF537-STAMP" || $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF609-EZKIT" } {
 while 1 {
    expect {
       -re "0.*>" {
