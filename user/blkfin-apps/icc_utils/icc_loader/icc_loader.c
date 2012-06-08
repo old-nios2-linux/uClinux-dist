@@ -86,7 +86,7 @@ struct {
 		.index = 2,
 	},{	/* L1 Instruction SRAM */
 		.start = (void*)0xFF600000,
-		.end   = (void*)0xFF600000 + 0x4000,
+		.end   = (void*)0xFF600000 + 0x10000,
 		.index = 0,
 	},{ /* L1 Instruction SRAM/Cache */
 		.start = (void*)0xFF610000,
@@ -116,6 +116,9 @@ static int put_region(void *dst, size_t dst_size, const void *src, size_t src_si
 	unsigned int nbytes = 0;
 	unsigned long ldst = (unsigned long)dst;
 	char *cdst, *csrc;
+
+	if ((unsigned long)dst == 0)
+		return 0;
 
 	/* figure out how to get this section into the memory map */
 	for (i = 0; i < ARRAY_SIZE(mem_regions); ++i) {
