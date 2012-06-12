@@ -1,6 +1,7 @@
 #ifndef __DEBUG_H_
 #define __DEBUG_H_
-//#define DEBUG
+/* ICC DEBUG */
+#define DEBUG
 #ifdef DEBUG
 extern int coreb_debug_level;
 void coreb_msg(char *fmt, ...);
