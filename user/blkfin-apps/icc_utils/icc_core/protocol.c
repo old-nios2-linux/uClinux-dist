@@ -400,7 +400,7 @@ void sm_handle_control_message()
 			}
 
 			sm_task1_status = SM_TASK_INIT;
-			sm_send_task_run_ack(sm_task1_control_ep, coreb_info.icc_info.slave_cpu);
+			sm_send_task_run_ack(sm_task1_control_ep, coreb_info.icc_info.peer_cpu);
 
 			delay(1);
 
@@ -855,7 +855,7 @@ static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 	}
 	memcpy(&message->msg, msg, sizeof(struct sm_msg));
 	message->dst = cpu;
-	message->src = coreb_info.icc_info.slave_cpu;
+	message->src = coreb_info.icc_info.peer_cpu;
 
 	if ((SM_MSG_PROTOCOL(msg->type) == SP_SCALAR))
 		sm_send_scalar_ack(session, msg->src_ep, message->src,
@@ -952,7 +952,7 @@ matched1:
 		session->flags = SM_CONNECTING;
 		session->type = SM_MSG_PROTOCOL(msg->type);
 		coreb_msg("session type %x\n", session->type);
-		sm_send_connect_ack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
+		sm_send_connect_ack(session, msg->src_ep, coreb_info.icc_info.peer_cpu);
 		break;
 	case SM_SESSION_PACKET_CONNECT_DONE:
 	case SM_SESSION_SCALAR_CONNECT_DONE:
@@ -961,9 +961,9 @@ matched1:
 		break;
 	case SM_SESSION_PACKET_ACTIVE:
 		if (session->flags & SM_OPEN)
-			sm_send_session_active_ack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
+			sm_send_session_active_ack(session, msg->src_ep, coreb_info.icc_info.peer_cpu);
 		else
-			sm_send_session_active_noack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
+			sm_send_session_active_noack(session, msg->src_ep, coreb_info.icc_info.peer_cpu);
 		break;
 	case SM_SESSION_PACKET_ACTIVE_ACK:
 		if (session->flags & SM_OPEN) {
@@ -976,7 +976,7 @@ matched1:
 	case SM_SESSION_SCALAR_CLOSE:
 		session->remote_ep = 0;
 		session->flags = 0;
-		sm_send_close_ack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
+		sm_send_close_ack(session, msg->src_ep, coreb_info.icc_info.peer_cpu);
 		break;
 	case SM_SESSION_PACKET_CLOSE_ACK:
 	case SM_SESSION_SCALAR_CLOSE_ACK:
