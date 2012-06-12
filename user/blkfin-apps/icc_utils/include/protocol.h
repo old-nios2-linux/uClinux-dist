@@ -5,6 +5,7 @@
 
 struct coreb_icc_node {
 	struct sm_icc_desc icc_info;
+	struct sm_session_table *sessions_table;
 	struct gen_pool *pool;
 	struct gen_pool *msg_pool;
 };

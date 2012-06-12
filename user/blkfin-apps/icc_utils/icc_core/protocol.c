@@ -67,14 +67,14 @@ int check_buffer_inpool(uint32_t addr, uint32_t size)
 
 int init_sm_session_table(void)
 {
-	coreb_info.icc_info.sessions_table = gen_pool_alloc(coreb_info.pool,
+	coreb_info.sessions_table = gen_pool_alloc(coreb_info.pool,
 		sizeof(struct sm_session_table)); /* alloc session table*/
-	if (!coreb_info.icc_info.sessions_table) {
+	if (!coreb_info.sessions_table) {
 		coreb_msg("@@@ alloc session table failed\n");
 		return -ENOMEM;
 	}
-	coreb_msg("session table %x\n", coreb_info.icc_info.sessions_table);
-	coreb_info.icc_info.sessions_table->nfree = MAX_ENDPOINTS;
+	coreb_msg("session table %x\n", coreb_info.sessions_table);
+	coreb_info.sessions_table->nfree = MAX_ENDPOINTS;
 }
 
 static int get_msg_src(struct sm_msg *msg)
@@ -118,14 +118,14 @@ static int sm_message_dequeue(int srccpu, struct sm_msg *msg)
 
 static struct sm_session_table* sm_get_session_table(void)
 {
-	struct sm_session_table *table = coreb_info.icc_info.sessions_table;
+	struct sm_session_table *table = coreb_info.sessions_table;
 	table->refcnt++;
 	return table;
 }
 
 static int sm_put_session_table(void)
 {
-	struct sm_session_table *table = coreb_info.icc_info.sessions_table;
+	struct sm_session_table *table = coreb_info.sessions_table;
 	table->refcnt--;
 	return 0;
 }
@@ -133,7 +133,7 @@ static int sm_put_session_table(void)
 struct sm_session* sm_index_to_session(uint32_t session_idx)
 {
 	struct sm_session *session;
-	struct sm_session_table *table = coreb_info.icc_info.sessions_table;
+	struct sm_session_table *table = coreb_info.sessions_table;
 	if (session_idx < 0 && session_idx >= MAX_SESSIONS)
 		return NULL;
 	if (!test_bit(session_idx, table->bits))
@@ -144,7 +144,7 @@ struct sm_session* sm_index_to_session(uint32_t session_idx)
 
 uint32_t sm_session_to_index(struct sm_session *session)
 {
-	struct sm_session_table *table = coreb_info.icc_info.sessions_table;
+	struct sm_session_table *table = coreb_info.sessions_table;
 	uint32_t index;
 	if ((session >= &table->sessions[0])
 		&& (session < &table->sessions[MAX_SESSIONS])) {
@@ -1124,7 +1124,7 @@ int icc_handle_scalar_cmd(struct sm_msg *msg)
 	coreb_msg("scalar cmd %x %x\n", SM_SCALAR_CMD(scalar0), SM_SCALAR_CMD_HEAD);
 	switch (SM_SCALAR_CMDARG(scalar0)) {
 	case SM_SCALAR_CMD_GET_SESSION_ID:
-		index = sm_find_session(scalar1, 0, coreb_info.icc_info.sessions_table);
+		index = sm_find_session(scalar1, 0, coreb_info.sessions_table);
 		session = sm_index_to_session(index);
 		if (session) {
 			scalar0 = MK_SM_SCALAR_CMD_ACK(SM_SCALAR_CMD_GET_SESSION_ID);
@@ -1172,7 +1172,7 @@ uint32_t msg_handle(void)
 	struct sm_session_status status;
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
-	index = sm_find_session(msg->dst_ep, 0, coreb_info.icc_info.sessions_table);
+	index = sm_find_session(msg->dst_ep, 0, coreb_info.sessions_table);
 
 	session = sm_index_to_session(index);
 	if (!session) {

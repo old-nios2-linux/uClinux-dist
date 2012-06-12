@@ -274,6 +274,7 @@ int bfin_coretmr_set_next_event(unsigned long cycles)
 
 #ifdef DEBUG
 int coreb_debug_level = 2;
+static unsigned char debug_buf[DEBUG_MSG_BUF_SIZE];
 # define MSG_LINE 128
 void coreb_msg(char *fmt, ...)
 {
@@ -285,7 +286,7 @@ void coreb_msg(char *fmt, ...)
 	uint16_t sent, received;
 	sent = sm_atomic_read(&queue->sent);
 	received = sm_atomic_read(&queue->received);
-	void *p = (void *)DEBUG_MSG_BUF_ADDR + (sent % SM_MSGQ_LEN) * MSG_LINE;
+	void *p = (void *)debug_buf + (sent % SM_MSGQ_LEN) * MSG_LINE;
 	va_start(args, fmt);
 	i = vsprintf(buf + 7, fmt, args);
 	va_end(args);
@@ -385,16 +386,6 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 	pending = iccqueue_getpending(cpu);
 	sm_handle_control_message(cpu);
 	platform_unmask_ipi(cpu, COREB_ICC_LOW_RECV);
-	return IRQ_HANDLED;
-}
-
-irqreturn_t ipi_handler_int1(int irq, void *dev_instance)
-{
-	uint32_t cpu = blackfin_core_id();
-
-	platform_clear_ipi(cpu, COREB_ICC_HIGH_RECV);
-	pending = iccqueue_getpending(cpu);
-	platform_unmask_ipi(cpu, COREB_ICC_HIGH_RECV);
 	return IRQ_HANDLED;
 }
 
@@ -505,7 +496,9 @@ void icc_init(void)
 		coreb_msg("@@@add chunk fail\n");
 
 
-	coreb_info.icc_info.icc_queue = (struct sm_message_queue *)MSGQ_START_ADDR;
+	coreb_info.icc_info.icc_queue = (struct sm_message_queue *)MSGQ_START_ADDR +
+			 (blackfin_core_id() - 1) * MSGQ_SIZE;
+	coreb_info.icc_info.icc_high_queue = coreb_info.icc_info.icc_queue + 2;
 	init_sm_session_table();
 	register_sm_proto();
 }
