@@ -379,25 +379,23 @@ void platform_secondary_init(void)
  * there is chance to reschedule */
 irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 {
-	unsigned int cpu = blackfin_core_id();
+	uint32_t cpu = blackfin_core_id();
 	++intcnt;
 
 	platform_clear_ipi(cpu, COREB_ICC_LOW_RECV);
-	pending = iccqueue_getpending(cpu);
-	sm_handle_control_message(cpu);
+	pending = iccqueue_getpending();
+	sm_handle_control_message();
 	platform_unmask_ipi(cpu, COREB_ICC_LOW_RECV);
 	return IRQ_HANDLED;
 }
 
 irqreturn_t timer_handle(int irq, void *dev_instance)
 {
-	uint32_t cpu = blackfin_core_id();
-
-	pending = iccqueue_getpending(cpu);
+	pending = iccqueue_getpending();
 	return IRQ_HANDLED;
 }
 
-static void setup_secondary(unsigned int cpu)
+static void setup_secondary()
 {
 	unsigned long ilat;
 	unsigned long bfin_irq_flags;
@@ -499,21 +497,21 @@ void icc_init(void)
 	coreb_info.icc_info.icc_queue = (struct sm_message_queue *)MSGQ_START_ADDR +
 			 (blackfin_core_id() - 1) * MSGQ_SIZE;
 	coreb_info.icc_info.icc_high_queue = coreb_info.icc_info.icc_queue + 2;
+	coreb_info.icc_info.slave_cpu = 0;
 	init_sm_session_table();
 	register_sm_proto();
 }
 
 void secondary_start_kernel(void)
 {
-	unsigned int cpu = blackfin_core_id();
 	init_exception_vectors();
 	SSYNC();
 
-	setup_secondary(cpu);
+	setup_secondary();
 
 	platform_secondary_init();
 
-	bfin_setup_caches(cpu);
+	bfin_setup_caches(blackfin_core_id());
 
 	bfin_coretmr_init();
 

@@ -52,7 +52,7 @@ void free_message(struct sm_message *message)
 
 void *get_free_buffer(uint32_t size)
 {
-	return gen_pool_alloc(coreb_info.pool, size);
+	return (void*)gen_pool_alloc(coreb_info.pool, size);
 }
 
 void free_buffer(uint32_t addr, uint32_t size)
@@ -67,7 +67,8 @@ int check_buffer_inpool(uint32_t addr, uint32_t size)
 
 int init_sm_session_table(void)
 {
-	coreb_info.sessions_table = gen_pool_alloc(coreb_info.pool,
+	coreb_info.sessions_table =
+		(struct sm_session_table *)gen_pool_alloc(coreb_info.pool,
 		sizeof(struct sm_session_table)); /* alloc session table*/
 	if (!coreb_info.sessions_table) {
 		coreb_msg("@@@ alloc session table failed\n");
@@ -92,9 +93,8 @@ static int get_msg_src(struct sm_msg *msg)
 		return 0;
 }
 
-static int sm_message_enqueue(int dstcpu, int srccpu, struct sm_msg *msg)
+static int sm_message_enqueue(struct sm_message_queue *outqueue, struct sm_msg *msg)
 {
-	struct sm_message_queue *outqueue = &coreb_info.icc_info.icc_queue[dstcpu];
 	uint16_t sent = sm_atomic_read(&outqueue->sent);
 	uint16_t received = sm_atomic_read(&outqueue->received);
 	if ((sent - received) >= (SM_MSGQ_LEN - 1)) {
@@ -107,9 +107,8 @@ static int sm_message_enqueue(int dstcpu, int srccpu, struct sm_msg *msg)
 	return 0;
 }
 
-static int sm_message_dequeue(int srccpu, struct sm_msg *msg)
+static int sm_message_dequeue(struct sm_message_queue *inqueue, struct sm_msg *msg)
 {
-	struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[srccpu];
 	uint16_t received = sm_atomic_read(&inqueue->received);
 	received++;
 	sm_atomic_write(&inqueue->received, received);
@@ -153,11 +152,12 @@ uint32_t sm_session_to_index(struct sm_session *session)
 	return -EINVAL;
 }
 
-static int sm_send_message_internal(struct sm_msg *msg, int dstcpu, int srccpu)
+static int sm_send_message_internal(struct sm_msg *msg, int dstcpu)
 {
+	struct sm_message_queue *outqueue = coreb_info.icc_info.icc_queue;
 	int ret = 0;
-	coreb_msg("%s() dst %d src %d %x\n", __func__, dstcpu, srccpu, msg->type);
-	ret = sm_message_enqueue(dstcpu, srccpu, msg);
+	coreb_msg("%s() dst %d src %d %x\n", __func__, dstcpu, blackfin_core_id(), msg->type);
+	ret = sm_message_enqueue(outqueue, msg);
 	if (!ret)
 		platform_send_ipi_cpu(dstcpu, COREB_ICC_LOW_SEND);
 	return ret;
@@ -237,7 +237,7 @@ int sm_create_session(uint32_t src_ep, uint32_t type)
 }
 
 int sm_register_session_handler(uint32_t session_idx,
-			void (*handle)(struct sm_message *message, struct sm_session *session))
+			int (*handle)(struct sm_message *message, struct sm_session *session))
 {
 	struct sm_session *session = sm_index_to_session(session_idx);
 	if (!session)
@@ -361,10 +361,9 @@ int sm_close_session(uint32_t index)
 }
 
 #define SM_MAX_TASKARGS 3
-void sm_handle_control_message(uint32_t cpu)
+void sm_handle_control_message()
 {
-
-	struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[cpu];
+	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
 	uint16_t sent = sm_atomic_read(&inqueue->sent);
 	uint16_t received = sm_atomic_read(&inqueue->received);
 	struct sm_msg *msg;
@@ -401,7 +400,7 @@ void sm_handle_control_message(uint32_t cpu)
 			}
 
 			sm_task1_status = SM_TASK_INIT;
-			sm_send_task_run_ack(sm_task1_control_ep, cpu ^ 1);
+			sm_send_task_run_ack(sm_task1_control_ep, coreb_info.icc_info.slave_cpu);
 
 			delay(1);
 
@@ -414,9 +413,9 @@ void sm_handle_control_message(uint32_t cpu)
 			sm_task1_status = SM_TASK_NONE;
 			break;
 		}
-		sm_message_dequeue(cpu, msg);
+		sm_message_dequeue(inqueue, msg);
 		if (reinit)
-			memset(&coreb_info.icc_info.icc_queue[cpu], 0, sizeof(struct sm_message_queue));
+			memset(inqueue, 0, sizeof(struct sm_message_queue));
 		coreb_msg("finish1 %s task status %d\n", __func__, sm_task1_status);
 		return;
 	}
@@ -438,7 +437,7 @@ sm_send_control_msg(struct sm_session *session, uint32_t remote_ep,
 	m->length = len;
 	m->payload = payload;
 
-	ret = sm_send_message_internal(m, dst_cpu, blackfin_core_id());
+	ret = sm_send_message_internal(m, dst_cpu);
 	if (ret)
 		return -EAGAIN;
 	return ret;
@@ -458,7 +457,7 @@ int sm_send_task_run_ack(uint32_t remote_ep,
 	if (sm_task1_msg_buffer)
 		m->payload = sm_task1_msg_buffer;
 
-	ret = sm_send_message_internal(m, dst_cpu, blackfin_core_id());
+	ret = sm_send_message_internal(m, dst_cpu);
 	if (ret)
 		return -EAGAIN;
 	return ret;
@@ -477,7 +476,7 @@ int sm_send_task_kill_ack(struct sm_session *session, uint32_t remote_ep,
 	m->length = 0;
 	m->payload = 0;
 
-	ret = sm_send_message_internal(m, dst_cpu, blackfin_core_id());
+	ret = sm_send_message_internal(m, dst_cpu);
 	if (ret)
 		return -EAGAIN;
 	return ret;
@@ -626,7 +625,7 @@ int sm_recv_release(void *addr, uint32_t size, uint32_t session_idx)
 
 	}
 
-	if (msg && msg->payload != addr)
+	if (msg && msg->payload != (unsigned long)addr)
 		return -EINVAL;
 
 	if (SM_MSG_PROTOCOL(msg->type) == SP_PACKET)
@@ -678,7 +677,7 @@ sm_send_scalar(uint32_t session_idx, uint16_t dst_ep,
 	if (ret)
 		goto fail;
 
-	ret = sm_send_message_internal(&message->msg, dst_cpu, blackfin_core_id());
+	ret = sm_send_message_internal(&message->msg, dst_cpu);
 	if (!ret)
 		goto out;
 fail:
@@ -724,7 +723,7 @@ sm_send_packet(uint32_t session_idx, uint16_t dst_ep,
 	if (ret)
 		goto fail;
 
-	ret = sm_send_message_internal(&message->msg, dst_cpu, blackfin_core_id());
+	ret = sm_send_message_internal(&message->msg, dst_cpu);
 	if (!ret)
 		goto out;
 
@@ -742,7 +741,6 @@ int sm_recv_scalar(uint32_t session_idx, uint16_t *src_ep, uint16_t *src_cpu, ui
 	struct sm_message *message;
 	struct sm_msg *msg;
 	struct sm_session *session;
-	int cpu = blackfin_core_id();
 	int ret = 0;
 	uint32_t len = 0;
 
@@ -810,7 +808,6 @@ int sm_recv_packet(uint32_t session_idx, uint16_t *src_ep, uint16_t *src_cpu, vo
 	struct sm_message *message;
 	struct sm_msg *msg;
 	struct sm_session *session;
-	int cpu = blackfin_core_id();
 	int ret = 0;
 
 	session = sm_index_to_session(session_idx);
@@ -834,9 +831,9 @@ int sm_recv_packet(uint32_t session_idx, uint16_t *src_ep, uint16_t *src_cpu, vo
 	return ret;
 }
 
-inline uint16_t iccqueue_getpending(uint32_t srccpu)
+inline uint16_t iccqueue_getpending()
 {
-	struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[srccpu];
+	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
 	uint16_t sent = sm_atomic_read(&inqueue->sent);
 	uint16_t received = sm_atomic_read(&inqueue->received);
 	uint16_t pending;
@@ -858,7 +855,7 @@ static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 	}
 	memcpy(&message->msg, msg, sizeof(struct sm_msg));
 	message->dst = cpu;
-	message->src = cpu ^ 1;
+	message->src = coreb_info.icc_info.slave_cpu;
 
 	if ((SM_MSG_PROTOCOL(msg->type) == SP_SCALAR))
 		sm_send_scalar_ack(session, msg->src_ep, message->src,
@@ -904,8 +901,8 @@ static int
 sm_default_recvmsg(struct sm_msg *msg, struct sm_session *session)
 {
 	int ret = 0;
-	int cpu = blackfin_core_id();
 	struct sm_message *uncompleted;
+	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
 
 	coreb_msg("type %x, dstep %d, srcep %d \n", msg->type, msg->dst_ep, msg->src_ep);
 	switch (msg->type) {
@@ -955,7 +952,7 @@ matched1:
 		session->flags = SM_CONNECTING;
 		session->type = SM_MSG_PROTOCOL(msg->type);
 		coreb_msg("session type %x\n", session->type);
-		sm_send_connect_ack(session, msg->src_ep, cpu ^ 1);
+		sm_send_connect_ack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
 		break;
 	case SM_SESSION_PACKET_CONNECT_DONE:
 	case SM_SESSION_SCALAR_CONNECT_DONE:
@@ -964,9 +961,9 @@ matched1:
 		break;
 	case SM_SESSION_PACKET_ACTIVE:
 		if (session->flags & SM_OPEN)
-			sm_send_session_active_ack(session, msg->src_ep, cpu ^ 1);
+			sm_send_session_active_ack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
 		else
-			sm_send_session_active_noack(session, msg->src_ep, cpu ^ 1);
+			sm_send_session_active_noack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
 		break;
 	case SM_SESSION_PACKET_ACTIVE_ACK:
 		if (session->flags & SM_OPEN) {
@@ -979,7 +976,7 @@ matched1:
 	case SM_SESSION_SCALAR_CLOSE:
 		session->remote_ep = 0;
 		session->flags = 0;
-		sm_send_close_ack(session, msg->src_ep, cpu ^ 1);
+		sm_send_close_ack(session, msg->src_ep, coreb_info.icc_info.slave_cpu);
 		break;
 	case SM_SESSION_PACKET_CLOSE_ACK:
 	case SM_SESSION_SCALAR_CLOSE_ACK:
@@ -1012,7 +1009,7 @@ matched1:
 		ret = -EINVAL;
 	};
 
-	sm_message_dequeue(cpu, msg);
+	sm_message_dequeue(inqueue, msg);
 	return ret;
 }
 
@@ -1021,7 +1018,7 @@ static int sm_default_shutdown(struct sm_session *session)
 	return 0;
 }
 
-static int sm_default_error(struct sm_message *message, struct sm_session *session)
+static int sm_default_error(struct sm_msg *msg, struct sm_session *session)
 {
 	return 0;
 }
@@ -1067,7 +1064,6 @@ void icc_run_task(void)
 	char *task_argv[SM_MAX_TASKARGS];
 	struct sm_task *task;
 	int i;
-	int cpu = blackfin_core_id();
 	if (sm_task1_status == SM_TASK_INIT) {
 		task = &sm_task1;
 		for (i = 0; i < SM_MAX_TASKARGS; i++) {
@@ -1145,11 +1141,10 @@ int icc_handle_scalar_cmd(struct sm_msg *msg)
 uint32_t msg_handle(void);
 int icc_wait(int session_mask)
 {
-	int cpu = blackfin_core_id();
 	uint32_t avail = 0;
 	unsigned long flags;
 	icc_run_task();
-	pending = iccqueue_getpending(cpu);
+	pending = iccqueue_getpending();
 	if (!pending) {
 		bfin_coretmr_set_next_event(4000000000);
 		coreb_idle();
@@ -1161,8 +1156,7 @@ int icc_wait(int session_mask)
 
 uint32_t msg_handle(void)
 {
-	int cpu = blackfin_core_id(); /* cpu_id(); */
-	struct sm_message_queue *inqueue = &coreb_info.icc_info.icc_queue[cpu];
+	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
 	uint16_t sent = sm_atomic_read(&inqueue->sent);
 	uint16_t received = sm_atomic_read(&inqueue->received);
 	struct sm_msg *msg;
@@ -1177,11 +1171,11 @@ uint32_t msg_handle(void)
 	session = sm_index_to_session(index);
 	if (!session) {
 		coreb_msg("error messag type %08x\n", msg->type);
-		sm_message_dequeue(cpu, msg);
+		sm_message_dequeue(inqueue, msg);
 		return;
 	}
 
-	pending = iccqueue_getpending(cpu);
+	pending = iccqueue_getpending();
 	if (!pending) {
 		coreb_msg("BUG\n");
 		return 0;
@@ -1200,7 +1194,7 @@ uint32_t msg_handle(void)
 
 	} else {
 		coreb_msg("discard msg type\n", msg->type);
-		sm_message_dequeue(cpu, msg);
+		sm_message_dequeue(inqueue, msg);
 	}
 	return status.n_avail;
 }
