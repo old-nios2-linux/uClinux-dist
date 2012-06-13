@@ -184,7 +184,7 @@ ENTRY(_evt_evt7)
 	[--sp] = (R7:0,P5:0);                                               
 	call _ipi_handler_int0;
 	p0.l = _sm_task1_status;
-	p0.l = _sm_task1_status;
+	p0.h = _sm_task1_status;
 	r0 = [p0];
 	cc = r0 == SM_TASK_INIT;
 	if cc jump .L_reload_task;
@@ -213,7 +213,7 @@ ENTRY(_evt_evt11)
 	[--sp] = (R7:0,P5:0);                                               
 	call _ipi_handler_int0;
 	p0.l = _sm_task1_status;
-	p0.l = _sm_task1_status;
+	p0.h = _sm_task1_status;
 	r0 = [p0];
 	cc = r0 == SM_TASK_INIT;
 	if cc jump .L_reload_task1;
