@@ -24,7 +24,6 @@
 extern uint16_t pending;
 extern struct coreb_icc_node coreb_info;
 
-
 static inline void coreb_idle(void)
 {
 	__asm__ __volatile__( \
@@ -495,7 +494,7 @@ void icc_init(void)
 
 
 	coreb_info.icc_info.icc_queue = (struct sm_message_queue *)MSGQ_START_ADDR +
-			 (blackfin_core_id() - 1) * MSGQ_SIZE;
+				(blackfin_core_id() - 1) * MSGQ_SIZE;
 	coreb_info.icc_info.icc_high_queue = coreb_info.icc_info.icc_queue + 2;
 	coreb_info.icc_info.peer_cpu = 0;
 	init_sm_session_table();

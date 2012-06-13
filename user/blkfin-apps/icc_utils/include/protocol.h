@@ -3,6 +3,8 @@
 #include <icc.h>
 #include <mempool.h>
 
+#define MSGQ_START_ADDR L2_START
+
 struct coreb_icc_node {
 	struct sm_icc_desc icc_info;
 	struct sm_session_table *sessions_table;
