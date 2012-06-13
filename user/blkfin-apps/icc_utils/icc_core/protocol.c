@@ -640,6 +640,20 @@ int sm_recv_release(void *addr, uint32_t size, uint32_t session_idx)
 	return 0;
 }
 
+inline uint16_t iccqueue_getpending()
+{
+	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
+	uint16_t sent = sm_atomic_read(&inqueue->sent);
+	uint16_t received = sm_atomic_read(&inqueue->received);
+	uint16_t pending;
+	pending = sent - received;
+	if(pending < 0)
+		pending += USHRT_MAX;
+	return (pending % SM_MSGQ_LEN);
+}
+
+uint32_t msg_handle(void);
+
 int
 sm_send_scalar(uint32_t session_idx, uint16_t dst_ep,
 		uint16_t dst_cpu, uint32_t scalar0, uint32_t scalar1, uint32_t size)
@@ -677,9 +691,11 @@ sm_send_scalar(uint32_t session_idx, uint16_t dst_ep,
 	if (ret)
 		goto fail;
 
-	ret = sm_send_message_internal(&message->msg, dst_cpu);
-	if (!ret)
-		goto out;
+	while (sm_send_message_internal(&message->msg, dst_cpu)) {
+		if (iccqueue_getpending())
+			msg_handle();
+	}
+
 fail:
 	free_message(message);
 out:
@@ -723,9 +739,10 @@ sm_send_packet(uint32_t session_idx, uint16_t dst_ep,
 	if (ret)
 		goto fail;
 
-	ret = sm_send_message_internal(&message->msg, dst_cpu);
-	if (!ret)
-		goto out;
+	while (sm_send_message_internal(&message->msg, dst_cpu)) {
+		if (iccqueue_getpending())
+			msg_handle();
+	}
 
 fail:
 	free_message(message);
@@ -831,18 +848,6 @@ int sm_recv_packet(uint32_t session_idx, uint16_t *src_ep, uint16_t *src_cpu, vo
 	return ret;
 }
 
-inline uint16_t iccqueue_getpending()
-{
-	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
-	uint16_t sent = sm_atomic_read(&inqueue->sent);
-	uint16_t received = sm_atomic_read(&inqueue->received);
-	uint16_t pending;
-	pending = sent - received;
-	if(pending < 0)
-		pending += USHRT_MAX;
-	return (pending % SM_MSGQ_LEN);
-}
-
 static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
 {
 	int ret = 0;
@@ -913,9 +918,8 @@ sm_default_recvmsg(struct sm_msg *msg, struct sm_session *session)
 				coreb_msg("ack matched free buf %x\n", msg->payload);
 				goto matched;
 			}
-			coreb_msg("unmatched ack %08x %x uncomplete tx %08x\n", msg->payload, msg->length, uncompleted->msg.payload);
 		}
-		coreb_msg("unmatched ack\n");
+		coreb_msg("unmatched ack %08x %x uncomplete tx %08x\n", msg->payload, msg->length, uncompleted->msg.payload);
 		break;
 matched:
 		list_del(&uncompleted->next);
@@ -931,9 +935,8 @@ matched:
 				coreb_msg("ack matched free buf %x\n", msg->payload);
 				goto matched1;
 			}
-			coreb_msg("unmatched ack %08x %x uncomplete tx %08x\n", msg->payload, msg->length, uncompleted->msg.payload);
 		}
-		coreb_msg("unmatched ack\n");
+		coreb_msg("unmatched ack %08x %x uncomplete tx %08x\n", msg->payload, msg->length, uncompleted->msg.payload);
 		break;
 matched1:
 		list_del(&uncompleted->next);
@@ -1138,7 +1141,6 @@ int icc_handle_scalar_cmd(struct sm_msg *msg)
 	return 1;
 }
 
-uint32_t msg_handle(void);
 int icc_wait(int session_mask)
 {
 	uint32_t avail = 0;
