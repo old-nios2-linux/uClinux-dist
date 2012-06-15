@@ -15,6 +15,8 @@ config USER_BLACKFIN_AUDIOTEST
 	bool "AUDIO test program"
 config USER_BLACKFIN_VIDEOTEST
 	bool "VIDEO test program"
+config USER_BLACKFIN_V4L2_VIDEOTEST
+	bool "V4L2 VIDEO test program"
 config USER_BLACKFIN_PFBUTTONS
 	bool "PFBUTTONS test program"
 config USER_BLACKFIN_TWI

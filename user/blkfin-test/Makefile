@@ -11,6 +11,7 @@ dir_$(CONFIG_USER_BLACKFIN_DPMC)            += dpmc-test
 dir_$(CONFIG_USER_BLACKFIN_DCPLB)           += dcplb-test
 dir_$(CONFIG_USER_BLACKFIN_AUDIOTEST)       += audio_test
 dir_$(CONFIG_USER_BLACKFIN_VIDEOTEST)       += video_test
+dir_$(CONFIG_USER_BLACKFIN_V4L2_VIDEOTEST)  += v4l2_video_test
 dir_$(CONFIG_USER_BLACKFIN_TWI)             += twi_test
 dir_$(CONFIG_USER_BLACKFIN_SPITEST)         += spi-test
 dir_$(CONFIG_USER_BLACKFIN_TWILCDTEST)      += twi_lcd-test
