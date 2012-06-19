@@ -44,8 +44,7 @@ incr case_num
 send "ifconfig eth1 $spi_net_ip\r"
 while 1 {
     expect {
-        -re "link up" {
-            expect "duplex"
+        -re "multicast mode" {
             case_pass $case_num
             break
         }
@@ -59,6 +58,22 @@ while 1 {
     }
 }
 
+expect "duplex"
+
+set timeout 5
+incr case_num
+send "ifconfig eth1\r"
+while 1 {
+    expect {
+        -re "$spi_net_ip.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
 
 step "Untar netperf."
 cd $uclinux_path/testsuites/ethernet/
@@ -137,6 +152,8 @@ while 1 {
 
 set spawn_id $netserver_id
 set timeout 3
+expect -re $sh_prompt
+
 send -s "sudo pkill netserver_x86\r"
 while 1 {
     expect {
