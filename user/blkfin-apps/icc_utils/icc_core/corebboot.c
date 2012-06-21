@@ -314,28 +314,26 @@ void dump_execption(unsigned int errno, unsigned int addr)
 	coreb_msg("execption %x addr %x\n", errno, addr);
 	if (errno == 0x26) {
 		unsigned long fault_addr = bfin_read_DCPLB_FAULT_ADDR();
-		if ((fault_addr >= 0x8000000) || (fault_addr < L2_START)
-				|| (fault_addr >= L2_START + L2_LENGTH)) {
+
+		coreb_msg("fault addr %x dcplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
+		if (fault_addr >= 0x8000000)
 			dump_stack();
-		}
 		_disable_dcplb();
 		fault_addr &= ~(0x400000 - 1);
 		bfin_write32(DCPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
 		bfin_write32(DCPLB_DATA1 + 4 * ((fault_addr/ 0x1000000) % 15), (CPLB_COMMON | PAGE_SIZE_4MB));
 		_enable_dcplb();
-		coreb_msg("fault addr %x dcplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
 	} else if (errno == 0x2c) {
 		unsigned long fault_addr = bfin_read_ICPLB_FAULT_ADDR();
-		if ((fault_addr >= 0x8000000) || (fault_addr < L2_START)
-				|| (fault_addr >= L2_START + L2_LENGTH)) {
+
+		coreb_msg("fault addr %x icplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
+		if (fault_addr >= 0x8000000)
 			dump_stack();
-		}
 		_disable_icplb();
 		fault_addr &= ~(0x400000 - 1);
 		bfin_write32(ICPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
 		bfin_write32(ICPLB_DATA1 + 4 * ((fault_addr/ 0x1000000) % 15), ((SDRAM_IGENERIC & ~CPLB_L1_CHBL) | PAGE_SIZE_4MB));
 		_enable_icplb();
-		coreb_msg("fault addr %x icplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
 	} else {
 		dump_stack();
 	}
