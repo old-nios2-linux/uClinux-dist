@@ -83,12 +83,12 @@ while 1 {
             break
         }
         eof {
-            send "q\r"
+            send "w\r"
             expect -re $kernel_prompt
             break
         }
         timeout {
-            send "q\r"
+            send "w\r"
             expect -re $kernel_prompt
             break
         }
@@ -167,12 +167,18 @@ while 1 {
     }
 }
 
+set timeout 5
+send "echo 0 > /proc/sys/kernel/hung_task_timeout_secs\r"
+expect -re $kernel_prompt
+
 set timeout 3600
 incr case_num
-send "time bonnie++ -u root -d /mnt -s 200M\r"
+send "time bonnie++ -u root -d /mnt -s 50M\r"
 while 1 {
     expect {
         -re "Hardware Trace" {
+            set timeout 60
+            expect -re $kernel_prompt
             send_user "bonnie++ failed\n"
             case_fail $case_num
         }
@@ -187,8 +193,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
+all_pass
 send_user "Ending $argv0\n"
-
 log_file
