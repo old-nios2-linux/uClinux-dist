@@ -148,11 +148,37 @@ while 1 {
 }
 
 if [ catch {exec rcp root@$targetip:/var/camera.avi ./} ] {
-    send_user "FAIL: rcp camera.avi host PC\n"
+    send_user "FAIL: rcp camera.avi to host PC\n"
     send_user "$errorInfo\n"
     case_fail $case_num
 } else {
-    send_user "PASS: rcp camera.avi host PC\n"
+    send_user "PASS: rcp camera.avi to host PC\n"
+}
+
+incr case_num
+set timeout 10
+send "v4l2_video_test -w 320 -h 240 -N 5 -F /var/camera.yuv\r"
+while 1 {
+    expect {
+        -re "\[eE]rror|\[fF]ail|Hardware Trace|SIGSEGV" {
+            case_fail $case_num
+        }
+        -re "frames captured.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+if [ catch {exec rcp root@$targetip:/var/camera.yuv ./} ] {
+    send_user "FAIL: rcp camera.yuv to host PC\n"
+    send_user "$errorInfo\n"
+    case_fail $case_num
+} else {
+    send_user "PASS: rcp camera.yuv to host PC\n"
 }
 
 incr case_num
