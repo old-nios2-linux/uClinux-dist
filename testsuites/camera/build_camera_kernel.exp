@@ -55,6 +55,16 @@ while 1 {
             continue
         }
 
+# reserve more L1 space
+        -re "Use L1 memory for rx/tx packets.*BFIN_MAC_USE_L1.*\\\[.*]" {
+            send "N\r"
+        }
+
+# may have confliction with MTD driver
+        -re "Memory Technology Device \\\(MTD\\\) support \\\(MTD\\\) \\\[.*]" {
+            send "N\r"
+        }
+
         -re "I2C support.*I2C.*\\\[.*]" {
             send "Y\r"
         }
@@ -124,6 +134,10 @@ while 1 {
         }
 
         -re "FFmpeg and FFserver.*USER_FFMPEG_APPS.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "V4L2 VIDEO test program.*USER_BLACKFIN_V4L2_VIDEOTEST.*\\\[.*]" {
             send "Y\r"
         }
 
