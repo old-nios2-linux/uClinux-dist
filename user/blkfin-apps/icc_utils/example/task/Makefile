@@ -11,7 +11,7 @@ MCAPI_TEST_INCLUDE ?= ${PWD}/../../../../../staging/usr/include/mcapi-2.0/
 ICC_CORE := ../../icc_core/icc
 LIBMCAPI_COREB ?= ${PWD}/../../../../../staging/usr/lib/libmcapi_coreb.a
 
-ifeq ($(ICC_MACHINE),bf561)
+ifneq ($(ICC_MACHINE),bf609)
 TASK_LOAD_BASE := 0x3c00000
 CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I${ICC_INCLUDE} -I${KERNEL_DIR}/include -I${KERNEL_DIR}/arch/blackfin/include -I${KERNEL_DIR}/arch/blackfin/include/generated  -I${KERNEL_DIR}/arch/blackfin/mach-bf561/include -I${KERNEL_DIR}/drivers/staging/icc/include -I${MCAPI_INCLUDE} -I${MCAPI_TEST_INCLUDE} -DCONFIG_BF561 -D__KERNEL__
 endif

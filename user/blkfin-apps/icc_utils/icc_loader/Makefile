@@ -4,10 +4,10 @@ CC = bfin-uclinux-gcc
 # running under linux, not a bare metal environment like core b
 
 PWD:= $(shell pwd)
-ICC_INCLUDE := $(PWD)/../icc_core
 KERNEL_DIR ?= ${PWD}/../../../../linux-2.6.x
+ICC_INCLUDE ?= $(PWD)/../icc_core
+ICC_CFLAGS  := -I$(KERNEL_DIR)/drivers/staging/icc/include -I$(ICC_INCLUDE) -g
 
-ICC_CFLAGS  ?= -I$(KERNEL_DIR)/drivers/staging/icc/include -I$(ICC_INCLUDE) -g
 CFLAGS  = $(ICC_CFLAGS)
 
 all: icc_loader

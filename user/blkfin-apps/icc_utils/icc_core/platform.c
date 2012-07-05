@@ -43,6 +43,7 @@ void platform_clear_ipi(unsigned int cpu, int irq)
 
 
 #ifdef CONFIG_BF561
+#include <mach/irq.h>
 void platform_send_ipi_cpu(unsigned int cpu, int irq)
 {
 	int offset = (irq == IRQ_SUPPLE_0) ? 6 : 8;

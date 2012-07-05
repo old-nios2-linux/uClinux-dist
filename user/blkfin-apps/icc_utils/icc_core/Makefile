@@ -6,13 +6,18 @@ LD := bfin-elf-ld
 PWD:= $(shell pwd)
 KERNEL_DIR ?= ${PWD}/../../../../linux-2.6.x
 ICC_INCLUDE ?= ${PWD}/../include
+ICC_MACHINE ?= bf561
+ifeq ($(ICC_MACHINE), bf609)
+CPU_TYPE := CONFIG_BF609
+else
+CPU_TYPE := CONFIG_BF561
+endif
 ICC_CFLAGS ?= -I${KERNEL_DIR}/arch/blackfin/include \
 	-I${KERNEL_DIR}/include \
 	-I${KERNEL_DIR}/arch/blackfin/mach-$(ICC_MACHINE)/include \
 	-I${KERNEL_DIR}/arch/blackfin/include/generated \
 	-I${KERNEL_DIR}/drivers/staging/icc/include
 
-CPU_TYPE ?= CONFIG_BF609
 
 CFLAGS  = -I${ICC_INCLUDE} $(ICC_CFLAGS) -D$(CPU_TYPE) -D__KERNEL__ -mlong-calls
 LDFLAGS  = $(CFLAGS)

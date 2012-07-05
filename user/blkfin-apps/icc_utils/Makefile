@@ -3,13 +3,13 @@ all:    icc icc_loader libmcapi icc_example
 icc_example: icc
 
 libmcapi:
-	$(MAKE) -C libmcapi_coreb KERNEL_DIR=$(KERNEL_DIR) ICC_MACHINE=$(ICC_MACHINE) ICC_BUILDROOT=$(ICC_BUILDROOT)
+	$(MAKE) -C libmcapi_coreb
 
 icc: icc_core
-	$(MAKE) -C  icc_core KERNEL_DIR=$(KERNEL_DIR) ICC_MACHINE=$(ICC_MACHINE)
+	$(MAKE) -C  icc_core
 
 icc_loader: 
-	$(MAKE) -C  $@ KERNEL_DIR=$(KERNEL_DIR) ICC_MACHINE=$(ICC_MACHINE)
+	$(MAKE) -C  $@
 
 icc_example: libmcapi
 	$(MAKE) -C example/task

@@ -18,10 +18,7 @@ CFLAGS := -Wall -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -DCONFIG_BF561 -I$(
 endif
 
 LDFLAGS :=
-ifneq ($(ICC_BUILDROOT),y)
-include $(ROOTDIR)/tools/autotools.mk
-else
-
+ifeq ($(ICC_BUILDROOT),y)
 all: build install
 
 build:
@@ -30,4 +27,7 @@ build:
 
 install:
 	$(MAKE) -C $(VER) DESTDIR=$(DESTDIR) install
+
+else
+include $(ROOTDIR)/tools/autotools.mk
 endif
