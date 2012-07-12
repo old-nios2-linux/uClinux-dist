@@ -97,7 +97,12 @@ static int sm_message_enqueue(struct sm_message_queue *outqueue, struct sm_msg *
 {
 	uint16_t sent = sm_atomic_read(&outqueue->sent);
 	uint16_t received = sm_atomic_read(&outqueue->received);
-	if ((sent - received) >= (SM_MSGQ_LEN - 1)) {
+	uint16_t pending = sent - received;
+
+	if (pending < 0)
+		pending += USHRT_MAX;
+
+	if (pending >= (SM_MSGQ_LEN - 1)) {
 		coreb_msg("over run\n");
 		return -EAGAIN;
 	}
@@ -618,6 +623,8 @@ int sm_recv_release(void *addr, uint32_t size, uint32_t session_idx)
 	struct sm_message *message = NULL;
 	struct sm_msg *msg = NULL;
 	struct sm_session *session = sm_index_to_session(session_idx);
+	if (!session)
+		return -EINVAL;
 	if (!list_empty(&session->rx_messages)) {
 		message = list_first_entry(&session->rx_messages,
 					struct sm_message, next);
@@ -696,6 +703,9 @@ sm_send_packet(uint32_t session_idx, uint16_t dst_ep,
 	struct sm_message *message = get_message();
 
 	session = sm_index_to_session(session_idx);
+
+	if (!session)
+		return -EINVAL;
 
 	message->msg.src_ep = session->local_ep;
 	message->msg.dst_ep = dst_ep;
@@ -811,6 +821,9 @@ int sm_recv_packet(uint32_t session_idx, uint16_t *src_ep, uint16_t *src_cpu, vo
 	int ret = 0;
 
 	session = sm_index_to_session(session_idx);
+
+	if (!session)
+		return -EINVAL;
 
 	coreb_msg(" %s session type %x localep%d\n",__func__, session->type, session->local_ep);
 	if (!list_empty(&session->rx_messages)) {

@@ -274,29 +274,37 @@ int bfin_coretmr_set_next_event(unsigned long cycles)
 #ifdef DEBUG
 int coreb_debug_level = 2;
 static unsigned char debug_buf[DEBUG_MSG_BUF_SIZE];
-# define MSG_LINE 128
 void coreb_msg(char *fmt, ...)
 {
 	va_list args;
 	int i;
-	char buf[MSG_LINE] = "COREB: ";
+	uint16_t sent, received, pending;
+	unsigned long flags = bfin_cli();
+	char buf[DEBUG_MSG_LINE] = "COREB: ";
 	struct sm_message_queue *queue = (struct sm_message_queue *)MSGQ_START_ADDR;
 	struct sm_msg *msg = &queue->messages[0];
-	uint16_t sent, received;
 	sent = sm_atomic_read(&queue->sent);
 	received = sm_atomic_read(&queue->received);
-	void *p = (void *)debug_buf + (sent % SM_MSGQ_LEN) * MSG_LINE;
-	va_start(args, fmt);
-	i = vsprintf(buf + 7, fmt, args);
-	va_end(args);
-	memset(p, 0, MSG_LINE);
-	SSYNC();
-	strcpy(p, buf);
-	while((sent - received) >= (SM_MSGQ_LEN - 1)) {
+	void *p = (void *)debug_buf + (sent % SM_MSGQ_LEN) * DEBUG_MSG_LINE;
+
+	pending = sent - received;
+	if (pending < 0)
+		pending += USHRT_MAX;
+	while(pending >= (SM_MSGQ_LEN - 1)) {
 		delay(1);
 		sent = sm_atomic_read(&queue->sent);
 		received = sm_atomic_read(&queue->received);
+		pending = sent - received;
+		if (pending < 0)
+			pending += USHRT_MAX;
 	}
+
+	va_start(args, fmt);
+	i = vsprintf(buf + 7, fmt, args);
+	va_end(args);
+	memset(p, 0, DEBUG_MSG_LINE);
+	SSYNC();
+	strcpy(p, buf);
 	memset(&msg[sent%SM_MSGQ_LEN], 0, sizeof(struct sm_msg));
 	msg[(sent % SM_MSGQ_LEN)].type = SM_BAD_MSG;
 	msg[(sent % SM_MSGQ_LEN)].dst_ep = received;
@@ -306,6 +314,7 @@ void coreb_msg(char *fmt, ...)
 	sm_atomic_write(&queue->sent, sent);
 	SSYNC();
 	platform_send_ipi_cpu(0, COREB_ICC_LOW_SEND);
+	bfin_sti(flags);
 }
 #endif
 
