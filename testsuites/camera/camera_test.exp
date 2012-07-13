@@ -157,7 +157,7 @@ if [ catch {exec rcp root@$targetip:/var/camera.avi ./} ] {
 
 incr case_num
 set timeout 10
-send "v4l2_video_test -w 320 -h 240 -N 5 -F /var/camera.yuv\r"
+send "v4l2_video_capture -w 320 -h 240 -N 5 -F /var/camera.yuv\r"
 while 1 {
     expect {
         -re "\[eE]rror|\[fF]ail|Hardware Trace|SIGSEGV" {
