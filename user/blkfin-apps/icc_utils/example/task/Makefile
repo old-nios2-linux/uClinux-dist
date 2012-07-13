@@ -54,6 +54,6 @@ icc_latency: icc_latency.o $(ICC_CORE) coreb_task.lds
 	$(LD) $(LDFLAGS) -o icc_latency -T coreb_task.lds --just-symbol $(ICC_CORE) icc_latency.o -Ttext $(TASK_LOAD_BASE)
 
 clean:
-	rm -rf *.o task1 task2 scalar $(INSTALL_TASK) 
+	rm -rf *.o task1 task2 scalar $(INSTALL_TASK) coreb_task.lds
 
 .PHONY: all clean

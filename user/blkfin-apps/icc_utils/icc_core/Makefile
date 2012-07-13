@@ -33,6 +33,6 @@ icc: $(ICC_OBJS) coreb.lds
 	bfin-elf-objdump -x -D $@ > $@.dump
 
 clean:
-	rm -f *.map *.dump *.elf *.gdb *.o icc
+	rm -f *.map *.dump *.elf *.gdb *.o icc coreb.lds
 
 .PHONY: all clean romfs
