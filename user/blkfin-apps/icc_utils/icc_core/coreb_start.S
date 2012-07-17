@@ -17,8 +17,9 @@
 #endif
 
 #define SM_TASK_NONE 0
-#define SM_TASK_INIT 1
-#define SM_TASK_RUNNING 2
+#define SM_TASK_RESET 1
+#define SM_TASK_INIT 2
+#define SM_TASK_RUNNING 3
 
 .section .l1.text
 
@@ -215,7 +216,7 @@ ENTRY(_evt_evt11)
 	p0.l = _sm_task1_status;
 	p0.h = _sm_task1_status;
 	r0 = [p0];
-	cc = r0 == SM_TASK_INIT;
+	cc = r0 == SM_TASK_RESET;
 	if cc jump .L_reload_task1;
 	(R7:0,P5:0) = [SP++];
 	sp += 8;        /* Skip orig_r0/orig_p0 */
@@ -224,6 +225,9 @@ ENTRY(_evt_evt11)
 	csync;
 	rti;
 .L_reload_task1:
+	r0.l = SM_TASK_INIT;
+	r0.h = 0;
+	[p0] = r0;
 	/* Initialize stack pointer */
 	sp.l = lo(INITIAL_STACK);
 	sp.h = hi(INITIAL_STACK);
@@ -246,7 +250,7 @@ ENTRY(_evt_evt2)
 	csync;
 	SYSCFG = [sp++];
 	csync;
-	rti;
+	rtn;
 ENDPROC(_evt_evt2)
 
 ENTRY(_evt_evt3)

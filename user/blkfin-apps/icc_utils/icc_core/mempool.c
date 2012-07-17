@@ -244,7 +244,7 @@ unsigned long gen_pool_alloc(struct gen_pool *pool, unsigned long size)
 		return addr;
 	}
 	coreb_msg("@@@bug gen pool full\n");
-	dump_stack();
+	coreb_dump_stack(0,0);
 	return 0;
 }
 

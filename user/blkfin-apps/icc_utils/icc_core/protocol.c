@@ -29,8 +29,9 @@ struct sm_message scratch_message;
 uint16_t iccq_should_stop;
 
 #define SM_TASK_NONE 0
-#define SM_TASK_INIT 1
-#define SM_TASK_RUNNING 2
+#define SM_TASK_RESET 1
+#define SM_TASK_INIT 2
+#define SM_TASK_RUNNING 3
 struct sm_task sm_task1;
 int sm_task1_status = 0;
 int sm_task1_control_ep = 0;
@@ -95,6 +96,7 @@ static int get_msg_src(struct sm_msg *msg)
 
 static int sm_message_enqueue(struct sm_message_queue *outqueue, struct sm_msg *msg)
 {
+	unsigned int flags = bfin_cli();
 	uint16_t sent = sm_atomic_read(&outqueue->sent);
 	uint16_t received = sm_atomic_read(&outqueue->received);
 	uint16_t pending = sent - received;
@@ -109,14 +111,17 @@ static int sm_message_enqueue(struct sm_message_queue *outqueue, struct sm_msg *
 	memcpy(&outqueue->messages[(sent%SM_MSGQ_LEN)], msg, sizeof(struct sm_msg));
 	sent++;
 	sm_atomic_write(&outqueue->sent, sent);
+	bfin_sti(flags);
 	return 0;
 }
 
 static int sm_message_dequeue(struct sm_message_queue *inqueue, struct sm_msg *msg)
 {
+	unsigned int flags = bfin_cli();
 	uint16_t received = sm_atomic_read(&inqueue->received);
 	received++;
 	sm_atomic_write(&inqueue->received, received);
+	bfin_sti(flags);
 	return 0;
 }
 
@@ -404,7 +409,7 @@ void sm_handle_control_message()
 				icc_init();
 			}
 
-			sm_task1_status = SM_TASK_INIT;
+			sm_task1_status = SM_TASK_RESET;
 			sm_send_task_run_ack(sm_task1_control_ep, coreb_info.icc_info.peer_cpu);
 
 			delay(1);

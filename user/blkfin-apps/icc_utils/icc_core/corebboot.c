@@ -102,12 +102,15 @@ static inline void *get_sp(void)
 }
 
 #define INITIAL_STACK   (COREB_L1_SCRATCH_START + L1_SCRATCH_LENGTH - 12)
-void dump_stack(void)
+void coreb_dump_stack(unsigned int errno, unsigned int addr)
 {
 	void *stack, *stackend;
 	unsigned int *p, *fp = 0;
 	unsigned short *ins, *ret_addr;
 	int frame_no = 0;
+
+	coreb_msg("execption %x addr %x, ipend=0x%x\n", errno, addr, readipend());
+
 	stack = get_sp();
 	stackend = INITIAL_STACK;
 	coreb_msg("coreb dump stack\n");
@@ -140,6 +143,9 @@ void dump_stack(void)
 	for (p = stack; p <= stackend; p++) {
 		if (*p & 0x1)
 			continue;
+		if (frame_no > 5)
+			while(1)
+				continue;
 
 		ins = (unsigned short *)*p;
 		ins--;
@@ -281,6 +287,9 @@ void coreb_msg(char *fmt, ...)
 	uint16_t sent, received, pending;
 	unsigned long flags = bfin_cli();
 	char buf[DEBUG_MSG_LINE] = "COREB: ";
+	va_start(args, fmt);
+	i = vsprintf(buf + 7, fmt, args);
+	va_end(args);
 	struct sm_message_queue *queue = (struct sm_message_queue *)MSGQ_START_ADDR;
 	struct sm_msg *msg = &queue->messages[0];
 	sent = sm_atomic_read(&queue->sent);
@@ -299,9 +308,6 @@ void coreb_msg(char *fmt, ...)
 			pending += USHRT_MAX;
 	}
 
-	va_start(args, fmt);
-	i = vsprintf(buf + 7, fmt, args);
-	va_end(args);
 	memset(p, 0, DEBUG_MSG_LINE);
 	SSYNC();
 	strcpy(p, buf);
@@ -320,13 +326,11 @@ void coreb_msg(char *fmt, ...)
 
 void dump_execption(unsigned int errno, unsigned int addr)
 {
-	coreb_msg("execption %x addr %x\n", errno, addr);
 	if (errno == 0x26) {
 		unsigned long fault_addr = bfin_read_DCPLB_FAULT_ADDR();
 
-		coreb_msg("fault addr %x dcplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
 		if (fault_addr >= 0x8000000)
-			dump_stack();
+			coreb_dump_stack(errno, addr);
 		_disable_dcplb();
 		fault_addr &= ~(0x400000 - 1);
 		bfin_write32(DCPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
@@ -335,16 +339,15 @@ void dump_execption(unsigned int errno, unsigned int addr)
 	} else if (errno == 0x2c) {
 		unsigned long fault_addr = bfin_read_ICPLB_FAULT_ADDR();
 
-		coreb_msg("fault addr %x icplb %d\n", fault_addr, (fault_addr/ 0x1000000) % 15);
 		if (fault_addr >= 0x8000000)
-			dump_stack();
+			coreb_dump_stack(errno, addr);
 		_disable_icplb();
 		fault_addr &= ~(0x400000 - 1);
 		bfin_write32(ICPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
 		bfin_write32(ICPLB_DATA1 + 4 * ((fault_addr/ 0x1000000) % 15), ((SDRAM_IGENERIC & ~CPLB_L1_CHBL) | PAGE_SIZE_4MB));
 		_enable_icplb();
 	} else {
-		dump_stack();
+		coreb_dump_stack(errno, addr);
 	}
 }
 
@@ -485,6 +488,8 @@ void coreb_icc_dispatcher(void)
 			coreb_idle();
 		}
 		icc_wait(0);
+		pending = iccqueue_getpending();
+		sm_handle_control_message();
 	}
 }
 
