@@ -10,11 +10,7 @@
 #define __ASSEMBLY__
 #include <linux/linkage.h>
 #include <asm/blackfin.h>
-#if 0
-#include <linux/init.h>
-#include <asm/asm-offsets.h>
-#include <asm/trace.h>
-#endif
+#include <asm/context.S>
 
 #define SM_TASK_NONE 0
 #define SM_TASK_RESET 1
@@ -159,40 +155,39 @@ ENTRY(_coreb_start)
 	/*
 	 * switch to IDLE stack.
 	 */
+	sp += -12;
 	call _secondary_start_kernel;
+	sp += 12;
 .L_exit:
 	jump.s	.L_exit;
 ENDPROC(_coreb_start)
 
 ENTRY(_evt_evt6)
-	[--sp] = SYSCFG;                                                    
-	[--sp] = P0;        /*orig_p0*/                                     
-	[--sp] = R0;        /*orig_r0*/                                     
-	[--sp] = (R7:0,P5:0);                                               
+	save_context_no_interrupts
+
+	sp += -12;
 	call _timer_handle;
-	(R7:0,P5:0) = [SP++];
-	sp += 8;        /* Skip orig_r0/orig_p0 */
-	csync;
-	SYSCFG = [sp++];
+	sp += 12;
+
+	restore_context_no_interrupts
 	csync;
 	rti;
 ENDPROC(_evt_evt6)
 
 ENTRY(_evt_evt7)
-	[--sp] = SYSCFG;                                                    
-	[--sp] = P0;        /*orig_p0*/                                     
-	[--sp] = R0;        /*orig_r0*/                                     
-	[--sp] = (R7:0,P5:0);                                               
+	save_context_no_interrupts
+
+	sp += -12;
 	call _ipi_handler_int0;
+	sp += 12;
+
 	p0.l = _sm_task1_status;
 	p0.h = _sm_task1_status;
 	r0 = [p0];
 	cc = r0 == SM_TASK_INIT;
 	if cc jump .L_reload_task;
-	(R7:0,P5:0) = [SP++];
-	sp += 8;        /* Skip orig_r0/orig_p0 */
-	csync;
-	SYSCFG = [sp++];
+
+	restore_context_no_interrupts
 	csync;
 	rti;
 .L_reload_task:
@@ -208,20 +203,18 @@ ENTRY(_evt_evt7)
 ENDPROC(_evt_evt7)
 
 ENTRY(_evt_evt11)
-	[--sp] = SYSCFG;                                                    
-	[--sp] = P0;        /*orig_p0*/                                     
-	[--sp] = R0;        /*orig_r0*/                                     
-	[--sp] = (R7:0,P5:0);                                               
+	save_context_no_interrupts
+
+	sp += -12;
 	call _ipi_handler_int0;
+	sp += 12;
 	p0.l = _sm_task1_status;
 	p0.h = _sm_task1_status;
 	r0 = [p0];
 	cc = r0 == SM_TASK_RESET;
 	if cc jump .L_reload_task1;
-	(R7:0,P5:0) = [SP++];
-	sp += 8;        /* Skip orig_r0/orig_p0 */
-	csync;
-	SYSCFG = [sp++];
+
+	restore_context_no_interrupts
 	csync;
 	rti;
 .L_reload_task1:
@@ -240,54 +233,38 @@ ENTRY(_evt_evt11)
 ENDPROC(_evt_evt11)
 
 ENTRY(_evt_evt2)
-	[--sp] = SYSCFG;                                                    
-	[--sp] = P0;        /*orig_p0*/                                     
-	[--sp] = R0;        /*orig_r0*/                                     
-	[--sp] = (R7:0,P5:0);                                               
+	save_context_no_interrupts
 
-	(R7:0,P5:0) = [SP++];
-	sp += 8;        /* Skip orig_r0/orig_p0 */
-	csync;
-	SYSCFG = [sp++];
+	restore_context_no_interrupts
 	csync;
 	rtn;
 ENDPROC(_evt_evt2)
 
 ENTRY(_evt_evt3)
-	[--sp] = SYSCFG;                                                    
-	[--sp] = P0;        /*orig_p0*/                                     
-	[--sp] = R0;        /*orig_r0*/                                     
-	[--sp] = (R7:0,P5:0);                                               
+	save_context_no_interrupts
 
 	r0 = SEQSTAT;
 	r0 <<= 26;
 	r0 >>= 26;
 	r1 = retx;
+	sp += -12;
 	call _dump_execption;
+	sp += 12;
 
-	(R7:0,P5:0) = [SP++];
-	sp += 8;        /* Skip orig_r0/orig_p0 */
-	csync;
-	SYSCFG = [sp++];
+	restore_context_no_interrupts
 	csync;
 	rtx;
 ENDPROC(_evt_evt3)
 
 ENTRY(_evt_evt5)
-	[--sp] = SYSCFG;                                                    
-	[--sp] = P0;        /*orig_p0*/                                     
-	[--sp] = R0;        /*orig_r0*/                                     
-	[--sp] = (R7:0,P5:0);                                               
+	save_context_no_interrupts
 
 	P0.H = HI(0xFEB1FFFC);
 	P0.L = LO(0xFEB1FFFC);
 	R0 = 25;
 	[P0] = R0;
 
-	(R7:0,P5:0) = [SP++];
-	sp += 8;        /* Skip orig_r0/orig_p0 */
-	csync;
-	SYSCFG = [sp++];
+	restore_context_no_interrupts
 	csync;
 	rti;
 ENDPROC(_evt_evt5)
