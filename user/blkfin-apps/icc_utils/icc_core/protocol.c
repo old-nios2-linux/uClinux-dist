@@ -1182,6 +1182,8 @@ uint32_t msg_handle(void)
 	int pending;
 	uint32_t index;
 	struct sm_session_status status;
+
+	sm_handle_control_message();
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
 	index = sm_find_session(msg->dst_ep, 0, coreb_info.sessions_table);

@@ -10,7 +10,7 @@
 #define __ASSEMBLY__
 #include <linux/linkage.h>
 #include <asm/blackfin.h>
-#include <asm/context.S>
+#include "context.S"
 
 #define SM_TASK_NONE 0
 #define SM_TASK_RESET 1
@@ -117,11 +117,6 @@ ENTRY(_coreb_trampoline_start)
 	[p0] = p1;
 	csync;
 
-	P0.H = HI(0xFEB1FFFC);
-	P0.L = LO(0xFEB1FFFC);
-	R0 = 2;
-	[P0] = R0;
-
 	raise 15;
 	p0.l = .LWAIT_HERE;
 	p0.h = .LWAIT_HERE;
@@ -136,11 +131,6 @@ ENTRY(_coreb_trampoline_end)
 
 .section ".text"
 ENTRY(_coreb_start)
-
-	P0.H = HI(0xFEB1FFFC);
-	P0.L = LO(0xFEB1FFFC);
-	R0 = 3;
-	[P0] = R0;
 
 	[--sp] = reti;
 
@@ -258,11 +248,6 @@ ENDPROC(_evt_evt3)
 
 ENTRY(_evt_evt5)
 	save_context_no_interrupts
-
-	P0.H = HI(0xFEB1FFFC);
-	P0.L = LO(0xFEB1FFFC);
-	R0 = 25;
-	[P0] = R0;
 
 	restore_context_no_interrupts
 	csync;
