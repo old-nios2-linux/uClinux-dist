@@ -141,7 +141,7 @@ while 1 {
             }
         }
 
-        -re "SoC I2S Audio for the ADI BF5xx chip.*SND_BF5XX_I2S.*\\\[.*]" {
+        -re "SoC I2S Audio for the ADI Blackfin chip.*SND_BF5XX_I2S.*\\\[.*]" {
             if { $audio_dev == "audio_ssm2603" || $audio_dev == "audio_ad73311" || [string match "audio_adau*" $audio_dev] } {
                 send "Y\r"
             } else {
