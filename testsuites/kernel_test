@@ -702,7 +702,7 @@ do
   cp $UCLINUX_DIST_PATH/linux-2.6.x/vmlinux  $THIS_LOG/vmlinux.${AUTO_TESTCASE[$i]}
   fi
 
-  if [ ${AUTO_TESTCASE[$i]} == "spimmc" ] || [ ${AUTO_TESTCASE[$i]} == "spimmc_interrupt" ] || [ ${AUTO_TESTCASE[$i]} == "sdiommc" ] || [ ${AUTO_TESTCASE[$i]} == "nand" ] ; then
+  if [ ${AUTO_TESTCASE[$i]} == "spimmc" ] || [ ${AUTO_TESTCASE[$i]} == "spimmc_interrupt" ] || [ ${AUTO_TESTCASE[$i]} == "sdiommc" ] || [ ${AUTO_TESTCASE[$i]} == "nand" ] || [ ${AUTO_TESTCASE[$i]} == "usb_camera" ] ; then
       cp $UCLINUX_DIST_PATH/images/vmImage $THIS_LOG/vmImage.${AUTO_TESTCASE[$i]}
   fi
 

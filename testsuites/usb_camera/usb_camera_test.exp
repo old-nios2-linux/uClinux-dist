@@ -296,6 +296,17 @@ while 1 {
     }
 }
 
+incr case_num
+send_user "\nrcp root@$targetip:/usb_camera.mp4 .\n"
+if [ catch {exec rcp root@$targetip:/usb_camera.mp4 .} ] {
+    send_user "FAIL: rcp video file to host PC\n"
+    send_user "$errorInfo\n"
+    case_fail $case_num
+} else {
+    send_user "PASS: rcp video file to host PC\n"
+    case_pass $case_num
+}
+
 all_pass
 send_user "Ending $argv0\n"
 log_file
