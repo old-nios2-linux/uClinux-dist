@@ -48,10 +48,6 @@ while 1 {
             continue
         }
 
-        -re "Virtual terminal.*VT.*\\\[.*]" {
-            send "N\r"
-        }
-
 #Multimedia support
         -re "Multimedia support.*MEDIA_SUPPORT.*\\\[.*]" {
             send "Y\r"
@@ -80,6 +76,22 @@ while 1 {
 
         -re " (\[0-9]+). Inventra.*USB_INVENTRA_DMA.* (\[0-9]+). Disable DMA.*MUSB_PIO_ONLY.*\[cC]hoice.*\\\[.*]" {
             send "\r"
+        }
+
+        -re "USB Mass Storage support.*USB_STORAGE.*\\\[./././.]" {
+            send "Y\r"
+        }
+
+        -re "USB Peripheral Controller \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Gadget Drivers \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Gadget Drivers.* (\[0-9]+). Gadget Zero.*USB_ZERO.*\[cC]hoice\\\[.*]" {
+            send "$expect_out(1,string)\r"
         }
 
 # enable ATAPI hard disk
@@ -117,6 +129,52 @@ while 1 {
 
         -re "Codepage 437 \\\(United States, Canada\\\).*NLS_CODEPAGE_437.*\\\[.*]" {
             send "Y\r"
+        }
+
+#TFT LCD
+        -re "Support for generic platform NAND driver.*MTD_NAND_PLATFORM.*\\\[.*]" {
+            #conflict with TFT LCD
+            send "N\r"
+        }
+
+        -re "Support for frame buffer devices.*FB.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Backlight & LCD device support.*BACKLIGHT_LCD_SUPPORT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Lowlevel LCD controls.*LCD_CLASS_DEVICE.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Lowlevel Backlight controls.*BACKLIGHT_CLASS_DEVICE.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "SHARP LQ043 TFT LCD.*BF548 EZKIT.*\\\[.*]" {
+            if { $board_type == "BF548-EZKIT" } {
+                send "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "Varitronix COG-T350MCQB TFT LCD display.*FB_BFIN_T350MCQB.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT" } {
+                send "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "SHARP LQ035Q1DH02 TFT LCD.*FB_BFIN_LQ035Q1.*\\\[.*]" {
+            if { $board_type == "BF527-EZKIT-V2" } {
+                send "Y\r"
+            } else {
+                send "N\r"
+            }
         }
 
 #Virtual terminal & frame buffer
