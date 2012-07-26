@@ -11,16 +11,6 @@ if { [source make_clean.exp] != 0 } {
     exit
 }
 
-if { $board_type == "BF548-EZKIT" } {
-    send_user "\n\nModify pata_bf54x.c to change BFIN_MAX_SG_SEGMENTS to 1 for bug 7169"
-    set driver_file $uclinux_path/linux-2.6.x/drivers/ata/pata_bf54x.c
-    if [ catch {exec sed -i "/define BFIN_MAX_SG_SEGMENTS/ s/4/1/" $driver_file} ] {
-        send_user "\nfail to modify driver file\n"
-        send_user "$errorInfo\n"
-        exit
-    }
-}
-
 cd $uclinux_path/testsuites
 step "Make config."
 source  make_default_config.exp
