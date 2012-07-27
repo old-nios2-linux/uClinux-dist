@@ -67,7 +67,7 @@ expect {
 
 set timeout 80
 incr case_num
-send -s "./icc_loader -f -e ./task1 \r"
+send -s "./icc_loader  -e ./task1 \r"
 while 1 {
    expect {
      -re "icc_task_init" {
