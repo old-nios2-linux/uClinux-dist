@@ -40,7 +40,7 @@ expect -re $kernel_prompt
 
 set timeout 60
 incr case_num
-send "ping -C 15 $serverip\r"
+send "ping -c 15 $serverip\r"
 while 1 {
     expect {
         -re "(\[fF]ail|\[eE]rror|No such).*$kernel_prompt" {
@@ -63,7 +63,7 @@ expect -re $kernel_prompt
 
 set timeout 60
 incr case_num
-send "ping -C 15 $serverip\r"
+send "ping -c 15 $serverip\r"
 while 1 {
     expect {
         -re "(\[fF]ail|\[eE]rror|No such).*$kernel_prompt" {
