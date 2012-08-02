@@ -10,14 +10,10 @@
 #include <generated/autoconf.h>
 #include <linux/linkage.h>
 #include <linux/types.h>
-
+#include <asm/blackfin.h>
 #include <asm/icc.h>
-
 #include <asm/cplb.h>
 #include <asm/irqflags.h>
-
-#include <asm/blackfin.h>
-
 #include <protocol.h>
 #include <debug.h>
 
@@ -415,7 +411,7 @@ irqreturn_t timer_handle(int irq, void *dev_instance)
 static void setup_secondary()
 {
 	unsigned long ilat;
-	unsigned long bfin_irq_flags;
+	unsigned long irq_flags;
 
 	bfin_write_IMASK(0);
 	CSYNC();
@@ -427,11 +423,11 @@ static void setup_secondary()
 	/* Enable interrupt levels IVG7. IARs have been already
 	 * programmed by the boot CPU.  */
 #ifdef CONFIG_BF561
-	bfin_irq_flags = IMASK_IVG7| IMASK_IVGTMR;
+	irq_flags = IMASK_IVG7| IMASK_IVGTMR;
 #else
-	bfin_irq_flags = IMASK_IVG11| IMASK_IVGTMR;
+	irq_flags = IMASK_IVG11| IMASK_IVGTMR;
 #endif
-	bfin_sti(bfin_irq_flags);
+	bfin_sti(irq_flags);
 	SSYNC();
 }
 
