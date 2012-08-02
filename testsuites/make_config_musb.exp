@@ -27,11 +27,11 @@ while 1 {
             send "Y\r"
         }
 
-        -re "USB Gadget Support.*USB_GADGET.*\\\[.*]" {
+        -re "Disable external hubs.*USB_OTG_BLACKLIST_HUB.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "USB Peripheral Controller \\\[.*]" {
+        -re "USB Gadget Support.*USB_GADGET.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -90,20 +90,12 @@ while 1 {
             send "$expect_out(1,string)\r"
         }
 
-        -re "Driver Mode.*(\[0-9]+). USB Peripheral.*USB_MUSB_PERIPHERAL.*\[cC]hoice\\\[.*]" {
-            send "$expect_out(1,string)\r"
-        }
-
         -re " (\[0-9]+). Inventra.*USB_INVENTRA_DMA.* (\[0-9]+). Disable DMA.*MUSB_PIO_ONLY.*\[cC]hoice.*\\\[.*]" {
             send "\r"
         }
 
-        -re "USB Peripheral Controller \\\[.*]" {
+        -re "Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -re "USB Peripheral Controller.*(\[0-9]+). Inventra HDRC USB Peripheral.*USB_GADGET_MUSB_HDRC.*\[cC]hoice\\\[.*]" {
-            send "$expect_out(1,string)\r"
         }
 
         -re "USB Gadget Drivers \\\[.*]" {

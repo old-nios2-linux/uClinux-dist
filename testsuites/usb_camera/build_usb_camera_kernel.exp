@@ -66,10 +66,6 @@ while 1 {
         }
 
 # USB support
-        -re "USB Peripheral Controller \\\[.*]" {
-            send "Y\r"
-        }
-
         -re "Platform Glue Layer \\\[.*]" {
             send "Y\r"
         }
@@ -79,10 +75,6 @@ while 1 {
         }
 
         -re "USB Mass Storage support.*USB_STORAGE.*\\\[./././.]" {
-            send "Y\r"
-        }
-
-        -re "USB Peripheral Controller \\\[.*]" {
             send "Y\r"
         }
 
