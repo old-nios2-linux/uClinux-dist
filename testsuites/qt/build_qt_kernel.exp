@@ -26,12 +26,15 @@ step "Make config."
 cd $uclinux_path/testsuites
 source  make_default_config.exp
 
-# Following make specific configuration for this case.
+step "Config musb driver"
+cd $uclinux_path/testsuites
+source make_config_musb.exp
+
+
+step "Config for testcase"
 cd $uclinux_path
 set timeout 300
-set baud_rate_done_flag 0
 spawn make config
-
 #TFT-LCD is used to test QT. Other video module can also be used.
 #TFT-LCD driver is different for different boards.
 #So all video related dirvers are built as modules.
@@ -125,68 +128,24 @@ while 1 {
         }
 
 #USB mouse
-        -re "CFI Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
-#CONFIG_MTD_PHYSMAP claims the entire Async. Memory Space
-#need to entirely disable it while using various U-Connector boards
-            send "N\r"
-        }
-
-        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Support for Host-side USB.*USB.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Bank 3.*BANK_3.*\\\[.*]" {
-            if { $board_type == "BF537-STAMP" } {
-                send "0xAAC2\r"
-            } else {
-                send "\r"
-            }
-        }
-
-        -re "ISP1362 HCD support \\\(USB_ISP1362_HCD\\\).*\\\[.*]" {
-            if { $board_type == "BF537-STAMP" } {
-                send "Y\r"
-            } else {
-                send "N\r"
-            }
-        }
-
-        -re "GPIO for Interrupt.*USB_ISP1362_BFIN_GPIO_IRQ.*\\\[.*]" {
-#For JP4 on usb add-on board, pin15 & 16 should be connected.
-#PB4 on BF537-STAMP should be disabled.
-            if { $board_type == "BF537-STAMP" } {
-                send "55\r"
-            } else {
-                send "\r"
-            }
-        }
-
-#        -re "SL811HS HCD support.*USB_SL811_HCD.*\\\[.*]" {
-#            if { $board_type == "BF537-STAMP" } {
-#                send "Y\r"
-#            } else {
-#                send "N\r"
-#            }
-#        }
-
-        -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
-                send "Y\r"
-            } else {
-                send "\r"
-            }
-        }
-
         -re "Platform Glue Layer \\\[.*]" {
             send "Y\r"
         }
 
-        -re "Disable DMA.*always use PIO.*MUSB_PIO_ONLY.*\\\[.*]" {
+        -re " (\[0-9]+). Inventra.*USB_INVENTRA_DMA.* (\[0-9]+). Disable DMA.*MUSB_PIO_ONLY.*\[cC]hoice.*\\\[.*]" {
             send "\r"
+        }
+
+        -re "USB Mass Storage support.*USB_STORAGE.*\\\[./././.]" {
+            send "Y\r"
+        }
+
+        -re "USB Gadget Drivers \\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "USB Gadget Drivers.* (\[0-9]+). Gadget Zero.*USB_ZERO.*\[cC]hoice\\\[.*]" {
+            send "$expect_out(1,string)\r"
         }
 
         -re "USB Human Interface Device \\\(full HID\\\) support.*USB_HID.*\\\[.*]" {
