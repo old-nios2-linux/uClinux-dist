@@ -222,6 +222,8 @@ send "time bonnie++ -u root -d /mnt\r"
 while 1 {
     expect {
         -re "Hardware Trace" {
+            set timeout 30
+            expect -re $kernel_prompt
             send_user "bonnie++ failed\n"
             case_fail $case_num
         }
