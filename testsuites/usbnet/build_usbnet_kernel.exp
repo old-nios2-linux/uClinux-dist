@@ -50,7 +50,7 @@ while 1 {
         }
 
         -re "PLX NET2272.*USB_NET2272.*\\\[.*]:" {
-            send "$expect_out(1,string)\r"
+            send "Y\r"
         }
 
         -re "USB Gadget Drivers \\\[.*]" {
