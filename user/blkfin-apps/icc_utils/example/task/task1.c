@@ -20,7 +20,7 @@ void  icc_task_init(int argc, char *argv[])
 	while (1) {
 		COREB_DEBUG(1, "task loop\n");
 		if (icc_wait()) {
-			ret = sm_recv_packet(session_index, &src_ep, &src_cpu, &buf, len);
+			ret = sm_recv_packet(session_index, &src_ep, &src_cpu, &buf, &len);
 			if (ret <= 0) {
 				COREB_DEBUG(1, "recv packet failed\n");
 			}
