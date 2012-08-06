@@ -46,7 +46,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 /*
  * Open the device; in fact, there's nothing to do here.
  */
-static int simple_open(struct inode *inode, struct file *filp)
+static int mmap_simple_open(struct inode *inode, struct file *filp)
 {
 	return 0;
 }
@@ -54,7 +54,7 @@ static int simple_open(struct inode *inode, struct file *filp)
 /*
  * Closing is just as simpler.
  */
-static int simple_release(struct inode *inode, struct file *filp)
+static int mmap_simple_release(struct inode *inode, struct file *filp)
 {
 	return 0;
 }
@@ -63,13 +63,13 @@ static int simple_release(struct inode *inode, struct file *filp)
  * Common VMA ops.
  */
 
-void simple_vma_open(struct vm_area_struct *vma)
+void mmap_simple_vma_open(struct vm_area_struct *vma)
 {
 	printk(KERN_NOTICE "Simple VMA open, virt %lx, phys %lx\n",
 	       vma->vm_start, vma->vm_pgoff << PAGE_SHIFT);
 }
 
-void simple_vma_close(struct vm_area_struct *vma)
+void mmap_simple_vma_close(struct vm_area_struct *vma)
 {
 	printk(KERN_NOTICE "Simple VMA close.\n");
 }
@@ -80,14 +80,14 @@ void simple_vma_close(struct vm_area_struct *vma)
  */
 
 static struct vm_operations_struct simple_remap_vm_ops = {
-	.open = simple_vma_open,
-	.close = simple_vma_close,
+	.open = mmap_simple_vma_open,
+	.close = mmap_simple_vma_close,
 };
 
 /* In this sample we are using _ramend <-> physical_mem_end as
  * the buffer to be mmaped.
  */
-static int simple_remap_mmap(struct file *filp, struct vm_area_struct *vma)
+static int mmap_simple_remap_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	/* the kernel passes in the vm_pgoff - the offset, in *pages*
 	 * from the start of the buffer that the user space app wants
@@ -120,7 +120,7 @@ static int simple_remap_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EAGAIN;
 
 	vma->vm_ops = &simple_remap_vm_ops;
-	simple_vma_open(vma);
+	mmap_simple_vma_open(vma);
 	return 0;
 }
 
@@ -159,7 +159,7 @@ static struct vm_operations_struct simple_nopage_vm_ops = {
 };
 */
 
-ssize_t simple_read(struct file * filp, char __user * buf, size_t count, loff_t * f_pos)
+ssize_t mmap_simple_read(struct file * filp, char __user * buf, size_t count, loff_t * f_pos)
 {
 	return count;
 }
@@ -202,10 +202,10 @@ static void simple_setup_cdev(struct cdev *dev, int minor,
 /* Device 0 uses remap_pfn_range */
 static struct file_operations simple_remap_ops = {
 	.owner = THIS_MODULE,
-	.open = simple_open,
-	.read = simple_read,
-	.release = simple_release,
-	.mmap = simple_remap_mmap,
+	.open = mmap_simple_open,
+	.read = mmap_simple_read,
+	.release = mmap_simple_release,
+	.mmap = mmap_simple_remap_mmap,
 };
 
 /* Device 1 uses nopage */
