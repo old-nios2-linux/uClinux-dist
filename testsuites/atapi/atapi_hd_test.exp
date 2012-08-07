@@ -30,17 +30,29 @@ send "mkdir /mnt/hd2\r"
 
 set timeout 5
 incr case_num
-send "dmesg\r"
+send "dmesg | grep ^ata\r"
 while 1 {
     expect {
-        -re "TOSHIBA MK4032GAX.*78140160 sectors.*configured for UDMA.*sda: sda1" {
-            sleep 2
-            send_user "Harddisk found, test pass\n"
+        -re "(TOSHIBA MK4032GAX|FUJITSU MHW2040AT).*78140160 sectors.*configured for UDMA.*$kernel_prompt" {
             case_pass $case_num
             break
         }
         timeout {
-            send_user "Harddisk not found, test fail\n"
+            case_fail $case_num
+        }
+    }
+}
+
+set timeout 5
+incr case_num
+send "dmesg | grep sd\r"
+while 1 {
+    expect {
+        -re "sda:.*Attached SCSI disk.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
             case_fail $case_num
         }
     }
@@ -81,84 +93,147 @@ while 1 {
 }
 
 set timeout 10
+incr case_num
 send "fdisk /dev/sda\r"
-expect -re "Command.*:"
-send "p\r"
-set timeout 10
 while 1 {
     expect {
-        -re "/dev/sda1" {
+        -re "Command.*:" {
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+send "p\r"
+while 1 {
+    expect {
+        -re "/dev/sda1.*Command.*:" {
             send "d\r"
-            expect -re "Partition number.*"
+            expect -re "Partition number.*:"
             send "1\r"
-            expect -re "Command.*"
-            send "w\r"
-            expect  -re $kernel_prompt
-            send_user "sda1 is deleted\n"
+            expect -re "Command.*:"
+            break
+        }
+        -re "Command.*:" {
             break
         }
         timeout {
-            send "q\r"
-            break
+            case_fail $case_num
         }
     }
 }
-
-set timeout 10
-send "fdisk /dev/sda\r"
-expect -re "Command.*:"
 send "p\r"
-set timeout 10
 while 1 {
     expect {
-        -re "/dev/sda2" {
+        -re "/dev/sda2.*Command.*:" {
             send "d\r"
-            expect -re "Partition number.*"
+            expect -re "Partition number.*:"
             send "2\r"
-            expect -re "Command.*"
-            send "w\r"
-            expect  -re $kernel_prompt
-            send_user "sda1 is deleted\n"
+            expect -re "Command.*:"
+            break
+        }
+        -re "Command.*:" {
             break
         }
         timeout {
-            send "q\r"
+            case_fail $case_num
+        }
+    }
+}
+set timeout 20
+send "w\r"
+while 1 {
+    expect {
+        -re "error" {
+            expect -re $kernel_prompt
+            case_fail $case_num
+        }
+        -re "Syncing disks.*$kernel_prompt" {
+            case_pass $case_num
             break
+        }
+        timeout {
+            case_fail $case_num
         }
     }
 }
 
+incr case_num
 set timeout 10
 send "fdisk /dev/sda\r"
-expect -re "Command.*:"
+while 1 {
+    expect {
+        -re "Command.*:" {
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
 send "n\r"
-expect -re "primary partition.*:"
+expect -re "primary partition \\\(.*\\\)"
 send "p\r"
-expect -re "Partition number.*:"
-send "1\r"
-expect -re "First cylinder.*:"
-send "\r"
-expect -re "Last cylinder.*:"
-send "$NUM_CYLINDER_DOS\r"
-expect -re "Command.*:"
-send "t\r"
-expect -re "Partition number.*:"
-send "1\r"
-expect -re "Hex code.*:"
-send "b\r"
-expect -re "Command.*:"
+while 1 {
+    expect {
+        -re "Partition number.*:" {
+            send "1\r"
+            expect -re "First cylinder.*:"
+            send "\r"
+            expect -re "Last cylinder.*:"
+            send "$NUM_CYLINDER_DOS\r"
+            expect -re "Command.*:"
+            send "t\r"
+            expect -re "Partition number.*:"
+            send "1\r"
+            expect -re "Hex code.*:"
+            send "b\r"
+            expect -re "Command.*:"
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
 send "n\r"
-expect -re "primary partition.*"
+expect -re "primary partition \\\(.*\\\)"
 send "p\r"
-expect -re "Partition number.*"
-send "2\r"
-expect -re "First cylinder.*"
-send "\r"
-expect -re "Last cylinder.*"
-send "$NUM_CYLINDER_EXT2\r"
-expect -re "Command.*"
+while 1 {
+    expect {
+        -re "Partition number.*:" {
+            send "2\r"
+            expect -re "First cylinder.*:"
+            send "\r"
+            expect -re "Last cylinder.*:"
+            send "$NUM_CYLINDER_EXT2\r"
+            expect -re "Command.*:"
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+set timeout 20
 send "w\r"
-expect -re $kernel_prompt
+while 1 {
+    expect {
+        -re "error" {
+            expect -re $kernel_prompt
+            case_fail $case_num
+        }
+        -re "Syncing disks.*$kernel_prompt" {
+            case_pass $case_num
+            break
+        }
+        timeout {
+            case_fail $case_num
+        }
+    }
+}
+
 
 set timeout 300
 incr case_num
