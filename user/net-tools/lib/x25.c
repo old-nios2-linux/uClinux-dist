@@ -119,7 +119,7 @@ X25_input(int type, char *bufp, struct sockaddr *sap)
   /* All done. */
 #ifdef DEBUG
   fprintf(stderr, "x25_input(%s): ", orig);
-  for (i = 0; i < sizeof(x25_address); i++)
+  for (i = 0; i < sizeof(struct x25_address); i++)
 	fprintf(stderr, "%02X ", sap->sa_data[i] & 0377);
   fprintf(stderr, "\n");
 #endif
