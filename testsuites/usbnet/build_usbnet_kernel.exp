@@ -49,7 +49,7 @@ while 1 {
             send "Y\r"
         }
 
-        -re "PLX NET2272.*USB_NET2272.*\\\[.*]:" {
+        -re "PLX NET2272.*USB_NET2272.*\\\[.*]" {
             send "Y\r"
         }
 
