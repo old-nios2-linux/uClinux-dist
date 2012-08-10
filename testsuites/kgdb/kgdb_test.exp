@@ -929,7 +929,7 @@ for { set j 0 } { $j < 2 } { incr j 1 } {
 #if  l1 is not run, the breakpoints here are b1 and b2.
 #if  l1 is run, the breakpoints here are b3 and b4.
 #
-if { $board_type == "BF548-EZKIT" || $board_type == "BF561-EZKIT" } {
+if { $board_type == "BF548-EZKIT" || [string match "BF561-EZKIT*" $board_type] } {
 
         set spawn_id $kermit_spawn_id
 	send -s "cat /proc/kgdbtest\r"

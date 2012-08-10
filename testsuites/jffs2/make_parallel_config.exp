@@ -77,7 +77,7 @@ while 1 {
 ##############################################################################
 
         -re "Blackfin BF561 EZKIT Flash Chip Support \\\(MTD_EZKIT561\\\).*\\\[.*]" {
-            if { $board_type == "BF561-EZKIT" } {
+            if { [string match "BF561-EZKIT*" $board_type] } {
                 send -s "Y\r"
             } else {
                 send -s "N\r"
