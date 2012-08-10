@@ -174,13 +174,16 @@ ENTRY(_evt_evt7)
 	p0.l = _sm_task1_status;
 	p0.h = _sm_task1_status;
 	r0 = [p0];
-	cc = r0 == SM_TASK_INIT;
+	cc = r0 == SM_TASK_RESET;
 	if cc jump .L_reload_task;
 
 	restore_context_no_interrupts
 	csync;
 	rti;
 .L_reload_task:
+	r0.l = SM_TASK_INIT;
+	r0.h = 0;
+	[p0] = r0;
 	/* Initialize stack pointer */
 	sp.l = lo(INITIAL_STACK);
 	sp.h = hi(INITIAL_STACK);
