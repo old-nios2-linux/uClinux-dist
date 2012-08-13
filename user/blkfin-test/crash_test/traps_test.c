@@ -774,7 +774,7 @@ struct {
 	{ 0x00, prefetch_scratch,  0, "prefetch scratch pad"},
 	{ 0x00, prefetch_l1_dataA, 0, "prefetch l1_dataA"},
 	{ 0x00, prefetch_l1_dataB, 0, "prefetch l1_dataB"},
-	{ 0x00, prefetch_l1_instruction, SIGILL, "prefetch l1_instruction"},
+	{ 0x3f, prefetch_l1_instruction, SIGBUS, "prefetch l1_instruction"},
 	{ 0x00, prefetch_l1_non,   0, "prefetch _l1_non"},
 	{ 0x00, prefetch_sysmmr,   0, "prefetch _sysmmr"},
 	{ 0x00, prefetch_coremmr,  0, "prefetch _coremmr"},
