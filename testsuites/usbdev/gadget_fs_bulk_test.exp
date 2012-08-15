@@ -6,18 +6,28 @@
 
 source ../kernel_config.exp
 source configs/config.exp
-log_file [log_file_name "$argv0"]
-send_user "Starting $argv0\n"
-set TITLE [title "$argv0"]
 
-set musb_mode [lindex $argv 1]
-send_user "\n#### musb_mode is $musb_mode\n"
-
-if { $argc < 1} {
-    puts "Please input: musb_mode(PIO or DMA)"
+if { $argc < 2} {
+    puts "Please input: board_type, musb_mode(PIO or DMA), aio_flag(null or libaio)"
     exit
 }
-append TITLE " ($musb_mode)"
+set musb_mode [lindex $argv 1]
+set aio_flag  [lindex $argv 2]
+send_user "\n#### musb_mode is $musb_mode, aio_flag is $aio_flag\n"
+set TITLE [title "$argv0"]
+
+if { $aio_flag == "libaio" } {
+    append TITLE " (LIBAIO $musb_mode)"
+    set usb_makefile "Makefile.usb.libaio"
+    set log_name gadget_fs_bulk_libaio_test_log
+} else {
+    append TITLE " ($musb_mode)"
+    set usb_makefile "Makefile.usb"
+    set log_name gadget_fs_bulk_test_log
+}
+
+log_file $log_name
+send_user "Starting $argv0\n"
 
 
 step "Spawn kermit"
@@ -53,7 +63,7 @@ if [ catch {exec make -f Makefile.testusb -C src} ] {
     send_user "PASS: Build testusb\n"
 }
 
-if [ catch {exec make clean -f Makefile.usb -C src} ] {
+if [ catch {exec make clean -f $usb_makefile -C src} ] {
     send_user "FAIL: Make clean of usb\n"
     send_user "$errorInfo\n"
     case_fail $case_num
@@ -61,7 +71,7 @@ if [ catch {exec make clean -f Makefile.usb -C src} ] {
     send_user "PASS: Make clean of usb done\n"
 }
 
-if [ catch {exec make -f Makefile.usb -C src} ] {
+if [ catch {exec make -f $usb_makefile -C src} ] {
     send_user "FAIL: Build usb\n"
     send_user "$errorInfo\n"
     case_fail $case_num

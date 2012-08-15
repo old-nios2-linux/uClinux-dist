@@ -1,0 +1,9 @@
+#Makefile for usb test
+
+all: usb
+
+usb :
+	bfin-linux-uclibc-gcc -Wall -DAIO -g -o usb usb.c usbstring.c -lpthread -laio
+
+clean :
+	rm -rf usb
