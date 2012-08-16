@@ -145,8 +145,8 @@ proc case_fail { casenum } {
        if {[ catch { exec grep git-id $log_loc/$last_pass_dir/kernel_test_log } errmsg ]} {
           send_user "\nLast passed time: $last_pass_dir.\nUclinux-dist version: $last_pass_ucdist.\nKernel verion: $last_pass_kernel, Git-id is not found!\n"
       } else {
-          set last_pass_git_kernel [exec grep git-id $log_loc/$last_pass_dir/kernel_test_log | awk {{print $2}} | xargs  -i expr \{\} : .*\\\(\[0-9a-z\]\\\{40\\\}\\\) ]
-          send_user "\nLast passed time: $last_pass_dir.\nUclinux-dist version: $last_pass_ucdist.\nKernel verion: $last_pass_kernel, git-id: $last_pass_git_kernel\n"
+          set last_pass_git_kernel [exec grep commit $log_loc/$last_pass_dir/kernel_test_log | awk {{print $2}} | xargs  -i expr \{\} : .*\\\(\[0-9a-z\]\\\{40\\\}\\\) ]
+          send_user "\nLast passed time: $last_pass_dir.\nUclinux-dist version: $last_pass_ucdist.\nKernel verion: $last_pass_kernel, commit: $last_pass_git_kernel\n"
              }
           }  
   }
