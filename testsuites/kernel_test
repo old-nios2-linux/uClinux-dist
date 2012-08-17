@@ -1016,27 +1016,27 @@ do
   then
       echo "$0:   Error, failed."
       tail -50 ./build_audio_ad73311_kernel_log
-  else
-      sleep 30
-      ./audio_test.exp $BOARD_TYPE audio_ad73311 >/dev/null  2>&1
+  #else
+  #    sleep 30
+  #    ./audio_test.exp $BOARD_TYPE audio_ad73311 >/dev/null  2>&1
 
-      if [ $RESET_BOARD -eq 1  ] ; then
-          cd $UCLINUX_DIST_TESTSUITES
-          ./reset_board.exp  >/dev/null  2>&1 
-          sleep 10
-      fi
+  #    if [ $RESET_BOARD -eq 1  ] ; then
+  #        cd $UCLINUX_DIST_TESTSUITES
+  #        ./reset_board.exp  >/dev/null  2>&1 
+  #        sleep 10
+  #    fi
 
-      cd $UCLINUX_DIST_TESTSUITES/audio
-      ./audio_data_test.exp $BOARD_TYPE audio_ad73311 >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE audio_ad73311 >/dev/null 2>&1
+  #    cd $UCLINUX_DIST_TESTSUITES/audio
+  #    ./audio_data_test.exp $BOARD_TYPE audio_ad73311 >/dev/null 2>&1
+  #    ./snd2fftw_test.exp $BOARD_TYPE audio_ad73311 >/dev/null 2>&1
   fi
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.audio_ad73311
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_ad73311
   cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_ad73311
-  cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
-  mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ad73311
+  #cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
+  #mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.ad73311
 
   cd $UCLINUX_DIST_PATH/
   make clean  > /dev/null 2>&1
@@ -1425,7 +1425,7 @@ do
 
 
   echo  "Testing power with I2S Audio drivers..."
-  if [ ${AUTO_RUN_STATUS[$((n+4))]} -eq 1  ] || [ ${AUTO_RUN_STATUS[$((n+17))]} -eq 1  ] ; then
+  if [ ${AUTO_RUN_STATUS[$((n+17))]} -eq 1  ] ; then
 
       cd $UCLINUX_DIST_PATH/
       cp $UCLINUX_DIST_PATH_BAK/linux-2.6.x/.config linux-2.6.x/
@@ -1440,33 +1440,33 @@ do
           echo "$0:   Error, failed."
           tail -50 ./build_power_audio_i2s_kernel_log
       else
-          if [ ${AUTO_RUN_STATUS[$((n+4))]} -eq 1  ] ; then
-              cd $UCLINUX_DIST_TESTSUITES/power
-              ./power_ad73311_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-              cd $UCLINUX_DIST_TESTSUITES
-              ./reset_board.exp  >/dev/null  2>&1
-              sleep 10
+          #if [ ${AUTO_RUN_STATUS[$((n+4))]} -eq 1  ] ; then
+          #    cd $UCLINUX_DIST_TESTSUITES/power
+          #    ./power_ad73311_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+          #    cd $UCLINUX_DIST_TESTSUITES
+          #    ./reset_board.exp  >/dev/null  2>&1
+          #    sleep 10
 
-              cd $UCLINUX_DIST_TESTSUITES/power
-              ./power_ad73311_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-              cd $UCLINUX_DIST_TESTSUITES
-              ./reset_board.exp  >/dev/null  2>&1
-              sleep 10
-          fi
+          #    cd $UCLINUX_DIST_TESTSUITES/power
+          #    ./power_ad73311_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+          #    cd $UCLINUX_DIST_TESTSUITES
+          #    ./reset_board.exp  >/dev/null  2>&1
+          #    sleep 10
+          #fi
 
-          if [ ${AUTO_RUN_STATUS[$((n+14))]} -eq 1  ] ; then
-              cd $UCLINUX_DIST_TESTSUITES/power
-              ./power_adau1373_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
-              cd $UCLINUX_DIST_TESTSUITES
-              ./reset_board.exp  >/dev/null  2>&1
-              sleep 10
+          #if [ ${AUTO_RUN_STATUS[$((n+14))]} -eq 1  ] ; then
+          #    cd $UCLINUX_DIST_TESTSUITES/power
+          #    ./power_adau1373_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+          #    cd $UCLINUX_DIST_TESTSUITES
+          #    ./reset_board.exp  >/dev/null  2>&1
+          #    sleep 10
 
-              cd $UCLINUX_DIST_TESTSUITES/power
-              ./power_adau1373_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
-              cd $UCLINUX_DIST_TESTSUITES
-              ./reset_board.exp  >/dev/null  2>&1
-              sleep 10
-          fi
+          #    cd $UCLINUX_DIST_TESTSUITES/power
+          #    ./power_adau1373_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+          #    cd $UCLINUX_DIST_TESTSUITES
+          #    ./reset_board.exp  >/dev/null  2>&1
+          #    sleep 10
+          #fi
 
           if [ ${AUTO_RUN_STATUS[$((n+17))]} -eq 1  ] ; then
               cd $UCLINUX_DIST_TESTSUITES/power
