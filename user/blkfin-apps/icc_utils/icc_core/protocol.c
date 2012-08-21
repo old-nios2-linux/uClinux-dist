@@ -105,6 +105,7 @@ static int sm_message_enqueue(struct sm_message_queue *outqueue, struct sm_msg *
 		pending += USHRT_MAX;
 
 	if (pending >= (SM_MSGQ_LEN - 1)) {
+		bfin_sti(flags);
 		coreb_msg("over run\n");
 		return -EAGAIN;
 	}
