@@ -775,7 +775,7 @@ struct {
 	{ 0x00, prefetch_l1_dataA, 0, "prefetch l1_dataA"},
 	{ 0x00, prefetch_l1_dataB, 0, "prefetch l1_dataB"},
 	{ 0x3f, prefetch_l1_instruction, SIGBUS, "prefetch l1_instruction"},
-	{ 0x00, prefetch_l1_non,   0, "prefetch _l1_non"},
+	{ 0x3f, prefetch_l1_non,   SIGBUS, "prefetch _l1_non"},
 	{ 0x00, prefetch_sysmmr,   0, "prefetch _sysmmr"},
 	{ 0x00, prefetch_coremmr,  0, "prefetch _coremmr"},
 #endif
@@ -942,6 +942,9 @@ int main(int argc, char *argv[])
 	}
 	for (cpu = 0; cpu < NR_CPUS; cpu++)
 		if (CPU_ISSET(cpu, &set)) break;
+	if (cpu >= NR_CPUS) {
+		err("cpu_isset() failed\n");
+	}
 
 	progname = argv[0];
 
