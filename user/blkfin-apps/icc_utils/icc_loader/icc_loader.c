@@ -382,7 +382,6 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 	pkt.type = SM_TASK_RUN;
 	ioctl(fd, CMD_SM_SEND, &pkt);
 
-	sleep(5);
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 
 	free(task1);
