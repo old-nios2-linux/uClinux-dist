@@ -515,6 +515,10 @@ void icc_init(void)
 	coreb_info.icc_info.peer_cpu = 0;
 	init_sm_session_table();
 	register_sm_proto();
+
+	coreb_info.icc_info.icc_queue_attribute =
+		(uint32_t *)((uint32_t)coreb_info.icc_info.icc_queue + MSGQ_SIZE);
+
 }
 
 void secondary_start_kernel(void)
