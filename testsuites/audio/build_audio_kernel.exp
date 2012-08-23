@@ -191,7 +191,7 @@ while 1 {
 
         -re "SoC I2S\\\(TDM mode\\\) Audio for the ADI BF6xx chip.*SND_BF6XX_TDM.*\\\[.*]" {
             if { [string match "BF6*" $board_type] } {
-                if { $audio_dev == "audio_ad1836" || [string match "audio_ad193*" $audio_dev] } {
+                if { $audio_dev == "audio_ad1836" } {
                     send "Y\r"
                 } else {
                     send "N\r"
