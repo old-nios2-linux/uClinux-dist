@@ -12,9 +12,8 @@ if { $argc < 2} {
     exit
 }
 set audio_dev [lindex $argv 1]
-set title ${audio_dev}_test_log
-
-log_file $title
+set log_name ${audio_dev}_test_log
+log_file $log_name
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 append TITLE " ($audio_dev)"
@@ -26,7 +25,7 @@ source ../spawn_kermit.exp
 step "Reboot the kernel."
 source ../reboot_kernel.exp
 
-step "Start testing."
+step "Start testing"
 
 set count_under_run 0
 set case_num 0
@@ -41,9 +40,9 @@ proc alsa_rec_play {format rate channel file_type other_args} {
     global count_under_run
 
     if { $channel == "Mono" } {
-        set channel_num 1
+        set channel_num "1"
     } else {
-        set channel_num 2
+        set channel_num "2"
     }
 
     sleep 1
@@ -65,7 +64,10 @@ proc alsa_rec_play {format rate channel file_type other_args} {
                     }
                 }
             }
-            -re "$channel\r\n$kernel_prompt" {
+            -re "Input/output error.*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "$channel.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -93,7 +95,10 @@ proc alsa_rec_play {format rate channel file_type other_args} {
                     }
                 }
             }
-            -re "$channel\r\n$kernel_prompt" {
+            -re "Input/output error.*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "$channel.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -111,9 +116,9 @@ proc alsa_rec2play {format rate channel file_type other_args} {
     global count_under_run
 
     if { $channel == "Mono" } {
-        set channel_num 1
+        set channel_num "1"
     } else {
-        set channel_num 2
+        set channel_num "2"
     }
 
     sleep 1
@@ -134,7 +139,10 @@ proc alsa_rec2play {format rate channel file_type other_args} {
                     }
                 }
             }
-            -re "$channel\r\n$kernel_prompt" {
+            -re "Input/output error.*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "$channel.*$kernel_prompt" {
                 case_pass $case_num
                 break
             }
@@ -171,6 +179,7 @@ proc repeat { test_proc total_count } {
         }
     }
 }
+
 
 spawn mpg123 -Z ./audiotest.mp3
 set plaympeg_id $spawn_id
@@ -241,6 +250,23 @@ while 1 {
     }
 }
 
+if { $audio_dev == "audio_adau1761" } {
+    incr case_num
+    set timeout 15
+    send "amixer cset name='Headphone Playback Switch' on; amixer cset name='Headphone Playback Volume' 40; amixer cset name='Right Playback Mixer Right DAC Switch' on; amixer cset name='Left Playback Mixer Left DAC Switch' on; amixer cset name='DSP Bypass Playback Switch' on; amixer cset name='DSP Bypass Capture Switch' on; amixer cset name='Digital Capture Volume' 255; amixer cset name='Input 2 Capture Volume' 7; amixer cset name='Input 4 Capture Volume' 7;\r"
+    while 1 {
+        expect {
+            -re $kernel_prompt {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+}
+
 repeat alsa_rec_play $repeat_count
 
 incr case_num
@@ -283,7 +309,10 @@ while 1 {
                     }
                 }
             }
-            -re "Stereo\r\n$kernel_prompt" {
+            -re "Input/output error.*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "Stereo.*$kernel_prompt" {
                 break
             }
             timeout {
@@ -307,6 +336,9 @@ while 1 {
                     }
                 }
             }
+            -re "Input/output error.*$kernel_prompt" {
+                case_fail $case_num
+            }
             -re "Playing WAVE" {
                 break
             }
@@ -317,7 +349,7 @@ while 1 {
     }
     send -s "\n"
     expect {
-        ">" {}
+        -re $kernel_prompt {}
         timeout {
             case_fail $case_num
         }
@@ -340,7 +372,7 @@ while 1 {
             -re "Input/output error" {
                 case_fail $case_num
             }
-            -re "Stereo\r\n$kernel_prompt" {
+            -re "Stereo.*$kernel_prompt" {
                 break
             }
             timeout {

@@ -11,11 +11,9 @@ if { $argc < 2} {
     puts "Refer to build_audio_kernel.exp for audio_dev."
     exit
 }
-
 set audio_dev [lindex $argv 1]
-set title ${audio_dev}_data_test_log
-log_file $title
-
+set log_name ${audio_dev}_data_test_log
+log_file $log_name
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
 append TITLE " ($audio_dev)"
@@ -30,7 +28,7 @@ source ../reboot_kernel.exp
 step "Start testing."
 
 set output_file_type "wav"
-if { $audio_dev == "audio_ad1938" || $audio_dev == "audio_ad1836" || $audio_dev == "audio_ssm2603" } {
+if { $audio_dev == "audio_ad1938" || $audio_dev == "audio_ad1836" || $audio_dev == "audio_ssm2603" || $audio_dev == "audio_adau1761" } {
     set channel "Stereo"
     set channel_num "2"
     set sample_rate "48000"
@@ -51,6 +49,7 @@ proc rec_at_pc { freq magnitude } {
     global kermit_spawn_id
     global host_spawn_id
     global kernel_prompt
+    global sh_prompt
     global output_dir
     global output_file_type
     global channel
@@ -87,13 +86,13 @@ proc rec_at_pc { freq magnitude } {
     send "arecord -t $output_file_type -c $channel_num -f $alsa_format -r $sample_rate -d 5 $output_dir/${freq}Hz_BFIN2PC.wav\n"
     while 1 {
         expect {
-            -re "$channel.*>" {
+            -re "$channel.*$sh_prompt" {
                 case_pass $case_num
                 break
             }
             timeout {
                 send "\3"
-                expect ">"
+                expect -re $sh_prompt
                 case_fail $case_num
             }
         }
@@ -124,6 +123,7 @@ proc rec_from_pc { freq magnitude } {
     global kermit_spawn_id
     global host_spawn_id
     global kernel_prompt
+    global sh_prompt
     global targetip
     global output_dir
     global output_file_type
@@ -146,7 +146,7 @@ proc rec_from_pc { freq magnitude } {
             }
             timeout {
                 send "\3"
-                expect ">"
+                expect -re $sh_prompt
                 case_fail $case_num
             }
         }
@@ -180,7 +180,7 @@ proc rec_from_pc { freq magnitude } {
     send "\3"
     while 1 {
         expect {
-            -re ">" {
+            -re $sh_prompt {
                 case_pass $case_num
                 break
             }
@@ -233,11 +233,44 @@ while 1 {
     }
 }
 
+if { $audio_dev == "audio_adau1361" } {
+    incr case_num
+    set timeout 15
+    send "amixer cset name='Headphone Playback Switch' on; amixer cset name='Headphone Playback Volume' 40; amixer cset name='Left Playback Mixer Left DAC Switch' on; amixer cset name='Right Playback Mixer Left DAC Switch' on; amixer cset name='Lineout Playback Switch' on; amixer cset name='Lineout Playback Volume' 40; amixer cset name='Left LR Playback Mixer Left Volume' 2; amixer cset name='Right LR Playback Mixer Right Volume' 2; amixer cset name='Aux Capture Volume' 7; amixer cset name='Digital Capture Volume' 255; amixer cset name='Input 1 Capture Volume' 7; amixer cset name='Input 2 Capture Volume' 7; amixer cset name='Input 3 Capture Volume' 7; amixer cset name='Input 4 Capture Volume' 7\r"
+    while 1 {
+        expect {
+            -re $kernel_prompt {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+}
+
+if { $audio_dev == "audio_adau1761" } {
+    incr case_num
+    set timeout 15
+    send "amixer cset name='Headphone Playback Switch' on; amixer cset name='Headphone Playback Volume' 40; amixer cset name='Right Playback Mixer Right DAC Switch' on; amixer cset name='Left Playback Mixer Left DAC Switch' on; amixer cset name='DSP Bypass Playback Switch' on; amixer cset name='DSP Bypass Capture Switch' on; amixer cset name='Digital Capture Volume' 255; amixer cset name='Input 2 Capture Volume' 7; amixer cset name='Input 4 Capture Volume' 7;\r"
+    while 1 {
+        expect {
+            -re $kernel_prompt {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+}
+
 
 spawn /bin/bash
 set host_spawn_id $spawn_id
-send "\r"
-expect ">"
+expect -re $sh_prompt
 
 if [ catch {exec rm -fr $output_dir} ] {
     send_user "FAIL: Remove the old DIRECTORY\n"
