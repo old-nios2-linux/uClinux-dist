@@ -5,7 +5,6 @@
 #
 
 source ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -101,7 +100,7 @@ while 1 {
         }
 
         -re "Inventra Highspeed Dual Role Controller.*USB_MUSB_HDRC.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] } {
+            if { $board_type == "BF548-EZKIT" || [string match "BF527-EZKIT*" $board_type] || $board_type == "BF609-EZKIT" } {
                 send "Y\r"
             } else {
                 send "\r"
@@ -110,16 +109,6 @@ while 1 {
 
         -re "Platform Glue Layer \\\[.*]" {
             send "Y\r"
-        }
-
-        -re "Disable DMA \\\(always use PIO\\\).*MUSB_PIO_ONLY.*\\\[.*]" {
-            if { $board_type == "BF548-EZKIT" } {
-                send "N\r"
-            } elseif { [string match "BF527-EZKIT*" $board_type] } {
-                send "Y\r"
-            } else {
-                send "\r"
-            }
         }
 
         -re "ISP1362 HCD support \\\(USB_ISP1362_HCD\\\).*\\\[.*]" {
@@ -152,13 +141,13 @@ while 1 {
         }
 
         eof {
-            puts "End of configuration"
+            send_user "\nEnd of configuration\n"
             break
         }
 
         timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config\n"
+            exit
         }
     }
 }
