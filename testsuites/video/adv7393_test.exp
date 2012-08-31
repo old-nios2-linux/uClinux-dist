@@ -15,13 +15,13 @@ step "Reboot the kernel."
 # set bootargs  $bootargs_param0
 source ../reboot_kernel.exp
 
-step "Start testing."
-set case_num 0
-set timeout 20
-
-sleep 5
+set timeout 10
+expect -re $kernel_prompt
 send "\r"
 expect -re $kernel_prompt
+
+step "Start testing"
+set case_num 0
 
 set timeout 20
 incr case_num
@@ -106,7 +106,5 @@ while 1 {
 }
 
 all_pass
-
 send_user "Ending $argv0\n"
-
 log_file
