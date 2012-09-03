@@ -94,6 +94,24 @@ static int get_msg_src(struct sm_msg *msg)
 		return 0;
 }
 
+int sm_get_icc_queue_attribute(uint32_t type, uint32_t *attribute)
+{
+	if (type >= ICC_QUEUE_ATTR_MAX)
+		return -EINVAL;
+	if (!attribute)
+		return -EINVAL;
+	*attribute = *(coreb_info.icc_info.icc_queue_attribute + type);
+	return 0;
+}
+
+int sm_set_icc_queue_attribute(uint32_t type, uint32_t attribute)
+{
+	if (type >= ICC_QUEUE_ATTR_MAX)
+		return -EINVAL;
+	*(coreb_info.icc_info.icc_queue_attribute + type) = attribute;
+	return 0;
+}
+
 static int sm_message_enqueue(struct sm_message_queue *outqueue, struct sm_msg *msg)
 {
 	unsigned int flags = bfin_cli();
@@ -411,6 +429,7 @@ void sm_handle_control_message()
 			}
 
 			sm_task1_status = SM_TASK_RESET;
+			sm_set_icc_queue_attribute(ICC_QUEUE_ATTR_STATUS, ICC_QUEUE_READY);
 			sm_send_task_run_ack(sm_task1_control_ep, coreb_info.icc_info.peer_cpu);
 
 			delay(1);
