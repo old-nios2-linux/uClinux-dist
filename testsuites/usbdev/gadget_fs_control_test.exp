@@ -19,11 +19,11 @@ set TITLE [title "$argv0"]
 if { $aio_flag == "libaio" } {
     append TITLE " (LIBAIO $musb_mode)"
     set usb_makefile "Makefile.usb.libaio"
-    set log_name gadget_fs_bulk_libaio_test_log
+    set log_name gadget_fs_control_libaio_test_log
 } else {
     append TITLE " ($musb_mode)"
     set usb_makefile "Makefile.usb"
-    set log_name gadget_fs_bulk_test_log
+    set log_name gadget_fs_control_test_log
 }
 
 log_file $log_name

@@ -503,7 +503,8 @@ if [ $BUILD_POLICY -eq 1  ] ; then
   echo "./build_policy_kernel.exp  $BOARD_TYPE $CPU $REVISION $UCLINUX_DIST_PATH $BINARY_FORMAT $ALLOCATOR $ICACHE $DCACHE $POLICY $UART_MODE $SMP $MPU $XENOMAI >/dev/null  2>&1"
     
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.policy
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.policy
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.policy
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.policy
   cp $UCLINUX_DIST_TESTSUITES/policy/build_policy_kernel_log  $THIS_LOG
   
   if [ ! -f $UCLINUX_DIST_PATH/images/uImage ] ; then
@@ -829,12 +830,14 @@ do
 
   if [ $BOARD_TYPE == "BF561-EZKIT" ] ; then
       cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.camera_adv7183
-      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.camera_adv7183
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.camera_adv7183
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.camera_adv7183
       cp $UCLINUX_DIST_TESTSUITES/camera/build_camera_kernel_log $THIS_LOG
       cp $UCLINUX_DIST_TESTSUITES/camera/adv7183_test_log $THIS_LOG/camera_adv7183_test_log
   else
       cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.camera_vs6624
-      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.camera_vs6624
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.camera_vs6624
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.camera_vs6624
       cp $UCLINUX_DIST_TESTSUITES/camera/build_camera_kernel_log $THIS_LOG
       cp $UCLINUX_DIST_TESTSUITES/camera/camera_test_log $THIS_LOG/camera_vs6624_test_log
       cp $UCLINUX_DIST_TESTSUITES/camera/camera.avi $THIS_LOG
@@ -883,7 +886,8 @@ do
 
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.adv7393
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.adv7393
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.adv7393
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.adv7393
   cp $UCLINUX_DIST_TESTSUITES/video/build_video_kernel_log $THIS_LOG
   cp $UCLINUX_DIST_TESTSUITES/video/adv7393_test_log $THIS_LOG/video_adv7393_test_log
 
@@ -1420,7 +1424,8 @@ do
   fi
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.power
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.power
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.power
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.power
   cp $UCLINUX_DIST_TESTSUITES/power/*_log $THIS_LOG
 
 
@@ -1485,7 +1490,8 @@ do
       fi
 
       cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.power.audio_i2s
-      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.power.audio_i2s
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.power.audio_i2s
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.power.audio_i2s
       cp $UCLINUX_DIST_TESTSUITES/power/*_log $THIS_LOG
 
   fi
@@ -1544,7 +1550,8 @@ do
       fi
 
       cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.power.audio_tdm
-      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.power.audio_tdm
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.power.audio_tdm
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.power.audio_tdm
       cp $UCLINUX_DIST_TESTSUITES/power/*_log $THIS_LOG
 
   fi
@@ -1811,8 +1818,9 @@ if [ ${AUTO_RUN_STATUS[$((n+2))]} -eq 1 ] ; then
       echo "ltp build uclinux-dist failed for ${ltp_suf[i]}"
       tail -50 ./build_ltp_kernel_log
       cp $UCLINUX_DIST_TESTSUITES/ltp/build_ltp_kernel_log $THIS_LOG/build_ltp_kernel_log_${ltp_suf[i]}
-      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.ltp_${ltp_suf[i]}
-  else	
+      cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.ltp_${ltp_suf[i]}
+      cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.ltp_${ltp_suf[i]}
+  else
       # do if build uclinux-dist succeed
       echo "build_ltp_kernel.exp done"
       sleep 30
@@ -1885,7 +1893,8 @@ fi
   ./coreb_test.exp $BOARD_TYPE >/dev/null  2>&1
   
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.coreb 
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.coreb
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.coreb
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.coreb
   
   cp $UCLINUX_DIST_TESTSUITES/coreb/build_coreb_kernel_log $THIS_LOG
   cp $UCLINUX_DIST_TESTSUITES/coreb/coreb_test_log $THIS_LOG
@@ -1975,7 +1984,8 @@ fi
   fi
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.usbhost_bf5xx.$config
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.usbhost_bf5xx.$config
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.usbhost_bf5xx.$config
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.usbhost_bf5xx.$config
   mv $UCLINUX_DIST_TESTSUITES/usbhost/build_usbhost_bf5xx_kernel_log $THIS_LOG/build_usbhost_bf5xx_${config}_kernel_log
   mv $UCLINUX_DIST_TESTSUITES/usbhost/usbhost_bf5xx_test_log $THIS_LOG/usbhost_bf5xx_${config}_test_log
 
@@ -2109,7 +2119,8 @@ fi
   done
 
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.usbdev.$config
-  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.usbdev.$config
+  cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.usbdev.$config
+  cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.usbdev.$config
   mv $UCLINUX_DIST_TESTSUITES/usbdev/build_usbdev_kernel_log $THIS_LOG/build_usbdev_${config}_kernel_log
   mv $UCLINUX_DIST_TESTSUITES/usbdev/*_log $THIS_LOG
 
