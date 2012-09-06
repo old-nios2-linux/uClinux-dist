@@ -148,11 +148,11 @@ void icc_task_init(int argc, char *argv[])
 
 	while (1) {
 		if (icc_wait()) {
-			rc1 = recv_sclchan1(ep1, sizes[i%NUM_SIZES],status,MCAPI_SUCCESS);
+			rc1 = recv_sclchan1(ep1, sizes[pass_num1%NUM_SIZES],status,MCAPI_SUCCESS);
 			if (rc1 == MCAPI_TRUE)
 				pass_num1++;
 
-			rc2 = recv_sclchan2(ep2, sizes[i%NUM_SIZES],status,MCAPI_SUCCESS);
+			rc2 = recv_sclchan2(ep2, sizes[pass_num2%NUM_SIZES],status,MCAPI_SUCCESS);
 			if (rc2 == MCAPI_TRUE)
 				pass_num2++;
 			
