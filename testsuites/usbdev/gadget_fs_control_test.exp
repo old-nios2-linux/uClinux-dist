@@ -292,10 +292,10 @@ set spawn_id $host_spawn_id
 
 incr case_num
 set timeout 5
-send "cat /proc/bus/usb/devices\r"
+send "cat /proc/bus/usb/devices|grep -c \"Product=My Source\/Sink Product\"\r"
 while 1 {
     expect {
-        -re "Manufacturer=Licensed to Code, LLC.*Product=My Source/Sink Product.*#" {
+        -re "1.*#" {
             case_pass $case_num
             break
         }
@@ -304,6 +304,8 @@ while 1 {
         }
     }
 }
+
+sleep 2
 
 incr case_num
 set timeout 5
