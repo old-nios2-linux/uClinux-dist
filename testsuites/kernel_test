@@ -1129,19 +1129,19 @@ do
   then
       echo "$0:   Error, failed."
       tail -50 ./build_audio_adau1373_kernel_log
-  else
-      sleep 30
-      ./audio_test.exp $BOARD_TYPE audio_adau1373 >/dev/null  2>&1
+  #else
+  #    sleep 30
+  #    ./audio_test.exp $BOARD_TYPE audio_adau1373 >/dev/null  2>&1
 
-      if [ $RESET_BOARD -eq 1  ] ; then
-          cd $UCLINUX_DIST_TESTSUITES
-          ./reset_board.exp  >/dev/null  2>&1 
-          sleep 10
-      fi
+  #    if [ $RESET_BOARD -eq 1  ] ; then
+  #        cd $UCLINUX_DIST_TESTSUITES
+  #        ./reset_board.exp  >/dev/null  2>&1 
+  #        sleep 10
+  #    fi
 
-      cd $UCLINUX_DIST_TESTSUITES/audio
-      ./audio_data_test.exp $BOARD_TYPE audio_adau1373 >/dev/null 2>&1
-      ./snd2fftw_test.exp $BOARD_TYPE audio_adau1373 >/dev/null 2>&1
+  #    cd $UCLINUX_DIST_TESTSUITES/audio
+  #    ./audio_data_test.exp $BOARD_TYPE audio_adau1373 >/dev/null 2>&1
+  #    ./snd2fftw_test.exp $BOARD_TYPE audio_adau1373 >/dev/null 2>&1
   fi
 
 
@@ -1149,7 +1149,7 @@ do
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.audio_adau1373
   cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.audio_adau1373
   cp $UCLINUX_DIST_TESTSUITES/audio/*_log $THIS_LOG
-  mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.adau1373
+  #mv $UCLINUX_DIST_TESTSUITES/audio/audio_data $THIS_LOG/audio_data.adau1373
 
   cd $UCLINUX_DIST_PATH/
   make clean  > /dev/null 2>&1
