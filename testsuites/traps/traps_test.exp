@@ -76,11 +76,11 @@ if { $smp_flag == 1 } {
     send -s  "taskset 1 ./traps_test -1\r"
     while 1 {
         expect {
-            -re "Running test 20 for exception 0x00: prefetch l1_instruction\r\n\.\.\. FAIL" {
+            -re "Running test 20 for exception .*: prefetch l1_instruction\r\n\.\.\. FAIL" {
                 incr passed_case_number -1
                 continue
             }
-            -re "Running test 21 for exception 0x00: prefetch _l1_non\r\n\.\.\. FAIL" {
+            -re "Running test 21 for exception .*: prefetch _l1_non\r\n\.\.\. FAIL" {
                 incr passed_case_number -1
                 continue
             }
@@ -111,11 +111,11 @@ if { $smp_flag == 1 } {
     send -s "taskset 2 ./traps_test -1\r"
     while 1 {
         expect {
-            -re "Running test 20 for exception 0x00: prefetch l1_instruction\r\n\.\.\. FAIL" {
+            -re "Running test 20 for exception .*: prefetch l1_instruction\r\n\.\.\. FAIL" {
                 incr passed_case_number -1
                 continue
             }
-            -re "Running test 21 for exception 0x00: prefetch _l1_non\r\n\.\.\. FAIL" {
+            -re "Running test 21 for exception .*: prefetch _l1_non\r\n\.\.\. FAIL" {
                 incr passed_case_number -1
                 continue
             }
@@ -145,11 +145,11 @@ if { $smp_flag == 1 } {
     send -s "./traps_test -1\r"
     while 1 {
         expect {
-            -re "Running test 20 for exception 0x00: prefetch l1_instruction\r\n\.\.\. FAIL" {
+            -re "Running test 20 for exception .*: prefetch l1_instruction\r\n\.\.\. FAIL" {
                 incr passed_case_number -1
                 continue
             }
-            -re "Running test 21 for exception 0x00: prefetch _l1_non\r\n\.\.\. FAIL" {
+            -re "Running test 21 for exception .*: prefetch _l1_non\r\n\.\.\. FAIL" {
                 incr passed_case_number -1
                 continue
             }
