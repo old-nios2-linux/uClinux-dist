@@ -295,9 +295,6 @@ incr case_num
 send "pccardctl eject 0\r"
 while 1 {
     expect {
-        -nocase -re "(error|fail).*$kernel_prompt" {
-            case_fail $case_num
-        }
         -re "card ejected from slot 0.*$kernel_prompt" {
             case_pass $case_num
             break
