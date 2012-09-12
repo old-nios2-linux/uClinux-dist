@@ -7,7 +7,7 @@ if [ $# -ne 1 ]; then
 fi       
 cvs_server_addr=$1
 
-LTP_SUB_DIR=ltp-full-20101031
+LTP_SUB_DIR=ltp-full-20120903
 if [ -d $LTP_SUB_DIR ]
 then
 	rm -rf $LTP_SUB_DIR

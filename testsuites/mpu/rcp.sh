@@ -5,7 +5,7 @@ echo "$0:       Start rcp.sh at `date`"
 CWD=`pwd`
 cvs_server_addr=10.99.29.20
 LTP_PATCH=ltp.patch
-LTP_SUB_DIR=ltp-full-20101031
+LTP_SUB_DIR=ltp-full-20120903
 
 
 if [ -d $LTP_SUB_DIR ]

@@ -1708,9 +1708,13 @@ set result_matrix {
        { getuid02_16   	     {getuid02_16}                     	 notrun		UCLINUX }
        { getuid03     	     {getuid03}                     	 notrun		UCLINUX }
        { getuid03_16   	     {getuid03_16}                     	 notrun		UCLINUX }
+       { getxattr01   	     {getxattr01}                     	 notrun		UCLINUX }
+       { getxattr02   	     {getxattr02}                     	 notrun		UCLINUX }
+       { getxattr03   	     {getxattr03}                     	 notrun		UCLINUX }
        { inotify01     	     {inotify01}                     	 notrun		UCLINUX }
        { inotify02     	     {inotify02}                     	 notrun		UCLINUX }
        { inotify03     	     {inotify03 -D /dev/sdb1}          	 notrun		UCLINUX }
+       { inotify04     	     {inotify04}                         notrun		UCLINUX }
        { inotify_init1_01    {inotify_init1_01}                  notrun		UCLINUX }
        { inotify_init1_02    {inotify_init1_02}                  notrun		UCLINUX }
        { io_cancel01  	     {io_cancel01}                     	 notrun		UCLINUX }
@@ -1797,6 +1801,8 @@ set result_matrix {
        { mknodat01     	     {mknodat01}                     	 notrun		UCLINUX }
        { mlock01     	     {mlock01}                     	 notrun		UCLINUX }
        { mlock02     	     {mlock02}                     	 notrun		UCLINUX }
+       { mlock03     	     {mlock03}                     	 notrun		UCLINUX }
+       { mlock04     	     {mlock04}                     	 notrun		UCLINUX }
        { mlockall01          {mlockall01}                     	 notrun		UCLINUX }
        { mlockall02          {mlockall02}                     	 notrun		UCLINUX }
        { mlockall03          {mlockall03}                     	 notrun		UCLINUX }
@@ -1810,6 +1816,7 @@ set result_matrix {
        { mmap07     	     {mmap07}                     	 notrun		UCLINUX }
        { mmap08     	     {mmap08}                     	 notrun		UCLINUX }
        { mmap09     	     {mmap09}                     	 notrun		NA }
+       { mmap11     	     {mmap11}                     	 notrun		UCLINUX }
        { modify_ldt01        {modify_ldt01}                      notrun		UCLINUX }
        { modify_ldt02        {modify_ldt02}                      notrun		UCLINUX }
        { mount01             {mount01 -D /dev/sdb1}              notrun		UCLINUX }
@@ -2055,6 +2062,8 @@ set result_matrix {
        { sendfile06_64       {sendfile06_64}                  	 notrun		UCLINUX }
        { sendfile07          {sendfile07}                     	 notrun		UCLINUX }
        { sendfile07_64       {sendfile07_64}                  	 notrun		UCLINUX }
+       { sendfile08          {sendfile08}                     	 notrun		UCLINUX }
+       { sendfile08_64       {sendfile08_64}                  	 notrun		UCLINUX }
        { sendmsg01     	     {sendmsg01}                     	 notrun		UCLINUX }
        { sendto01     	     {sendto01}                     	 notrun		UCLINUX }
        { setdomainname01     {setdomainname01}                   notrun		UCLINUX }
@@ -2148,7 +2157,6 @@ set result_matrix {
        { setsid01     	     {setsid01}                     	 notrun		UCLINUX }
        { setsockopt01        {setsockopt01}                      notrun		UCLINUX }
        { set_thread_area01   {set_thread_area01}                 notrun		UCLINUX }
-       { set_thread_area02   {set_thread_area02}                 notrun		UCLINUX }
        { set_tid_address01   {set_tid_address01}                 notrun		UCLINUX }
        { settimeofday01      {settimeofday01}                    notrun		UCLINUX }
        { settimeofday02      {settimeofday02}                    notrun		UCLINUX }
@@ -2160,6 +2168,9 @@ set result_matrix {
        { setuid03_16   	     {setuid03_16}                     	 notrun		UCLINUX }
        { setuid04     	     {setuid04}                     	 notrun		UCLINUX }
        { setuid04_16   	     {setuid04_16}                     	 notrun		UCLINUX }
+       { setxattr01    	     {setxattr01}                     	 notrun		UCLINUX }
+       { setxattr02    	     {setxattr02}                     	 notrun		UCLINUX }
+       { setxattr03    	     {setxattr03}                     	 notrun		UCLINUX }
        { sgetmask01   	     {sgetmask01}                     	 notrun		UCLINUX }
        { shmat01     	     {shmat01}                     	 notrun		NA }
        { shmat02     	     {shmat02}                     	 notrun		UCLINUX }
@@ -2450,7 +2461,7 @@ if [ catch {exec ./build_ltp.sh $cvs_server_addr > build_ltp_log} ] {
 #set LTP_SOURCE_DIR		"$cwd/ltp/$LTP_SUB_DIR"
 #set LTP_TESTCASES_DIR           "$cwd/ltp/$LTP_SUB_DIR/testcases/bin"
 #set LTP_SUB_DIR			[exec cat ltp/current]
-set LTP_SOURCE_NAME             "ltp-full-20101031"
+set LTP_SOURCE_NAME             "ltp-full-20120903"
 set LTP_SOURCE_DIR		"$cwd/$LTP_SOURCE_NAME"
 set LTP_TESTCASES_DIR           "$cwd/$LTP_SOURCE_NAME/testcases/bin"
 
