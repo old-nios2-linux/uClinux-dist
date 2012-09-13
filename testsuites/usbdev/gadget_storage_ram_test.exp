@@ -33,12 +33,6 @@ step "Start testing."
 set case_num 0
 set mnt_point "/mnt/usb"
 
-if { $board_type == "BF548-EZKIT" } {
-    set dev "/dev/sdb"
-} else {
-    set dev "/dev/sdc"
-}
-
 set timeout 5
 sleep 3
 send "ifconfig eth0 $targetip\r"
@@ -122,6 +116,29 @@ while 1 {
     }
 }
 
+sleep 5
+incr case_num
+set timeout 5
+send "dmesg |tail -n 4\r"
+while 1 {
+    expect {
+        -re "(\[eE]rror|\[fF]ail).*#" {
+            send_user "Host PC fails to find gadget storage device\n"
+            case_fail $case_num
+        }
+        -re "sd(\[a-z]): unknown partition table.*#" {
+            set dev "/dev/sd$expect_out(1,string)"
+            send_user "Host PC can find gadget storage device $dev\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "Host PC fails to find gadget storage device due to timeout\n"
+            case_fail $case_num
+        }
+    }
+}
+
 incr case_num
 set timeout 5
 send "mkdir -p $mnt_point\r"
@@ -184,9 +201,7 @@ while 1 {
                     -re "kernel still uses the old table|\[eE]rror|\[fF]ail" {
                         case_fail $case_num
                     }
-                    -re "Syncing disks" {
-                        send "\r"
-                        expect "#"
+                    -re "Syncing disks.*#" {
                         case_pass $case_num
                         break
                     }
@@ -206,8 +221,8 @@ while 1 {
 append dev "1"
 
 incr case_num
-set timeout 600
-send "mke2fs $dev\r"
+set timeout 120
+send "time mke2fs $dev\r"
 while 1 {
     expect {
         -re "Writing inode tables.*done.*done.*#" {
@@ -239,8 +254,8 @@ while 1 {
 }
 
 incr case_num
-set timeout 1000
-send "date; time dd if=/dev/zero of=$mnt_point/10m.bin bs=1M count=10; date\r"
+set timeout 100
+send "time dd if=/dev/zero of=$mnt_point/10m.bin bs=1M count=10\r"
 while 1 {
     expect {
         -re "(\[eE]rror|\[fF]ail).*#" {
@@ -380,9 +395,6 @@ while 1 {
     }
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n"
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file

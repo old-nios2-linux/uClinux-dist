@@ -31,7 +31,6 @@ source ../reboot_kernel.exp
 
 step "Start testing."
 set case_num 0
-set dev "/dev/sdb"
 set mnt_point "/mnt/usb"
 
 set timeout 5
@@ -41,11 +40,14 @@ sleep 3
 send "\r"
 expect -re $kernel_prompt
 
-set timeout 9
 incr case_num
+set timeout 10
 send "dmesg|grep -i sd\r"
 while 1 {
     expect {
+        -re "(\[eE]rror|\[fF]ail).*$kernel_prompt" {
+            case_fail $case_num
+        }
         -re "sda1.*Attached SCSI disk.*$kernel_prompt" {
             case_pass $case_num
             break
@@ -56,7 +58,6 @@ while 1 {
         }
     }
 }
-expect -re $kernel_prompt
 
 incr case_num
 set timeout 20
@@ -111,6 +112,29 @@ while 1 {
             break
         }
         timeout {
+            case_fail $case_num
+        }
+    }
+}
+
+sleep 5
+incr case_num
+set timeout 5
+send "dmesg |tail -n 4\r"
+while 1 {
+    expect {
+        -re "(\[eE]rror|\[fF]ail).*#" {
+            send_user "Host PC fails to find gadget storage device\n"
+            case_fail $case_num
+        }
+        -re "sd(\[a-z]): sd.*#" {
+            set dev "/dev/sd$expect_out(1,string)"
+            send_user "Host PC can find gadget storage device $dev\n"
+            case_pass $case_num
+            break
+        }
+        timeout {
+            send_user "Host PC fails to find gadget storage device due to timeout\n"
             case_fail $case_num
         }
     }
@@ -203,7 +227,7 @@ append dev "1"
 
 incr case_num
 set timeout 120
-send "mke2fs $dev\r"
+send "time mke2fs $dev\r"
 while 1 {
     expect {
         -re "Writing inode tables.*done.*done.*#" {
@@ -235,7 +259,7 @@ while 1 {
 }
 
 incr case_num
-set timeout 120
+set timeout 100
 send "time dd if=/dev/zero of=$mnt_point/10m.bin bs=1M count=10\r"
 while 1 {
     expect {
@@ -250,6 +274,20 @@ while 1 {
             case_fail $case_num
         }
     }
+}
+
+incr case_num
+send "time cat $mnt_point/10m.bin > /dev/null\r"
+while 1 {
+   expect {
+     -re "real.*user.*sys.*#" {
+                case_pass $case_num
+                break
+      }
+      timeout {
+                case_fail $case_num
+      }
+   }
 }
 
 incr case_num
