@@ -960,6 +960,13 @@ proc run_LTP_test { filename command torun mode} {
        }
    }
 
+   if { $filename == "getrusage03" } {
+       if [ catch {exec rcp $LTP_TESTCASES_DIR/getrusage03_child root@$ipaddr:/bin} ] {
+           send_user "rcp test file getrusage03_child fail\n"
+           send_user "$errorInfo\n"
+       }
+   }
+
    if { $filename == "lchown02" || $filename == "lchown02_16" } {
        if [ catch {exec rcp $LTP_TESTCASES_DIR/create_link root@$ipaddr:/bin} ] {
            send_user "rcp test file fail\n"
@@ -1182,6 +1189,14 @@ proc run_LTP_test { filename command torun mode} {
             }
          }
 
+         # Someone wrote unshare01 with a non-standard passing response.
+         "unshare with*succeeded\r\n*succeeded\r\n*succeeded" {
+            if {$result_flag == $LTP_NOT_RUN} {
+               report "---pass"
+               set result_flag $LTP_PASS
+            }
+         }
+
          $LTP_WARN {
             if {$result_flag != $LTP_BROKEN && $result_flag != $LTP_FAIL} {
                report "---warn"
@@ -1250,6 +1265,9 @@ proc run_LTP_test { filename command torun mode} {
    }
    if { $filename == "execve02" || $filename == "execve04" } {
       send "rm -f /bin/test3\r"
+   }
+   if { $filename == "getrusage03" } {
+      send "rm -f /bin/getrusage03_child\r"
    }
    if { $filename == "lchown02" || $filename == "lchown02_16" } {
       send "rm -f /bin/create_link\r"
@@ -1695,6 +1713,8 @@ set result_matrix {
        { get_robust_list01   {get_robust_list01}               	 notrun		NA }
        { getrusage01         {getrusage01}                     	 notrun		UCLINUX }
        { getrusage02         {getrusage02}                     	 notrun		UCLINUX }
+       { getrusage03         {getrusage03}                     	 notrun		UCLINUX }
+       { getrusage04         {getrusage04}                     	 notrun		UCLINUX }
        { getsid01     	     {getsid01}                     	 notrun		UCLINUX }
        { getsid02     	     {getsid02}                     	 notrun		UCLINUX }
        { getsockname01       {getsockname01}                     notrun		UCLINUX }
