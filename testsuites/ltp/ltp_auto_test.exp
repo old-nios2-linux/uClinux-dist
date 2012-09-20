@@ -1714,7 +1714,7 @@ set result_matrix {
        { getrusage01         {getrusage01}                     	 notrun		UCLINUX }
        { getrusage02         {getrusage02}                     	 notrun		UCLINUX }
        { getrusage03         {getrusage03}                     	 notrun		UCLINUX }
-       { getrusage04         {getrusage04}                     	 notrun		UCLINUX }
+       { getrusage04         {getrusage04 -m 4}                	 notrun		UCLINUX }
        { getsid01     	     {getsid01}                     	 notrun		UCLINUX }
        { getsid02     	     {getsid02}                     	 notrun		UCLINUX }
        { getsockname01       {getsockname01}                     notrun		UCLINUX }
