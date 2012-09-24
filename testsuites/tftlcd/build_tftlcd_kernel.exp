@@ -1,7 +1,6 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -40,11 +39,11 @@ while 1 {
             send "N\r"
         }
 
-        -re "Backlight & LCD device support.*BACKLIGHT_LCD_SUPPORT.*\\\[.*]" {
+        -re "Support for frame buffer devices.*FB.*\\\[.*]" {
             send "Y\r"
         }
 
-        -re "Support for frame buffer devices.*FB.*\\\[.*]" {
+        -re "Backlight & LCD device support.*BACKLIGHT_LCD_SUPPORT.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -73,7 +72,7 @@ while 1 {
         }
 
 #LQ035 on BF537-STAMP
-        -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN.*\\\[.*]" {
+        -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN5XX.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
                 send "M\r"
             } else {
@@ -111,13 +110,13 @@ while 1 {
         }
 
         eof {
-            puts "End of configuration"
+            send_user "\nEnd of configuration\n"
             break
         }
 
         timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config\n"
+            exit
         }
     }
 }

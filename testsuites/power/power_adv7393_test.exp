@@ -1,35 +1,19 @@
 #!/usr/bin/expect
 
-source  ../kernel_config.exp
-source  ../board_info.exp
-log_file [log_file_name "$argv0"]
-send_user "Starting $argv0\n"
+source ../kernel_config.exp
+
+if { $argc < 2 } {
+    puts "Please input: board_type, pm_state (standby or mem)"
+    exit
+}
+set pm_state [lindex $argv 1]
 set TITLE [title "$argv0"]
+append TITLE " ($pm_state)"
+set log_name power_adv7393_${pm_state}_test_log
 
-if { $argc == 2 } {
-    set pm_state_count [lindex $argv 1]
-} else {
-    puts "Please input a power management state:"
-    puts "1: Standby; 2: Suspend-to-RAM"
-    exit
-}
-
-set wakeup_pattern "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt"
-
-if { $pm_state_count == 1 } {
-    set pm_state_str "standby"
-    append TITLE " (STANDBY)"
-} elseif { $pm_state_count == 2 } {
-    set pm_state_str "mem"
-    append TITLE " (SUSPEND-TO-RAM)"
-    if { $board_type == "BF533-STAMP" || $board_type == "BF533-EZKIT" }  {
-        set wakeup_pattern "wakeup from.*rtcwake: short write.*$kernel_prompt"
-    }
-} else {
-    send_user "Power Management State setting error\n"
-    exit
-}
-
+log_file $log_name
+send_user "Starting $argv0\n"
+send_user "\n#### Power management state is $pm_state. ####\n"
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -42,19 +26,20 @@ step "Reboot the kernel."
 source ../reboot_kernel.exp
 
 set wait_time 15
-set standby_fail 0
+set wakeup_fail 0
+set wakeup_pattern "Syncing filesystems \.\.\. done\.\r\nFreezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\).*Restarting tasks \.\.\. done.*$kernel_prompt"
 
 proc standby_test_case1 {} {
     global case_num
     global kernel_prompt
     global wait_time
-    global standby_fail
-    global pm_state_str
+    global wakeup_fail
+    global pm_state
     global wakeup_pattern
 
     set timeout [expr $wait_time + 10]
     incr case_num
-    send "\nrtcwake -s $wait_time -m $pm_state_str\r"
+    send "\nrtcwake -s $wait_time -m $pm_state\r"
     while 1 {
         expect {
             -re $wakeup_pattern {
@@ -63,7 +48,7 @@ proc standby_test_case1 {} {
             }
             timeout {
                 send_user "Test case 1: Wake up fail\n"
-                incr standby_fail
+                incr wakeup_fail
                 break
             }
         }
@@ -107,13 +92,13 @@ proc standby_test_case2 {} {
     global case_num
     global kernel_prompt
     global wait_time
-    global standby_fail
-    global pm_state_str
+    global wakeup_fail
+    global pm_state
     global wakeup_pattern
 
     set timeout [expr $wait_time + 10]
     incr case_num
-    send "\nrtcwake -s $wait_time -m $pm_state_str\r"
+    send "\nrtcwake -s $wait_time -m $pm_state\r"
     while 1 {
         expect {
             -re $wakeup_pattern {
@@ -122,7 +107,7 @@ proc standby_test_case2 {} {
             }
             timeout {
                 send_user "Test case 2: Wake up fail\n"
-                incr standby_fail
+                incr wakeup_fail
                 break
             }
         }
@@ -142,36 +127,6 @@ expect -re $kernel_prompt
 
 set timeout 20
 incr case_num
-send "modprobe i2c-bfin-twi\r"
-while 1 {
-    expect {
-        -re "Blackfin.*I2C TWI.*$kernel_prompt" {
-            break
-        }
-        timeout {
-            send_user "Install module failed!\r"
-            case_fail $case_num
-        }
-    }
-}
-send "lsmod\r"
-while 1 {
-    expect {
-        -re "i2c_bfin_twi.*$kernel_prompt" {
-            case_pass $case_num
-            break
-        }
-        timeout {
-            send_user "Install module failed!\r"
-            case_fail $case_num
-        }
-    }
-}
-
-sleep 5
-
-set timeout 20
-incr case_num
 send "modprobe bfin_adv7393fb\r"
 while 1 {
     expect {
@@ -184,6 +139,7 @@ while 1 {
         }
     }
 }
+
 send "lsmod\r"
 while 1 {
     expect {
@@ -289,13 +245,17 @@ for {set count 1} {$count <= $Total_Count} {incr count} {
 
 set timeout 20
 incr case_num
-send "video_test_id=\`ps ax|awk \'\$5==\"video_test\" {print \$1}\'\`; kill \$video_test_id\r"
+send "video_test_id=\`ps|awk \'\$5==\"video_test\" {print \$1}\'\`; kill \$video_test_id\r"
 while 1 {
     expect {
         -re "(kill:|Usage:|\[eE]rror|\[fF]ail).*$kernel_prompt" {
             case_fail $case_num
         }
         -re $kernel_prompt {
+            sleep 1
+	    set timeout 5
+            send "\r"
+            expect -nocase -re "Done.*$kernel_prompt"
             case_pass $case_num
             break
         }
@@ -304,9 +264,6 @@ while 1 {
         }
     }
 }
-
-send "ps ax\r"
-expect -re $kernel_prompt
 
 set timeout 20
 incr case_num
@@ -347,17 +304,14 @@ while 1 {
 }
 
 incr case_num
-if { $standby_fail == 0 } {
+if { $wakeup_fail == 0 } {
     send_user "Wake up pass\n"
     case_pass $case_num
 } else {
-    send_user "Wake up fail $standby_fail times\n"
+    send_user "Wake up fail $wakeup_fail times\n"
     case_fail $case_num
 }
 
-send_log "\n"
-send_log "\n$TITLE ............\[PASS\]\n" 
-
+all_pass
 send_user "Ending $argv0\n"
-
 log_file

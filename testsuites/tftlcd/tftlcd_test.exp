@@ -1,6 +1,6 @@
 #!/usr/bin/expect
 
-source  ../kernel_config.exp
+source ../kernel_config.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE "[title "$argv0"]"
@@ -19,7 +19,7 @@ step "Start testing."
 set case_num 0
 
 set timeout 10
-sleep 15
+expect -re $kernel_prompt
 send "\r"
 expect -re $kernel_prompt
 

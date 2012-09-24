@@ -1383,13 +1383,13 @@ do
   else
         if [ ${AUTO_RUN_STATUS[$((n+10))]} -eq 1  ] ; then
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_adv7393_test.exp $BOARD_TYPE 1 >/dev/null  2>&1
+            ./power_adv7393_test.exp $BOARD_TYPE standby >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10
 
             cd $UCLINUX_DIST_TESTSUITES/power
-            ./power_adv7393_test.exp $BOARD_TYPE 2 >/dev/null  2>&1
+            ./power_adv7393_test.exp $BOARD_TYPE mem >/dev/null  2>&1
             cd $UCLINUX_DIST_TESTSUITES
             ./reset_board.exp  >/dev/null  2>&1
             sleep 10
