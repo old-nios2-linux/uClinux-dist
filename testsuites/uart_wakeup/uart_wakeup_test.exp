@@ -1,12 +1,9 @@
 #!/usr/bin/expect
 
 source  ../kernel_config.exp
-source  ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 set TITLE [title "$argv0"]
-
-set standby_pattern "Syncing filesystems \.\.\. done.*Freezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\) \\\(use no_console_suspend to debug\\\)"
 
 step "Spawn kermit"
 source ../spawn_kermit.exp
@@ -18,7 +15,7 @@ step "Reboot the kernel."
 # set bootargs  $bootargs_param0
 source ../reboot_kernel.exp
 
-set standby_fail 0
+set standby_pattern "Syncing filesystems \.\.\. done.*Freezing user space processes \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nFreezing remaining freezable tasks \.\.\. \\\(elapsed.*seconds\\\) done\.\r\nSuspending console\\\(s\\\) \\\(use no_console_suspend to debug\\\)"
 
 proc standby_test_case {} {
     global case_num
@@ -54,7 +51,7 @@ proc standby_test_case {} {
                 break
             }
             timeout {
-                send_user "Wake up fail\n"
+                send_user "Wake up timeout\n"
                 case_fail $case_num
             }
         }
@@ -109,7 +106,5 @@ for {set count 1} {$count <= $Total_Count} {incr count} {
 }
 
 all_pass
-
 send_user "Ending $argv0\n"
-
 log_file
