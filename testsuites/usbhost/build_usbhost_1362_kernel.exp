@@ -31,10 +31,10 @@ while 1 {
             send "y\r"
         }
 
-        -re "CFI Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
+        -re "Flash device in physical memory map.*MTD_PHYSMAP.*\\\[.*]" {
 #CONFIG_MTD_PHYSMAP claims the entire Async. Memory Space
 #need to entirely disable it while using various U-Connector boards
-            send "n\r"
+            send "N\r"
         }
 
         -re "Bank 3.*BANK_3.*\\\[.*]" {
@@ -42,23 +42,23 @@ while 1 {
         }
 
         -re "SCSI device support \\\(SCSI\\\).*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "SCSI disk support.*BLK_DEV_SD.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Probe all LUNs on each SCSI device.*SCSI_MULTI_LUN.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Support for Host-side USB.*USB.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "ISP1362 HCD support.*USB_ISP1362_HCD.*\\\[.*]" {
@@ -82,19 +82,19 @@ while 1 {
         }
 
         -re "USB Mass Storage support.*USB_STORAGE.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Second extended fs support.*EXT2_FS.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "MSDOS fs support.*MSDOS_FS.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "VFAT.*Windows-95.*fs support.*VFAT_FS.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "Default codepage for FAT.*FAT_DEFAULT_CODEPAGE.*\\\[.*]" {
@@ -110,19 +110,19 @@ while 1 {
         }
 
         -re "Codepage 437.*United States, Canada.*NLS_CODEPAGE_437.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "NLS ISO 8859-1.*Latin 1; Western European Languages.*NLS_ISO8859_1.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "fdisk.*USER_FDISK_FDISK.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -re "bonnie\\\+\\\+.*USER_BONNIE.*\\\[.*]" {
-            send "y\r"
+            send "Y\r"
         }
 
         -nocase -re "\\\[\[^\r]*] (\[ymn])|choice\\\[.*]: \[0-9]+\r" {

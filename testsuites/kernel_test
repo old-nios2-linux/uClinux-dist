@@ -1976,7 +1976,7 @@ fi
   if [ ! -f $UCLINUX_DIST_PATH/images/uImage ]
   then
       echo "$0:   Error, failed."
-      tail -50 ./build_usbhost_bf5xx_kernel_log
+      tail -50 ./build_usbhost_bf5xx_${config}_kernel_log
   else
       sleep 30
       cd $UCLINUX_DIST_TESTSUITES/usbhost
@@ -1986,7 +1986,7 @@ fi
   cp $UCLINUX_DIST_PATH/images/uImage $THIS_LOG/uImage.usbhost_bf5xx.$config
   cp $UCLINUX_DIST_PATH/linux-2.6.x/.config $THIS_LOG/config.linux.usbhost_bf5xx.$config
   cp $UCLINUX_DIST_PATH/config/.config $THIS_LOG/config.config.usbhost_bf5xx.$config
-  mv $UCLINUX_DIST_TESTSUITES/usbhost/build_usbhost_bf5xx_kernel_log $THIS_LOG/build_usbhost_bf5xx_${config}_kernel_log
+  mv $UCLINUX_DIST_TESTSUITES/usbhost/build*log $THIS_LOG/
   mv $UCLINUX_DIST_TESTSUITES/usbhost/usbhost_bf5xx_test_log $THIS_LOG/usbhost_bf5xx_${config}_test_log
 
   sleep 30
