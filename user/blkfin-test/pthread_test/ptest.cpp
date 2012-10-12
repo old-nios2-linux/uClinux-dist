@@ -29,7 +29,7 @@ int main( int argc, char **argv , char **env )
 	pthread_attr_init( &attr );
 	pthread_attr_setstacksize( &attr, 32*1024 ); 			
 
-	pthread_attr_setstackaddr( &attr, stackaddr + sizeof stackaddr); 
+	pthread_attr_setstack( &attr, stackaddr, sizeof stackaddr); 
 	
 	pthread_create( &tst_pid, &attr, tst_thread, 0 );		
 	pthread_attr_destroy( &attr);
