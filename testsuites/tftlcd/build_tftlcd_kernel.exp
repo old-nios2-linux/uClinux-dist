@@ -34,16 +34,51 @@ while 1 {
             send "Y\r"
         }
 
+        -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN5XX.*\\\[.*]" {
+            if { $board_type == "BF537-STAMP" } {
+                send "M\r"
+            } else {
+                send "\r"
+            }
+        }
+
         -re "Support for generic platform NAND driver.*MTD_NAND_PLATFORM.*\\\[.*]" {
-            #conflict with TFT LCD
+            #conflict with some TFT LCD
             send "N\r"
         }
 
-        -re "Support for frame buffer devices.*FB.*\\\[.*]" {
-            send "Y\r"
+        -re "MMC/SD/SDIO card support \\\(MMC\\\).*\\\[.*]" {
+            # gpio confliction with touchscreen AD7879 on BF609-EZKIT
+            send "N\r"
         }
 
-        -re "Backlight & LCD device support.*BACKLIGHT_LCD_SUPPORT.*\\\[.*]" {
+# LCD on bf609-ezkit depends on touchscreen setting of AD7879 
+        -re "Touchscreens.*INPUT_TOUCHSCREEN.*\\\[.*]" {
+            if { $board_type == "BF609-EZKIT" } {
+                send "Y\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "Analog Devices.*touchscreen interface.*TOUCHSCREEN_AD7879.*\\\[.*]" {
+            if { $board_type == "BF609-EZKIT" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+        -re "support SPI bus connection.*TOUCHSCREEN_AD7879_SPI.*\\\[.*]" {
+            if { $board_type == "BF609-EZKIT" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+# Framebuffer config
+        -re "Support for frame buffer devices.*FB.*\\\[.*]" {
             send "Y\r"
         }
 
@@ -71,15 +106,6 @@ while 1 {
             }
         }
 
-#LQ035 on BF537-STAMP
-        -re "SPI controller driver for ADI Blackfin5xx.*SPI_BFIN5XX.*\\\[.*]" {
-            if { $board_type == "BF537-STAMP" } {
-                send "M\r"
-            } else {
-                send "\r"
-            }
-        }
-
         -re "SHARP LQ035 TFT LCD.*FB_BF537_LQ035.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
                 send "M\r"
@@ -88,16 +114,27 @@ while 1 {
             }
         }
 
+        -re "NEC NL8048HL WVGA LCD for BF609.*FB_BF609_NL8048.*\\\[.*]" {
+            if { $board_type == "BF609-EZKIT" } {
+                send "M\r"
+            } else {
+                send "N\r"
+            }
+        }
+
+# Backlight config
+        -re "Backlight & LCD device support.*BACKLIGHT_LCD_SUPPORT.*\\\[.*]" {
+            if { $board_type == "BF609-EZKIT" } {
+                send "N\r"
+            } else {
+                send "Y\r"
+            }
+        }
+
+        }
+
         -re "VIDEO test program.*USER_BLACKFIN_VIDEOTEST.*\\\[.*]" {
             send "Y\r"
-        }
-
-        -re "ThrustMaster devices support.*THRUSTMASTER_FF.*\\\[.*]" {
-            send "N\r"
-        }
-
-        -re "Zeroplus based game controller support.*ZEROPLUS_FF.*\\\[.*]" {
-            send "N\r"
         }
 
         "\\\(*) \\\[*]" {

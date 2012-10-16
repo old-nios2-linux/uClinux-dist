@@ -31,6 +31,8 @@ if { $board_type == "BF548-EZKIT" } {
     set module "bfin_lq035q1_fb"
 } elseif {$board_type == "BF537-STAMP" } {
     set module "bf537_lq035"
+} elseif {$board_type == "BF609-EZKIT" } {
+    set module "bf609_nl8048"
 } else {
     send_user "Wrong board type!\n"
     case_fail $case_num
@@ -43,7 +45,7 @@ while 1 {
         -re "(\[eE]rror|\[fF]ail).*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "initializ.*$kernel_prompt" {
+        -re $kernel_prompt {
             case_pass $case_num
             break
         }
@@ -63,6 +65,129 @@ while 1 {
         }
         timeout {
             case_fail $case_num
+        }
+    }
+}
+
+# BF609-EZKIT need to use ad7879 touchscreen driver to light the balcklight
+if {$board_type == "BF609-EZKIT" } {
+    incr case_num
+    send "modprobe ad7879-spi\r"
+    while 1 {
+        expect {
+            -re "(\[eE]rror|\[fF]ail).*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "input: AD7879 Touchscreen as.*input.*$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+
+    incr case_num
+    send "cd /sys/class/gpio; ls\r"
+    while 1 {
+        expect {
+            -re "(\[eE]rror|\[fF]ail|No such).*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "gpiochip112.*$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+
+    incr case_num
+    send "echo 112 > export; ls\r"
+    while 1 {
+        expect {
+            -re "(\[eE]rror|\[fF]ail|No such).*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "gpio112.*$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+
+    incr case_num
+    send "cd gpio112; ls\r"
+    while 1 {
+        expect {
+            -re "(\[eE]rror|\[fF]ail|No such).*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "direction.*$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+
+    incr case_num
+    send "cat direction; cat value\r"
+    while 1 {
+        expect {
+            -re "(\[eE]rror|\[fF]ail|No such).*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "in.*0.*$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+
+    # After this step, backlight should be light up.
+    incr case_num
+    send "echo high > direction\r"
+    while 1 {
+        expect {
+            -re "(\[eE]rror|\[fF]ail|No such).*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re $kernel_prompt {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
+        }
+    }
+
+    incr case_num
+    send "cat direction; cat value\r"
+    while 1 {
+        expect {
+            -re "(\[eE]rror|\[fF]ail|No such).*$kernel_prompt" {
+                case_fail $case_num
+            }
+            -re "out.*1.*$kernel_prompt" {
+                case_pass $case_num
+                break
+            }
+            timeout {
+                case_fail $case_num
+            }
         }
     }
 }
@@ -103,7 +228,7 @@ incr case_num
 send "modprobe -r $module\r"
 while 1 {
     expect {
-        -re "\[uU]nregister.*LCD driver.*$kernel_prompt" {
+        -re $kernel_prompt {
             case_pass $case_num
             break
         }
@@ -121,7 +246,7 @@ while 1 {
         -re "$module.*$kernel_prompt" {
             case_fail $case_num
         }
-        -re "Used by\r\n$kernel_prompt" {
+        -re $kernel_prompt {
             case_pass $case_num
             break
         }
