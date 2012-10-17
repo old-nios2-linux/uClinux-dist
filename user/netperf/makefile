@@ -1,4 +1,4 @@
-VER = netperf-2.4.1
+VER = netperf-2.6.0
 
 FLTFLAGS += -s 0x10000
 
