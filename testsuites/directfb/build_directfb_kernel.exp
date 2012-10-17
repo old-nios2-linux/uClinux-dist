@@ -1,7 +1,6 @@
 #!/usr/bin/expect
 
 source ../kernel_config.exp
-source ../board_info.exp
 log_file [log_file_name "$argv0"]
 send_user "Starting $argv0\n"
 
@@ -132,20 +131,20 @@ while 1 {
             send "N\r"
         }
 
-        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
-            send "Y\r"
-        }
-
-        -re "Support for Host-side USB.*USB.*\\\[.*]" {
-            send "Y\r"
-        }
-
         -re "Bank 3.*BANK_3.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
                 send "0xAAC2\r"
             } else {
                 send "\r"
             }
+        }
+
+        -re "USB support.*USB_SUPPORT.*\\\[.*]" {
+            send "Y\r"
+        }
+
+        -re "Support for Host-side USB.*USB.*\\\[.*]" {
+            send "Y\r"
         }
 
         -re "ISP1362 HCD support \\\(USB_ISP1362_HCD\\\).*\\\[.*]" {
@@ -156,29 +155,11 @@ while 1 {
             }
         }
 
-        -re "GPIO for Interrupt.*USB_ISP1362_BFIN_GPIO_IRQ.*\\\[.*]" {
-            if { $board_type == "BF537-STAMP" } {
-                #Pin15 & 16 are populated in JP3 on usb add-on board, and SW5.4 on BF537-STAMP is OFF.
-                send "55\r"
-            } else {
-                send "\r"
-            }
-        }
-
         -re "SL811HS HCD support.*USB_SL811_HCD.*\\\[.*]" {
             if { $board_type == "BF537-STAMP" } {
                 send "Y\r"
             } else {
                 send "N\r"
-            }
-        }
-
-        -re "GPIO IRQ pin for Interrupt.*USB_SL811_BFIN_IRQ.*\\\[.*]" {
-            if { $board_type == "BF537-STAMP" } {
-                #Pin17 & 18 are populated in JP5 on usb add-on board.
-                send "56\r"
-            } else {
-                send "\r"
             }
         }
 
@@ -202,10 +183,6 @@ while 1 {
             } else {
                 send "\r"
             }
-        }
-
-        -re "USB Human Interface Device \\\(full HID\\\) support.*USB_HID.*\\\[.*]" {
-            send "Y\r"
         }
 
         -re "Generic input layer.*needed for keyboard, mouse.*INPUT.*\\\[./.*]" {
@@ -244,6 +221,9 @@ while 1 {
             send "Y\r"
         }
 
+        -re "USB HID transport layer.*USB_HID.*\\\[.*]" {
+            send "Y\r"
+        }
 
 #vendor config
         -re "DirectFB Examples.*USER_DIRECTFBEXAMPLES.*\\\[.*]" {
@@ -264,13 +244,13 @@ while 1 {
         }
 
         eof {
-            puts "End of configuration"
+            send_user "\nEnd of configuration\n"
             break
         }
 
         timeout {
-            puts "\n\nFATAL ERROR: config prompt timeout in make config"
-            break
+            send_user "\n\nFATAL ERROR: config prompt timeout in make config\n"
+            exit
         }
     }
 }
