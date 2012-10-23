@@ -1,3 +1,4 @@
+EXEC ?= thttpd
 
 ifdef CONFIG_USER_NDSO
 EXEC = ndso
