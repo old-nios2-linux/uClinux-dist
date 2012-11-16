@@ -370,8 +370,7 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 	strcpy(task1->task_argv[1], taskargv1);
 
 	memset(&pkt, 0, sizeof(struct sm_packet));
-	pkt.local_ep = 0;
-	pkt.remote_ep = 5;
+	pkt.local_ep = 31;
 	pkt.type = SP_TASK_MANAGER;
 	pkt.dst_cpu = 1;
 	pkt.buf_len = packetsize;
