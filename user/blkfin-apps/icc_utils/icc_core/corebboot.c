@@ -17,7 +17,7 @@
 #include <protocol.h>
 #include <debug.h>
 
-extern uint16_t pending;
+extern uint16_t queue_pending;
 extern struct coreb_icc_node coreb_info;
 
 static inline void coreb_idle(void)
@@ -396,7 +396,7 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 	++intcnt;
 
 	platform_clear_ipi(cpu, COREB_ICC_LOW_RECV);
-	pending = iccqueue_getpending();
+	queue_pending = iccqueue_getpending();
 	sm_handle_control_message();
 	platform_unmask_ipi(cpu, COREB_ICC_LOW_RECV);
 	return IRQ_HANDLED;
@@ -404,7 +404,7 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 
 irqreturn_t timer_handle(int irq, void *dev_instance)
 {
-	pending = iccqueue_getpending();
+	queue_pending = iccqueue_getpending();
 	return IRQ_HANDLED;
 }
 
@@ -484,8 +484,9 @@ void coreb_icc_dispatcher(void)
 			coreb_idle();
 		}
 		icc_wait(0);
-		pending = iccqueue_getpending();
-		sm_handle_control_message();
+		queue_pending = iccqueue_getpending();
+		if (queue_pending)
+			sm_handle_control_message();
 	}
 }
 
@@ -519,6 +520,8 @@ void icc_init(void)
 	coreb_info.icc_info.icc_queue_attribute =
 		(uint32_t *)((uint32_t)coreb_info.icc_info.icc_queue + MSGQ_SIZE);
 
+	if (sm_create_session(EP_RESMGR_SERVICE, SP_RES_MANAGER) < 0)
+		coreb_msg("@@@create resource manager ep fail\n");
 }
 
 void secondary_start_kernel(void)

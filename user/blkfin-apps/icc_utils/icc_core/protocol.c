@@ -37,7 +37,7 @@ int sm_task1_status = 0;
 int sm_task1_control_ep = 0;
 uint32_t sm_task1_msg_buffer = 0;
 int reinit = 0;
-uint16_t pending = 0;
+uint16_t queue_pending = 0;
 
 struct sm_proto *sm_protos[SP_MAX];
 
@@ -389,6 +389,57 @@ int sm_close_session(uint32_t index)
 	return -EINVAL;
 }
 
+int sm_request_resource(uint32_t dst_cpu, uint32_t resource_id)
+{
+	uint32_t timeout = 1000;
+	struct sm_session *session;
+	int ret;
+	session = sm_index_to_session(EP_RESMGR_SERVICE);
+	if (!session)
+		return -EINVAL;
+	if(session->flags)
+		return -EAGAIN;
+
+	session->flags = SM_RES_MGR_REQUEST;
+	sm_send_control_msg(session, EP_RESMGR_SERVICE, dst_cpu, resource_id,
+			0, SM_RES_MGR_REQUEST);
+
+	while ((session->flags == SM_RES_MGR_REQUEST) && timeout--)
+		delay(1);
+
+	if (session->flags == SM_RES_MGR_REQUEST_FAIL) {
+		ret = -ENODEV;
+	}
+
+	session->flags = 0;
+	return ret;
+}
+
+int sm_free_resource(uint32_t dst_cpu, uint32_t resource_id)
+{
+	uint32_t timeout = 1000;
+	struct sm_session *session;
+	int ret = -EBUSY;
+	session = sm_index_to_session(EP_RESMGR_SERVICE);
+	if (!session)
+		return -EINVAL;
+	if(session->flags)
+		return -EAGAIN;
+
+	session->flags = SM_RES_MGR_FREE;
+	sm_send_control_msg(session, EP_RESMGR_SERVICE, dst_cpu, resource_id,
+			0, SM_RES_MGR_FREE);
+
+	while ((session->flags == SM_RES_MGR_REQUEST) && timeout--)
+		delay(1);
+
+	if (session->flags == SM_RES_MGR_FREE_DONE)
+		ret = 0;
+
+	session->flags = 0;
+	return ret;
+}
+
 #define SM_MAX_TASKARGS 3
 void sm_handle_control_message()
 {
@@ -399,6 +450,12 @@ void sm_handle_control_message()
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
 	coreb_msg("%s type %x\n", __func__, msg->type);
+
+	if (SM_MSG_PROTOCOL(msg->type) == SP_RES_MANAGER) {
+		sm_index_to_session(EP_RESMGR_SERVICE)->flags = msg->type;
+		sm_message_dequeue(inqueue, msg);
+		return;
+	}
 
 	if ((SM_MSG_PROTOCOL(msg->type) == SP_CORE_CONTROL) || (SM_MSG_PROTOCOL(msg->type) == SP_TASK_MANAGER)) {
 
@@ -1182,8 +1239,8 @@ int icc_wait(int session_mask)
 	uint32_t avail = 0;
 	unsigned long flags;
 	icc_run_task();
-	pending = iccqueue_getpending();
-	if (!pending) {
+	queue_pending = iccqueue_getpending();
+	if (!queue_pending) {
 		bfin_coretmr_set_next_event(4000000000);
 		coreb_idle();
 		return 0;
@@ -1204,6 +1261,11 @@ uint32_t msg_handle(void)
 	struct sm_session_status status;
 
 	sm_handle_control_message();
+	pending = iccqueue_getpending();
+	if (!pending) {
+		return 0;
+	}
+
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
 
 	index = sm_find_session(msg->dst_ep, 0, coreb_info.sessions_table);
