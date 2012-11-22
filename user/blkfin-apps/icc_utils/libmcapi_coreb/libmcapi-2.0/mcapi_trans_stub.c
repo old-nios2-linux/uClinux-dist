@@ -704,6 +704,7 @@ mcapi_boolean_t mcapi_trans_initialize_()
 		COREB_DEBUG(2, "%s %d db size %x\n", __func__, __LINE__, sizeof(mcapi_database));
 
 		/* mcapi_icc_node_init(); */
+		c_db->domains[0].nodes[0].node_d.num_endpoints = 1;
 	}
 	transport_sm_unlock_semaphore(sem_id);
 	mcapi_dprintf(1, "%s %d\n", __func__, __LINE__);
