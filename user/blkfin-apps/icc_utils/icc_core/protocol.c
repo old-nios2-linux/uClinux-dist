@@ -181,6 +181,18 @@ uint32_t sm_session_to_index(struct sm_session *session)
 	return -EINVAL;
 }
 
+inline uint16_t iccqueue_getpending()
+{
+	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
+	uint16_t sent = sm_atomic_read(&inqueue->sent);
+	uint16_t received = sm_atomic_read(&inqueue->received);
+	uint16_t pending;
+	pending = sent - received;
+	if(pending < 0)
+		pending += USHRT_MAX;
+	return (pending % SM_MSGQ_LEN);
+}
+
 static int sm_send_message_internal(struct sm_msg *msg, int dstcpu)
 {
 	struct sm_message_queue *outqueue = coreb_info.icc_info.icc_queue;
@@ -444,10 +456,12 @@ int sm_free_resource(uint32_t dst_cpu, uint32_t resource_id)
 void sm_handle_control_message()
 {
 	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
-	uint16_t sent = sm_atomic_read(&inqueue->sent);
-	uint16_t received = sm_atomic_read(&inqueue->received);
 	struct sm_msg *msg;
+	uint16_t received = sm_atomic_read(&inqueue->received);
 	msg = &inqueue->messages[(received % SM_MSGQ_LEN)];
+
+	if (!iccqueue_getpending())
+		return;
 
 	coreb_msg("%s type %x\n", __func__, msg->type);
 
@@ -924,18 +938,6 @@ int sm_recv_packet(uint32_t session_idx, uint16_t *src_ep, uint16_t *src_cpu, vo
 		ret = -EINVAL;
 	}
 	return ret;
-}
-
-inline uint16_t iccqueue_getpending()
-{
-	struct sm_message_queue *inqueue = coreb_info.icc_info.icc_queue + 1;
-	uint16_t sent = sm_atomic_read(&inqueue->sent);
-	uint16_t received = sm_atomic_read(&inqueue->received);
-	uint16_t pending;
-	pending = sent - received;
-	if(pending < 0)
-		pending += USHRT_MAX;
-	return (pending % SM_MSGQ_LEN);
 }
 
 static int msg_recv_internal(struct sm_msg *msg, struct sm_session *session)
