@@ -1,7 +1,7 @@
 #include <asm/blackfin.h>
+#include <mach/irq.h>
 
 #ifdef CONFIG_BF609
-# define SIC_SYSIRQ(irq)        ((irq) - 15)
 
 void bfin_sec_raise_irq(unsigned int sid)
 {
@@ -10,7 +10,7 @@ void bfin_sec_raise_irq(unsigned int sid)
 
 static void bfin_sec_mask_ack_irq(unsigned int cpu, unsigned int irq)
 {
-	unsigned int sid = SIC_SYSIRQ(irq);
+	unsigned int sid = BFIN_SYSIRQ(irq);
 
 	bfin_write_SEC_SCI(cpu, SEC_CSID, sid);
 
@@ -18,14 +18,14 @@ static void bfin_sec_mask_ack_irq(unsigned int cpu, unsigned int irq)
 
 static void bfin_sec_unmask_irq(unsigned int irq)
 {
-	unsigned int sid = SIC_SYSIRQ(irq);
+	unsigned int sid = BFIN_SYSIRQ(irq);
 
 	bfin_write32(SEC_END, sid);
 }
 
 void platform_send_ipi_cpu(unsigned int cpu, int irq)
 {
-	unsigned int sid = SIC_SYSIRQ(irq);
+	unsigned int sid = BFIN_SYSIRQ(irq);
 
 	bfin_sec_raise_irq(sid);
 }
@@ -43,7 +43,6 @@ void platform_clear_ipi(unsigned int cpu, int irq)
 
 
 #ifdef CONFIG_BF561
-#include <mach/irq.h>
 void platform_send_ipi_cpu(unsigned int cpu, int irq)
 {
 	int offset = (irq == IRQ_SUPPLE_0) ? 6 : 8;
