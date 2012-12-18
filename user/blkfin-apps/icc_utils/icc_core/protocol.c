@@ -401,7 +401,7 @@ int sm_close_session(uint32_t index)
 	return -EINVAL;
 }
 
-int sm_request_resource(uint32_t dst_cpu, uint32_t resource_id)
+int sm_request_resource(uint32_t dst_cpu, uint32_t resource_id, resources_t *data)
 {
 	uint32_t timeout = 1000;
 	struct sm_session *session;
@@ -414,7 +414,7 @@ int sm_request_resource(uint32_t dst_cpu, uint32_t resource_id)
 
 	session->flags = SM_RES_MGR_REQUEST;
 	sm_send_control_msg(session, EP_RESMGR_SERVICE, dst_cpu, resource_id,
-			0, SM_RES_MGR_REQUEST);
+			(uint32_t)data, SM_RES_MGR_REQUEST);
 
 	while ((session->flags == SM_RES_MGR_REQUEST) && timeout--)
 		delay(1);
@@ -427,7 +427,7 @@ int sm_request_resource(uint32_t dst_cpu, uint32_t resource_id)
 	return ret;
 }
 
-int sm_free_resource(uint32_t dst_cpu, uint32_t resource_id)
+int sm_free_resource(uint32_t dst_cpu, uint32_t resource_id, resources_t *data)
 {
 	uint32_t timeout = 1000;
 	struct sm_session *session;
@@ -439,10 +439,11 @@ int sm_free_resource(uint32_t dst_cpu, uint32_t resource_id)
 		return -EAGAIN;
 
 	session->flags = SM_RES_MGR_FREE;
-	sm_send_control_msg(session, EP_RESMGR_SERVICE, dst_cpu, resource_id,
-			0, SM_RES_MGR_FREE);
 
-	while ((session->flags == SM_RES_MGR_REQUEST) && timeout--)
+	sm_send_control_msg(session, EP_RESMGR_SERVICE, dst_cpu, resource_id,
+			(uint32_t)data, SM_RES_MGR_FREE);
+
+	while ((session->flags == SM_RES_MGR_FREE) && timeout--)
 		delay(1);
 
 	if (session->flags == SM_RES_MGR_FREE_DONE)

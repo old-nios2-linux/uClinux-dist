@@ -397,7 +397,8 @@ irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 
 	platform_clear_ipi(cpu, COREB_ICC_LOW_RECV);
 	queue_pending = iccqueue_getpending();
-	sm_handle_control_message();
+	if (queue_pending)
+		sm_handle_control_message();
 	platform_unmask_ipi(cpu, COREB_ICC_LOW_RECV);
 	return IRQ_HANDLED;
 }
