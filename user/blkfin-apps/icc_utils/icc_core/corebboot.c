@@ -386,20 +386,29 @@ void platform_secondary_init(void)
 #endif
 }
 
-
 /* Use IRQ_SUPPLE_0 to request reschedule.
  * When returning from interrupt to user space,
  * there is chance to reschedule */
 irqreturn_t ipi_handler_int0(int irq, void *dev_instance)
 {
+	struct icc_irq_desc *irqd;
 	uint32_t cpu = blackfin_core_id();
+	irq = platform_get_irq(cpu);
 	++intcnt;
 
-	platform_clear_ipi(cpu, COREB_ICC_LOW_RECV);
-	queue_pending = iccqueue_getpending();
-	if (queue_pending)
-		sm_handle_control_message();
-	platform_unmask_ipi(cpu, COREB_ICC_LOW_RECV);
+	platform_clear_ipi(cpu, irq);
+
+	if(irq == COREB_ICC_LOW_RECV) {
+		queue_pending = iccqueue_getpending();
+		if (queue_pending)
+			sm_handle_control_message();
+	} else {
+		irqd = &coreb_info.irq_table[irq];
+		if (irqd->handle)
+			irqd->handle(irq, irqd->data);
+	}
+
+	platform_unmask_ipi(cpu, irq);
 	return IRQ_HANDLED;
 }
 
@@ -516,6 +525,7 @@ void icc_init(void)
 	coreb_info.icc_info.icc_high_queue = coreb_info.icc_info.icc_queue + 2;
 	coreb_info.icc_info.peer_cpu = 0;
 	init_sm_session_table();
+	init_icc_irq_table();
 	register_sm_proto();
 
 	coreb_info.icc_info.icc_queue_attribute =

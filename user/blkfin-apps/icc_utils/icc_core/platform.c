@@ -39,6 +39,11 @@ void platform_clear_ipi(unsigned int cpu, int irq)
 {
 	bfin_sec_mask_ack_irq(cpu, irq);
 }
+
+int platform_get_irq(int cpu)
+{
+	return BFIN_IRQ(bfin_read_SEC_SCI(cpu, SEC_CSID));
+}
 #endif
 
 
@@ -62,4 +67,10 @@ void platform_clear_ipi(unsigned int cpu, int irq)
 	bfin_write_SICB_SYSCR(bfin_read_SICB_SYSCR() | (1 << (offset + cpu)));
 	SSYNC();
 }
+
+int platform_get_irq()
+{
+	return COREB_ICC_LOW_RECV;
+}
+
 #endif

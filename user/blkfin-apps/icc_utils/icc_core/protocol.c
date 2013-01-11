@@ -66,7 +66,7 @@ int check_buffer_inpool(uint32_t addr, uint32_t size)
 	return gen_pool_check(coreb_info.pool, addr, size);
 }
 
-int init_sm_session_table(void)
+void init_sm_session_table(void)
 {
 	coreb_info.sessions_table =
 		(struct sm_session_table *)gen_pool_alloc(coreb_info.pool,
@@ -77,6 +77,18 @@ int init_sm_session_table(void)
 	}
 	coreb_msg("session table %x\n", coreb_info.sessions_table);
 	coreb_info.sessions_table->nfree = MAX_ENDPOINTS;
+}
+
+void init_icc_irq_table(void)
+{
+	coreb_info.irq_table =
+		(struct icc_irq_desc *)gen_pool_alloc(coreb_info.pool,
+		sizeof(struct icc_irq_desc) * SYS_IRQS);
+	if (!coreb_info.irq_table) {
+		coreb_msg("@@@ alloc irq table failed\n");
+		return -ENOMEM;
+	}
+	coreb_msg("session table %x\n", coreb_info.irq_table);
 }
 
 static int get_msg_src(struct sm_msg *msg)
@@ -291,6 +303,25 @@ int sm_register_session_handler(uint32_t session_idx,
 	return 0;
 }
 
+int icc_register_irq_handle(int irq, int (*handle)(int irq, void *data))
+{
+	if (irq > SYS_IRQS)
+		return -EINVAL;
+	if (coreb_info.irq_table[irq].handle)
+		return -EAGAIN;
+	coreb_info.irq_table[irq].handle = handle;
+
+	return 0;
+}
+
+void icc_unregister_irq_handle(int irq)
+{
+	if (irq > SYS_IRQS)
+		return;
+	if (coreb_info.irq_table[irq].handle)
+		coreb_info.irq_table[irq].handle = NULL;
+}
+
 static int
 sm_wait_for_connect_ack(struct sm_session *session)
 {
@@ -405,7 +436,7 @@ int sm_request_resource(uint32_t dst_cpu, uint32_t resource_id, resources_t *dat
 {
 	uint32_t timeout = 1000;
 	struct sm_session *session;
-	int ret;
+	int ret = 0;
 	session = sm_index_to_session(EP_RESMGR_SERVICE);
 	if (!session)
 		return -EINVAL;
