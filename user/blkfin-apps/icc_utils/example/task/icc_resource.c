@@ -28,12 +28,57 @@ resources_t bfin_peri_res = {
 
 uint32_t resourceid_array[] = {
 	RESMGR_ID(RESMGR_TYPE_SYS_IRQ, IRQ_PINT4),
+	RESMGR_ID(RESMGR_TYPE_GPIO, GPIO_PG14),
 	0,
 };
+
+
+int bfin_gpio_output_value(int pin, int value)
+{
+	unsigned int bank;
+	volatile struct gpio_port_t * gpiobank_reg;
+	uint32_t gpiobit;
+
+	bank = pin/16;
+
+	gpiobit = 1 << (pin & 0xF);
+
+	gpiobank_reg = (struct gpio_port_t *)(PORTA_FER + 0x80 * bank);
+
+	gpiobank_reg->inen &= gpiobit;
+	if (value)
+		gpiobank_reg->data_set = gpiobit;
+	else
+		gpiobank_reg->data_clear = gpiobit;
+	gpiobank_reg->dir_set = gpiobit;
+
+	SSYNC();
+
+	return 0;
+}
+
+int bfin_get_value(int pin)
+{
+	unsigned int bank;
+	volatile struct gpio_port_t * gpiobank_reg;
+	uint32_t gpiobit;
+
+	bank = pin/16;
+
+	gpiobit = 1 << (pin & 0xF);
+
+	gpiobank_reg = (struct gpio_port_t *)(PORTA_FER + 0x80 * bank);
+
+	return (1 & ((gpiobank_reg->data & gpiobit) >> (pin & 0xF)));
+
+}
 
 void handle_gpio_irq(uint32_t pin)
 {
 	COREB_DEBUG(1, "handle gpio irq %d\n", pin);
+	bfin_gpio_output_value(GPIO_PG14, 1);
+	delay(5);
+	bfin_gpio_output_value(GPIO_PG14, 0);
 }
 
 static int bfin_handle_pint_irq(int irq)
