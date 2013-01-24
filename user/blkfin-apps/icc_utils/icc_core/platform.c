@@ -1,5 +1,6 @@
 #include <asm/blackfin.h>
 #include <mach/irq.h>
+#include <icc.h>
 
 #ifdef CONFIG_BF609
 
