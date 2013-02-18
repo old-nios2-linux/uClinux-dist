@@ -130,11 +130,11 @@ ret=0
 [ -d "$ksrc/arch/$karch/include/asm" ] \
 	&& arch_inc="$ksrc/arch/$karch/include/asm" \
 	|| arch_inc="$ksrc/include/asm-$karch"
-generic_inc="$ksrc/include/asm-generic"
+uapi_generic_inc="$ksrc/include/uapi/asm-generic"
 
 # easy: output is exactly what we want
 ebegin "errno list"
-sh ./errnoent.sh "$ksrc/include/linux"/*errno*.h "$ksrc/include/asm-generic"/*errno*.h | cpp_filter > errnoent.h
+sh ./errnoent.sh "$ksrc/include/linux"/*errno*.h "$uapi_generic_inc"/*errno*.h | cpp_filter > errnoent.h
 cat $(get_header errnoent.h) | cpp_filter > errnoent.h.old
 cmp -s errnoent.h errnoent.h.old
 eend $? errnoent.h errnoent.h.old
@@ -159,7 +159,7 @@ eend $? ioctlent.arch.h.in
 
 # easy: output is exactly what we want
 ebegin "signal list"
-sh ./signalent.sh "$arch_inc/signal.h" "$generic_inc/signal.h" > signalent.h
+sh ./signalent.sh "$arch_inc/signal.h" "$uapi_generic_inc/signal.h" > signalent.h
 cmp -s signalent.h $(get_header signalent.h)
 eend $? signalent.h
 
