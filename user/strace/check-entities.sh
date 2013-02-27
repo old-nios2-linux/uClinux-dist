@@ -159,7 +159,7 @@ eend $? ioctlent.arch.h.in
 
 # easy: output is exactly what we want
 ebegin "signal list"
-sh ./signalent.sh "$arch_inc/signal.h" "$uapi_generic_inc/signal.h" > signalent.h
+sh ./signalent.sh "$uapi_generic_inc/signal.h" > signalent.h
 cmp -s signalent.h $(get_header signalent.h)
 eend $? signalent.h
 
@@ -168,7 +168,7 @@ eend $? signalent.h
 # the number of syscalls found as we'll assume that the syscall list is forever
 # locked in stone and thus will only ever increase over time.
 ebegin "syscall list"
-sh ./syscallent.sh "$arch_inc/unistd.h" | sed '/sys_syscall/,$d' > syscallent.h
+sh ./syscallent.sh "$ksrc/arch/$karch/include/uapi/asm/unistd.h" | sed '/sys_syscall/,$d' > syscallent.h
 knr=$(set -- $(wc -l syscallent.h); echo $1)
 snr=$(grep '^[[:space:]]{' $(get_header syscallent.h) | wc -l)
 [ ${knr} -eq ${snr} ]
