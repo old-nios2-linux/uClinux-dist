@@ -14,8 +14,10 @@ CPU_TYPE := CONFIG_BF561
 endif
 ICC_CFLAGS ?= -I${KERNEL_DIR}/arch/blackfin/include \
 	-I${KERNEL_DIR}/include \
+	-I${KERNEL_DIR}/include/uapi \
 	-I${KERNEL_DIR}/arch/blackfin/mach-$(ICC_MACHINE)/include \
 	-I${KERNEL_DIR}/arch/blackfin/include/generated \
+	-I${KERNEL_DIR}/arch/blackfin/include/uapi \
 	-I${KERNEL_DIR}/drivers/staging/icc/include
 
 
