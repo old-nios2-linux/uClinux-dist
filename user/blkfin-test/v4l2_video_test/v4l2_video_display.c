@@ -33,7 +33,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <linux/types.h>
-#include "videodev2.h"
+#include <linux/videodev2.h>
 
 #if __GNUC__ < 4 || (__GNUC__ == 4 && (__GNUC_MINOR__ < 6))
 /* Sadly gcc versions older than 4.6 have a bug in how they initialize
