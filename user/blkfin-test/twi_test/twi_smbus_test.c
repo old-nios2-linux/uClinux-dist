@@ -7,7 +7,7 @@ static unsigned char vcomm_value = 150;
 
 #define AD5280_NAME "bf537-lq035-ad5280"
 
-static int __devinit ad5280_probe(struct i2c_client *client,
+static int ad5280_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
 	int ret;
