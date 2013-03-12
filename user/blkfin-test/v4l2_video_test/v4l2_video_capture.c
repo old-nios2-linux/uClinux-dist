@@ -44,11 +44,14 @@ static struct cap_buffer *pbuffer;
 
 static const char *device = "/dev/video0";
 static const char *file = "/1.yuv";
+static const char *pixel_fmt = "uyvy";
 static int input = 0;
 static int rate = 0;
 static int number = 1;
 static int width = 640;
 static int height = 480;
+static int mode = 0;
+static int ignore = 0;
 static int image_size;
 
 static int std_cap = 0;
@@ -56,12 +59,15 @@ static int dv_timings_cap = 0;
 
 static void usage(const char *prog)
 {
-	printf("Usage: %s [-DIrFNwh]\n", prog);
+	printf("Usage: %s [-DIrFNfmiwh]\n", prog);
 	puts("  -D --device   device to use (default /dev/video0)\n"
 	     "  -I --input    select input (default 0)\n"
 	     "  -r --rate     frame rate (default 0)\n"
 	     "  -F --file     file name (default /1.yuv)\n"
 	     "  -N --number   number of frames to capture (default 1)\n"
+	     "  -f --format   pixel format (default uyvy)\n"
+	     "  -m --mode     testing mode (default 0)\n"
+	     "  -i --ignore   ignore error frames\n"
 	     "  -w --width    image width (default 640)\n"
 	     "  -h --height   image height (default 480)\n");
 	exit(1);
@@ -76,13 +82,16 @@ static void parse_opts(int argc, char *argv[])
 			{ "rate",    1, 0, 'r' },
 			{ "file",    1, 0, 'F' },
 			{ "number",  1, 0, 'N' },
+			{ "format",  1, 0, 'f' },
+			{ "mode",    1, 0, 'm' },
+			{ "ignore",  0, 0, 'i' },
 			{ "width",   1, 0, 'w' },
 			{ "height",  1, 0, 'h' },
 			{ NULL,      0, 0, 0   },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "D:I:r:F:N:w:h:", lopts, NULL);
+		c = getopt_long(argc, argv, "D:I:r:F:N:f:m:iw:h:", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -102,6 +111,15 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'N':
 			number = atoi(optarg);
+			break;
+		case 'f':
+			pixel_fmt = optarg;
+			break;
+		case 'm':
+			mode = atoi(optarg);
+			break;
+		case 'i':
+			ignore = 1;
 			break;
 		case 'w':
 			width = atoi(optarg);
@@ -214,15 +232,15 @@ static int set_std(int fd)
 	return ret;
 }
 
-static int get_dv_timings(int fd)
+static int set_dv_timings(int fd)
 {
 	struct v4l2_dv_timings dv_timings;
 	struct v4l2_bt_timings bt;
 	int ret;
 
-	ret = ioctl(fd, VIDIOC_G_DV_TIMINGS, &dv_timings);
+	ret = ioctl(fd, VIDIOC_QUERY_DV_TIMINGS, &dv_timings);
 	if (ret) {
-		printf("ioctl VIDIOC_G_DV_TIMINGS error\n");
+		printf("ioctl VIDIOC_QUERY_DV_TIMINGS error\n");
 		return ret;
 	}
 	bt = dv_timings.bt;
@@ -237,7 +255,10 @@ static int get_dv_timings(int fd)
 		printf("il_vfrontporch=%d,il_vsync=%d,il_vbackporch=%d\n",
 				bt.il_vfrontporch, bt.il_vsync,
 				bt.il_vbackporch);
-	return 0;
+	ret = ioctl(fd, VIDIOC_S_DV_TIMINGS, &dv_timings);
+	if (ret < 0)
+		printf("ioctl VIDIOC_S_DV_TIMINGS error\n");
+	return ret;
 }
 
 static int set_fmt(int fd)
@@ -262,6 +283,18 @@ static int set_fmt(int fd)
 	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
 	fmt.fmt.pix.field       = V4L2_FIELD_ANY;
 
+	if (!strcmp(pixel_fmt, "uyvy")) {
+		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
+	} else if (!strcmp(pixel_fmt, "yuyv")) {
+		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+	} else if (!strcmp(pixel_fmt, "rgb565")) {
+		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB565;
+	} else if (!strcmp(pixel_fmt, "rgb444")) {
+		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB444;
+	} else {
+		printf("pixel format %s is not supported\n", pixel_fmt);
+		return -EINVAL;
+	}
 	ret = ioctl(fd, VIDIOC_S_FMT, &fmt);
 	if (ret < 0) {
 		printf("ioctl VIDIOC_S_FMT error\n");
@@ -345,6 +378,9 @@ int main(int argc, char *argv[])
 	struct v4l2_buffer buf;
 	enum v4l2_buf_type type;
 	FILE *fp;
+	int err_frame = 0;
+	struct timeval tv1, tv2;
+	struct timezone tz;
 
 	parse_opts(argc, argv);
 
@@ -368,7 +404,7 @@ int main(int argc, char *argv[])
 			goto err;
 	}
 	if (dv_timings_cap) {
-		ret = get_dv_timings(fd);
+		ret = set_dv_timings(fd);
 		if (ret)
 			goto err;
 	}
@@ -446,8 +482,8 @@ int main(int argc, char *argv[])
 	}
 	printf("open image file '%s' success\n", file);
 
+	gettimeofday(&tv1, &tz);
 	for (i = 0; i < number; i++) {
-		printf("processing frame %d\n", i);
 		memset(&buf, 0, sizeof(buf));
 		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		buf.memory = V4L2_MEMORY_MMAP;
@@ -457,7 +493,17 @@ int main(int argc, char *argv[])
 			goto err4;
 		}
 
-		fwrite(pbuffer[buf.index].start, 1, image_size, fp);
+		if (!mode) {
+			if (buf.flags & V4L2_BUF_FLAG_ERROR) {
+				err_frame++;
+				if (!ignore)
+					fwrite(pbuffer[buf.index].start,
+							1, image_size, fp);
+			} else {
+				fwrite(pbuffer[buf.index].start,
+						1, image_size, fp);
+			}
+		}
 
 		ret = ioctl(fd, VIDIOC_QBUF, &buf);
 		if (ret < 0) {
@@ -465,7 +511,11 @@ int main(int argc, char *argv[])
 			goto err4;
 		}
 	}
-	printf("%d frames captured\n", i);
+	gettimeofday(&tv2, &tz);
+	if (!mode)
+		printf("%d frames captured, %d error frames\n", i, err_frame);
+	else
+		printf("frame rate = %d\n", i / (tv2.tv_sec - tv1.tv_sec));
 err4:
 	fclose(fp);
 err3:
