@@ -10,23 +10,33 @@ MCAPI_INCLUDE ?= ${PWD}/../../../../../staging/usr/include/mcapi-2.0_coreb/
 MCAPI_TEST_INCLUDE ?= ${PWD}/../../../../../staging/usr/include/mcapi-2.0/
 ICC_CORE := ../../icc_core/icc
 LIBMCAPI_COREB ?= ${PWD}/../../../../../staging/usr/lib/libmcapi_coreb.a
+ICC_RESOURCE_TARGET=
 
 ifneq ($(ICC_MACHINE),bf609)
 TASK_LOAD_BASE := 0x3c00000
-CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I${ICC_INCLUDE} -I${KERNEL_DIR}/include -I${KERNEL_DIR}/arch/blackfin/include -I${KERNEL_DIR}/arch/blackfin/include/generated  -I${KERNEL_DIR}/arch/blackfin/mach-bf561/include -I${KERNEL_DIR}/drivers/staging/icc/include -I${MCAPI_INCLUDE} -I${MCAPI_TEST_INCLUDE} -DCONFIG_BF561 -D__KERNEL__
+CFLAGS  := -mcpu=bf561 -mmulticore -mcoreb -mlong-calls -I${ICC_INCLUDE} -I${MCAPI_INCLUDE} -I${MCAPI_TEST_INCLUDE} \
+	-I${KERNEL_DIR}/include \
+	-I$(KERNEL_DIR)/include/uapi \
+	-I${KERNEL_DIR}/arch/blackfin/include \
+	-I${KERNEL_DIR}/arch/blackfin/include/generated \
+	-I$(KERNEL_DIR)/arch/blackfin/include/uapi \
+	-I$(KERNEL_DIR)/arch/blackfin/mach-$(ICC_MACHINE)/include \
+	-I${KERNEL_DIR}/drivers/staging/icc/include \
+	-DCONFIG_BF561 -D__KERNEL__
 endif
 
 ifeq ($(ICC_MACHINE),bf609)
 TASK_LOAD_BASE := 0x7c00000
-CFLAGS = -I$(ICC_INCLUDE) -I$(MCAPI_INCLUDE) -I$(MCAPI_TEST_INCLUDE) -I$(KERNEL_DIR)/include \
-		-I$(KERNEL_DIR)/include/uapi \
-		-I$(KERNEL_DIR)/arch/blackfin/include \
-		-I$(KERNEL_DIR)/arch/blackfin/include/generated \
-		-I$(KERNEL_DIR)/arch/blackfin/include/uapi \
-		-I$(KERNEL_DIR)/arch/blackfin/mach-$(ICC_MACHINE)/include \
-		-I$(KERNEL_DIR)/drivers/staging/icc/include \
-		-DCONFIG_BF609 -D__KERNEL__ -mlong-calls
-
+CFLAGS = -I$(ICC_INCLUDE) -I$(MCAPI_INCLUDE) -I$(MCAPI_TEST_INCLUDE) \
+	-I$(KERNEL_DIR)/include \
+	-I$(KERNEL_DIR)/include/uapi \
+	-I$(KERNEL_DIR)/arch/blackfin/include \
+	-I$(KERNEL_DIR)/arch/blackfin/include/generated \
+	-I$(KERNEL_DIR)/arch/blackfin/include/uapi \
+	-I$(KERNEL_DIR)/arch/blackfin/mach-$(ICC_MACHINE)/include \
+	-I$(KERNEL_DIR)/drivers/staging/icc/include \
+	-DCONFIG_BF609 -D__KERNEL__ -mlong-calls
+ICC_RESOURCE_TARGET+=icc_resource
 endif
 
 LDFLAGS  =
@@ -35,7 +45,7 @@ ASFLAGS  =
 INSTALL_TASK_SRC := $(notdir $(wildcard mcapi_*.c))
 INSTALL_TASK := $(patsubst %.c,%,$(INSTALL_TASK_SRC))
 
-all: task1 task2 scalar icc_latency icc_resource $(INSTALL_TASK)
+all: task1 task2 scalar icc_latency $(ICC_RESOURCE_TARGET) $(INSTALL_TASK)
 
 coreb_task.lds: coreb_task.lds.S
 	$(CC) -E -ansi $(CFLAGS) -D__ASSEMBLY__ -P $^ -o $@
@@ -59,6 +69,6 @@ icc_resource: icc_resource.o $(ICC_CORE) coreb_task.lds
 	$(LD) $(LDFLAGS) -o icc_resource -T coreb_task.lds --just-symbol $(ICC_CORE) icc_resource.o -Ttext $(TASK_LOAD_BASE)
 
 clean:
-	rm -rf *.o task1 task2 scalar $(INSTALL_TASK) coreb_task.lds icc_resource icc_latency
+	rm -rf *.o task1 task2 scalar $(INSTALL_TASK) coreb_task.lds $(ICC_RESOURCE_TARGET) icc_latency
 
 .PHONY: all clean
