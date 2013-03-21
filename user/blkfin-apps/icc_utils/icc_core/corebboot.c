@@ -189,9 +189,6 @@ uint16_t intcnt;
 #define BFIN_IPI_CALL_FUNC    1
 #define BFIN_IPI_CPU_STOP     2
 
-#if !CONFIG_BFIN_EXTMEM_WRITETHROUGH
-# error need CONFIG_BFIN_EXTMEM_WRITETHROUGH
-#endif
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 
 
