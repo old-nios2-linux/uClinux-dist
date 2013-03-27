@@ -29,7 +29,7 @@ all: icc
 coreb.lds: coreb.lds.S
 	$(CC) -E -ansi $(CFLAGS) -D__ASSEMBLY__ -P $^ -o $@
 
-ICC_OBJS = coreb_start.o test.o corebboot.o vsprintf.o mempool.o protocol.o platform.o
+ICC_OBJS = coreb_start.o cache.o test.o corebboot.o vsprintf.o mempool.o protocol.o platform.o
 icc: $(ICC_OBJS) coreb.lds
 	$(CC) -Wl,--verbose -Wl,-M -T coreb.lds -Wl,--nostdlib $(CFLAGS) $(ICC_OBJS) -o $@ > $@.map
 	bfin-elf-objdump -x -D $@ > $@.dump

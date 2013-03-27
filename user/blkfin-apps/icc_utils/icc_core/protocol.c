@@ -10,6 +10,7 @@
 #include <protocol.h>
 #include <blackfin.h>
 #include <debug.h>
+#include "cacheflush.h"
 
 static inline void coreb_idle(void)
 {
@@ -966,6 +967,7 @@ int sm_recv_packet(uint32_t session_idx, uint16_t *src_ep, uint16_t *src_cpu, vo
 			*len = message->msg.length;
 		*buf = msg->payload;
 		ret = msg->length;
+		invalidate_dcache_range(msg->payload, msg->payload + msg->length);
 	} else {
 		ret = -EINVAL;
 	}
@@ -1012,6 +1014,7 @@ static int sm_default_sendmsg(struct sm_message *message, struct sm_session *ses
 	switch (SM_MSG_PROTOCOL(msg->type)) {
 	case SP_PACKET:
 	case SP_SESSION_PACKET:
+		flush_dcache_range(msg->payload, msg->payload + msg->length);
 	case SP_SCALAR:
 	case SP_SESSION_SCALAR:
 		list_add_tail(&message->next, &session->tx_messages);

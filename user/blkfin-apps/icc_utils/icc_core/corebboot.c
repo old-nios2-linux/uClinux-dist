@@ -20,6 +20,15 @@
 extern uint16_t queue_pending;
 extern struct coreb_icc_node coreb_info;
 
+static inline int get_mem_size()
+{
+#ifdef CONFIG_BF609
+	return 128 * 1024 * 1024;
+#else
+	return 64 * 1024 * 1024;
+#endif
+}
+
 static inline void coreb_idle(void)
 {
 	__asm__ __volatile__( \
@@ -322,22 +331,22 @@ void dump_execption(unsigned int errno, unsigned int addr)
 	if (errno == 0x26) {
 		unsigned long fault_addr = bfin_read_DCPLB_FAULT_ADDR();
 
-		if (fault_addr >= 0x8000000)
+		if (fault_addr >= get_mem_size())
 			coreb_dump_stack(errno, addr);
 		_disable_dcplb();
 		fault_addr &= ~(0x400000 - 1);
-		bfin_write32(DCPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
-		bfin_write32(DCPLB_DATA1 + 4 * ((fault_addr/ 0x1000000) % 15), (CPLB_COMMON | PAGE_SIZE_4MB));
+		bfin_write32(DCPLB_ADDR2 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
+		bfin_write32(DCPLB_DATA2 + 4 * ((fault_addr/ 0x1000000) % 15), (CPLB_COMMON | PAGE_SIZE_4MB));
 		_enable_dcplb();
 	} else if (errno == 0x2c) {
 		unsigned long fault_addr = bfin_read_ICPLB_FAULT_ADDR();
 
-		if (fault_addr >= 0x8000000)
+		if (fault_addr >= get_mem_size())
 			coreb_dump_stack(errno, addr);
 		_disable_icplb();
 		fault_addr &= ~(0x400000 - 1);
-		bfin_write32(ICPLB_ADDR1 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
-		bfin_write32(ICPLB_DATA1 + 4 * ((fault_addr/ 0x1000000) % 15), ((SDRAM_IGENERIC & ~CPLB_L1_CHBL) | PAGE_SIZE_4MB));
+		bfin_write32(ICPLB_ADDR2 + 4 * ((fault_addr/ 0x1000000) % 15), fault_addr);
+		bfin_write32(ICPLB_DATA2 + 4 * ((fault_addr/ 0x1000000) % 15), ((SDRAM_IGENERIC & ~CPLB_L1_CHBL) | PAGE_SIZE_4MB));
 		_enable_icplb();
 	} else {
 		coreb_dump_stack(errno, addr);
@@ -456,21 +465,23 @@ void bfin_setup_caches(unsigned int cpu)
 	unsigned long addr;
 	int i;
 
-	addr = 4 * 1024 * 1024;
 	i = 0;
-
 
 	bfin_write32(ICPLB_ADDR0 + i * 4, L2_START);
 	bfin_write32(ICPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_1MB));
 	bfin_write32(DCPLB_ADDR0 + i * 4, L2_START);
 	bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_1MB));
 	i++;
+	bfin_write32(ICPLB_ADDR0 + i * 4, get_mem_size() - 4 * 1024 * 1024);
+	bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_4MB));
+	bfin_write32(DCPLB_ADDR0 + i * 4, get_mem_size() - 4 * 1024 * 1024);
+	bfin_write32(DCPLB_DATA0 + i * 4, (SDRAM_DGENERIC | PAGE_SIZE_4MB));
 
-	for(i = 1; i < 16; i++) {
-		bfin_write32(ICPLB_ADDR0 + i * 4, addr + (i - 1) * 4 * 1024 * 1024);
-		bfin_write32(ICPLB_DATA0 + i * 4 ,((SDRAM_IGENERIC & ~CPLB_L1_CHBL) | PAGE_SIZE_4MB));
-		bfin_write32(DCPLB_ADDR0 + i * 4, addr + (i - 1) * 4 * 1024 * 1024);
-		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_4MB));
+	for(i = 2; i < 16; i++) {
+		bfin_write32(ICPLB_ADDR0 + i * 4, i * 4 * 1024 * 1024);
+		bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_4MB));
+		bfin_write32(DCPLB_ADDR0 + i * 4, i * 4 * 1024 * 1024);
+		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_WT | CPLB_L1_AOW | CPLB_COMMON));
 	}
 	_enable_cplb(IMEM_CONTROL, (IMC | ENICPLB));
 
