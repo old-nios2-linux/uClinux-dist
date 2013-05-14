@@ -44,12 +44,10 @@
 	P0 = R0;
 
 	LSETUP (1f, 2f) LC1 = P1;
-1:
+1:	\flushins [P0++];
 	nop;
 	nop;
-	nop;
-2:	\flushins [P0++];
-
+2:	nop;
 	RTS;
 .endm
 

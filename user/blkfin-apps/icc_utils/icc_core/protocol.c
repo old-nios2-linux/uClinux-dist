@@ -7,6 +7,7 @@
 #include <asm-generic/errno-base.h>
 #include <linux/bitmap.h>
 #include <icc.h>
+#include <asm/cplb.h>
 #include <protocol.h>
 #include <blackfin.h>
 #include <debug.h>
@@ -515,11 +516,9 @@ void sm_handle_control_message()
 			iccq_should_stop = 1;
 			break;
 		case SM_TASK_RUN:
-			if (sm_task1.task_init) {
-				coreb_msg("task exit %x\n", sm_task1.task_exit);
-				gen_pool_destroy(coreb_info.pool);
-				gen_pool_destroy(coreb_info.msg_pool);
-				reinit = 1;
+			if (!reinit) {
+				coreb_msg("%s: Old task is not killed yet.\n", __func__);
+				break;
 			}
 			memset(&sm_task1, 0, sizeof(struct sm_task));
 			memcpy(&sm_task1, msg->payload,
@@ -530,6 +529,7 @@ void sm_handle_control_message()
 
 			if (reinit) {
 				icc_init();
+				reinit = 0;
 			}
 
 			sm_task1_status = SM_TASK_RESET;
@@ -541,10 +541,24 @@ void sm_handle_control_message()
 			coreb_msg("finish %s task status %d\n", __func__, sm_task1_status);
 			break;
 		case SM_TASK_KILL:
-			if (sm_task1.task_init)
-				sm_task1.task_exit();
+			if (sm_task1.task_init) {
+				coreb_msg("task exit %x\n", sm_task1.task_exit);
+				if (sm_task1.task_exit)
+					sm_task1.task_exit();
+				gen_pool_destroy(coreb_info.pool);
+				gen_pool_destroy(coreb_info.msg_pool);
+				sm_task1.task_init = NULL;
+				sm_task1.task_exit = NULL;
+				reinit = 1;
+			}
+
 			memset(&sm_task1, 0, sizeof(struct sm_task));
 			sm_task1_status = SM_TASK_NONE;
+
+			SSYNC();
+			invalidate_dcache_range(COREB_TASK_START, COREB_TASK_START + COREB_MEM_SIZE);
+			coreb_msg("task exit invalidate dcache\n");
+
 			break;
 		}
 		sm_message_dequeue(inqueue, msg);
@@ -1198,11 +1212,17 @@ void icc_run_task(void)
 	int i;
 	if (sm_task1_status == SM_TASK_INIT) {
 		task = &sm_task1;
-		for (i = 0; i < SM_MAX_TASKARGS; i++) {
+		if (sm_task1.task_argc > SM_MAX_TASKARGS)
+			sm_task1.task_argc = SM_MAX_TASKARGS;
+		for (i = 0; i < sm_task1.task_argc; i++) {
 			task_argv[i] = task->task_argv[i];
 		}
 
 		coreb_msg("before run task %x\n", sm_task1.task_init);
+		
+		flush_icache_range(COREB_TASK_START, COREB_TASK_START + COREB_MEM_SIZE);
+		coreb_msg("task exit flush icache\n");
+
 		sm_task1_status = SM_TASK_RUNNING;
 		sm_task1.task_init(sm_task1.task_argc, task_argv);
 		sm_task1_status = SM_TASK_NONE;

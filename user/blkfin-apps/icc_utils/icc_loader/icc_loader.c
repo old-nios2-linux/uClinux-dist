@@ -314,6 +314,7 @@ int elf_load(void *buf)
 		++phdr;
 	}
 
+	printf("load elf code to core B\n");
 	/* now load all the program headers */
 	phdr = (ElfW(Phdr) *)(buf + ehdr->e_phoff);
 	for (i = 0; i < ehdr->e_phnum; ++i) {
@@ -346,6 +347,24 @@ static int open_icc(void)
 		exit(10);
 	}
 	return ret;
+}
+
+static void kill_task(int fd)
+{
+	struct sm_packet pkt;
+
+	memset(&pkt, 0, sizeof(struct sm_packet));
+	pkt.local_ep = 31;
+	pkt.type = SP_TASK_MANAGER;
+	pkt.dst_cpu = 1;
+
+	printf("kill current task and invalidate dcache on core B\n");
+	ioctl(fd, CMD_SM_CREATE, &pkt);
+
+	pkt.type = SM_TASK_KILL;
+	ioctl(fd, CMD_SM_SEND, &pkt);
+
+	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
 }
 
 static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exit_addr)
@@ -442,6 +461,7 @@ int main(int argc, char *argv[])
 			buf = map_elf(optarg, &stat);
 			if (!buf)
 				return EXIT_FAILURE;
+			kill_task(fd);
 			elf_load(buf);
 			task_init_addr = elf_sym_addr(buf, ICC_TASKINIT_FUNC);
 			if (task_init_addr == 0xffffffff)
