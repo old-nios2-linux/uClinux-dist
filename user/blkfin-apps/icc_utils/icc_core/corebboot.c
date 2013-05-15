@@ -22,11 +22,7 @@ extern struct coreb_icc_node coreb_info;
 
 static inline int get_mem_size()
 {
-#ifdef CONFIG_BF609
-	return 128 * 1024 * 1024;
-#else
-	return 64 * 1024 * 1024;
-#endif
+	return COREB_TASK_START + COREB_TASK_MEM_SIZE;
 }
 
 static inline void coreb_idle(void)
@@ -459,11 +455,10 @@ inline int readipend(void)
 	return _tmp;
 }
 
-
 void bfin_setup_caches(unsigned int cpu)
 {
 	unsigned long addr;
-	int i;
+	int i, j;
 
 	i = 0;
 
@@ -472,17 +467,30 @@ void bfin_setup_caches(unsigned int cpu)
 	bfin_write32(DCPLB_ADDR0 + i * 4, L2_START);
 	bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_1MB));
 	i++;
-	bfin_write32(ICPLB_ADDR0 + i * 4, get_mem_size() - 4 * 1024 * 1024);
-	bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_4MB));
-	bfin_write32(DCPLB_ADDR0 + i * 4, get_mem_size() - 4 * 1024 * 1024);
-	bfin_write32(DCPLB_DATA0 + i * 4, (SDRAM_DGENERIC | PAGE_SIZE_4MB));
 
-	for(i = 2; i < 16; i++) {
-		bfin_write32(ICPLB_ADDR0 + i * 4, i * 4 * 1024 * 1024);
-		bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_4MB));
-		bfin_write32(DCPLB_ADDR0 + i * 4, i * 4 * 1024 * 1024);
-		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_WT | CPLB_L1_AOW | CPLB_COMMON));
+	for(j = COREB_TASK_START; j < COREB_TASK_MEM_SIZE && i < 16; j += 0x400000, i++) {
+		bfin_write32(ICPLB_ADDR0 + i * 4, j);
+		bfin_write32(ICPLB_DATA0 + i * 4, (SDRAM_IGENERIC | PAGE_SIZE_4MB));
+		bfin_write32(DCPLB_ADDR0 + i * 4, j);
+		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_COMMON | PAGE_SIZE_4MB));
 	}
+
+	j = 0;
+#ifdef PAGE_SIZE_16MB
+	for(; j < COREB_TASK_START && i < 16; j += 0x1000000, i++) {
+		bfin_write32(ICPLB_ADDR0 + i * 4, j);
+		bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_16MB));
+		bfin_write32(DCPLB_ADDR0 + i * 4, j);
+		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_WT | CPLB_L1_AOW | CPLB_COMMON | PAGE_SIZE_16MB));
+	}
+#endif
+	for(; j < COREB_TASK_START && i < 16; j += 0x400000, i++) {
+		bfin_write32(ICPLB_ADDR0 + i * 4, j);
+		bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_4MB));
+		bfin_write32(DCPLB_ADDR0 + i * 4, j);
+		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_WT | CPLB_L1_AOW | CPLB_COMMON | PAGE_SIZE_4MB));
+	}
+
 	_enable_cplb(IMEM_CONTROL, (IMC | ENICPLB));
 
 	delay(1);
