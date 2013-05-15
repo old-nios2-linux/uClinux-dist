@@ -516,7 +516,7 @@ void sm_handle_control_message()
 			iccq_should_stop = 1;
 			break;
 		case SM_TASK_RUN:
-			if (!reinit) {
+			if (sm_task1.task_init) {
 				coreb_msg("%s: Old task is not killed yet.\n", __func__);
 				break;
 			}
