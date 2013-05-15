@@ -556,7 +556,7 @@ void sm_handle_control_message()
 			sm_task1_status = SM_TASK_NONE;
 
 			SSYNC();
-			invalidate_dcache_range(COREB_TASK_START, COREB_TASK_START + COREB_MEM_SIZE);
+			invalidate_dcache_range(COREB_TASK_START, COREB_TASK_START + COREB_TASK_MEM_SIZE);
 			coreb_msg("task exit invalidate dcache\n");
 
 			break;
@@ -1220,7 +1220,7 @@ void icc_run_task(void)
 
 		coreb_msg("before run task %x\n", sm_task1.task_init);
 		
-		flush_icache_range(COREB_TASK_START, COREB_TASK_START + COREB_MEM_SIZE);
+		flush_icache_range(COREB_TASK_START, COREB_TASK_START + COREB_TASK_MEM_SIZE);
 		coreb_msg("task exit flush icache\n");
 
 		sm_task1_status = SM_TASK_RUNNING;
