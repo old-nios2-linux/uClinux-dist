@@ -534,7 +534,6 @@ void sm_handle_control_message()
 			}
 
 			sm_task1_status = SM_TASK_RESET;
-			sm_set_icc_queue_attribute(ICC_QUEUE_ATTR_STATUS, ICC_QUEUE_READY);
 			sm_send_task_run_ack(sm_task1_control_ep, coreb_info.icc_info.peer_cpu);
 
 			delay(1);
