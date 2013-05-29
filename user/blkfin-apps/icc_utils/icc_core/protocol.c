@@ -518,6 +518,7 @@ void sm_handle_control_message()
 		case SM_TASK_RUN:
 			if (sm_task1.task_init) {
 				coreb_msg("%s: Old task is not killed yet.\n", __func__);
+				reinit = 0;
 				break;
 			}
 			memset(&sm_task1, 0, sizeof(struct sm_task));
@@ -559,6 +560,7 @@ void sm_handle_control_message()
 			invalidate_dcache_range(COREB_TASK_START, COREB_TASK_START + COREB_TASK_MEM_SIZE);
 			coreb_msg("task exit invalidate dcache\n");
 
+			sm_send_task_kill_ack(msg->src_ep, coreb_info.icc_info.peer_cpu);
 			break;
 		}
 		sm_message_dequeue(inqueue, msg);
@@ -591,8 +593,7 @@ sm_send_control_msg(struct sm_session *session, uint32_t remote_ep,
 	return ret;
 }
 
-int sm_send_task_run_ack(uint32_t remote_ep,
-		uint32_t dst_cpu)
+int sm_send_task_run_ack(uint32_t remote_ep, uint32_t dst_cpu)
 {
 	int ret;
 	struct sm_msg *m = &scratch_msg;
@@ -611,8 +612,7 @@ int sm_send_task_run_ack(uint32_t remote_ep,
 	return ret;
 }
 
-int sm_send_task_kill_ack(struct sm_session *session, uint32_t remote_ep,
-		uint32_t dst_cpu)
+int sm_send_task_kill_ack(uint32_t remote_ep, uint32_t dst_cpu)
 {
 	int ret;
 	struct sm_msg *m = &scratch_msg;

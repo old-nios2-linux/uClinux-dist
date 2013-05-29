@@ -349,9 +349,10 @@ static int open_icc(void)
 	return ret;
 }
 
-static void kill_task(int fd)
+static int kill_task(int fd)
 {
 	struct sm_packet pkt;
+	int ret;
 
 	memset(&pkt, 0, sizeof(struct sm_packet));
 	pkt.local_ep = 31;
@@ -359,15 +360,23 @@ static void kill_task(int fd)
 	pkt.dst_cpu = 1;
 
 	printf("kill current task and invalidate dcache on core B\n");
-	ioctl(fd, CMD_SM_CREATE, &pkt);
+	ret = ioctl(fd, CMD_SM_CREATE, &pkt);
+	if (ret)
+		return ret;
 
 	pkt.type = SM_TASK_KILL;
-	ioctl(fd, CMD_SM_SEND, &pkt);
+	ret = ioctl(fd, CMD_SM_SEND, &pkt);
+	if (ret)
+		goto shutdown;
 
+	ret = ioctl(fd, CMD_SM_RECV, &pkt);
+shutdown:
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
+
+	return ret;
 }
 
-static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exit_addr)
+static int exec_task(int fd, unsigned int task_init_addr, unsigned int task_exit_addr)
 {
 	struct sm_packet pkt;
 	struct sm_task *task1 = NULL;
@@ -375,6 +384,7 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 	char taskargv0[] = "task1";
 	char taskargv1[] = "icc";
 	int packetsize = sizeof(struct sm_task) + MAX_TASK_NAME * taskargs;
+	int ret;
 
 	task1 = malloc(packetsize);
 	if (!task1) {
@@ -395,15 +405,22 @@ static void exec_task(int fd, unsigned int task_init_addr, unsigned int task_exi
 	pkt.buf_len = packetsize;
 	pkt.buf = task1;
 
-	ioctl(fd, CMD_SM_CREATE, &pkt);
+	ret = ioctl(fd, CMD_SM_CREATE, &pkt);
+	if (ret)
+		goto free_task;
 
 	pkt.type = SM_TASK_RUN;
-	ioctl(fd, CMD_SM_SEND, &pkt);
+	ret = ioctl(fd, CMD_SM_SEND, &pkt);
+	if (ret)
+		goto shutdown;
 
+	ret = ioctl(fd, CMD_SM_RECV, &pkt);
+shutdown:
 	ioctl(fd, CMD_SM_SHUTDOWN, &pkt);
-
+free_task:
 	free(task1);
 
+	return ret;
 }
 #define GETOPT_FLAGS "l:e:kfhV"
 #define a_argument required_argument
@@ -461,7 +478,11 @@ int main(int argc, char *argv[])
 			buf = map_elf(optarg, &stat);
 			if (!buf)
 				return EXIT_FAILURE;
-			kill_task(fd);
+			if (kill_task(fd)) {
+				fprintf(stderr, "Fail to kill current task.");
+				break;
+			}
+			sleep(2);
 			elf_load(buf);
 			task_init_addr = elf_sym_addr(buf, ICC_TASKINIT_FUNC);
 			if (task_init_addr == 0xffffffff)
@@ -471,7 +492,10 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "task_exit_addr %x\n", task_exit_addr);
 			if (task_exit_addr == 0xffffffff)
 				task_exit_addr = 0;
-			exec_task(fd, task_init_addr, task_exit_addr);
+			if (exec_task(fd, task_init_addr, task_exit_addr)) {
+				fprintf(stderr, "Fail to run new task.");
+				break;
+			}
 			unmap_elf(buf, &stat);
 			break;
 		case 'k':
