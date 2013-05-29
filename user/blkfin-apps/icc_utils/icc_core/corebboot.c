@@ -472,16 +472,14 @@ void bfin_setup_caches(unsigned int cpu)
 		bfin_write32(ICPLB_ADDR0 + i * 4, j);
 		bfin_write32(ICPLB_DATA0 + i * 4, (SDRAM_IGENERIC | PAGE_SIZE_4MB));
 		bfin_write32(DCPLB_ADDR0 + i * 4, j);
-//		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_COMMON | PAGE_SIZE_4MB));
-		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_COMMON | PAGE_SIZE_4MB));
+		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_COMMON | PAGE_SIZE_4MB));
 	}
 
 	for(j = 0; j < COREB_TASK_START && i < 16; j += 0x400000, i++) {
 		bfin_write32(ICPLB_ADDR0 + i * 4, j);
 		bfin_write32(ICPLB_DATA0 + i * 4 ,(SDRAM_IGENERIC | PAGE_SIZE_4MB));
 		bfin_write32(DCPLB_ADDR0 + i * 4, j);
-//		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_WT | CPLB_L1_AOW | CPLB_COMMON | PAGE_SIZE_4MB));
-		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_AOW | CPLB_COMMON | PAGE_SIZE_4MB));
+		bfin_write32(DCPLB_DATA0 + i * 4, (CPLB_L1_CHBL | CPLB_WT | CPLB_L1_AOW | CPLB_COMMON | PAGE_SIZE_4MB));
 	}
 
 	_enable_cplb(IMEM_CONTROL, (IMC | ENICPLB));
