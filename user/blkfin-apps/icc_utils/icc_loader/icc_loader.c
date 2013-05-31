@@ -361,12 +361,12 @@ static int kill_task(int fd)
 
 	printf("kill current task and invalidate dcache on core B\n");
 	ret = ioctl(fd, CMD_SM_CREATE, &pkt);
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	pkt.type = SM_TASK_KILL;
 	ret = ioctl(fd, CMD_SM_SEND, &pkt);
-	if (ret)
+	if (ret < 0)
 		goto shutdown;
 
 	ret = ioctl(fd, CMD_SM_RECV, &pkt);
@@ -406,12 +406,12 @@ static int exec_task(int fd, unsigned int task_init_addr, unsigned int task_exit
 	pkt.buf = task1;
 
 	ret = ioctl(fd, CMD_SM_CREATE, &pkt);
-	if (ret)
+	if (ret < 0)
 		goto free_task;
 
 	pkt.type = SM_TASK_RUN;
 	ret = ioctl(fd, CMD_SM_SEND, &pkt);
-	if (ret)
+	if (ret < 0)
 		goto shutdown;
 
 	ret = ioctl(fd, CMD_SM_RECV, &pkt);
