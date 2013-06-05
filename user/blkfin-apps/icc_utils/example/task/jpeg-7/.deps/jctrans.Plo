@@ -1,0 +1,84 @@
+jctrans.lo: jctrans.c jinclude.h \
+  /home/aaron/work/git_609_new/2012R2/buildroot/output/build/icc-10837/include/debug.h \
+  jconfig.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/include/stddef.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/stdlib.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/ieeefp.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/newlib.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/config.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/features.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/reent.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/_types.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/_types.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/_default_types.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/lock.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/stdlib.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/alloca.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/stdio.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/include/stdarg.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/types.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/types.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/stdio.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/string.h \
+  /opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/string.h \
+  jpeglib.h jmorecfg.h jpegint.h jerror.h
+
+jinclude.h:
+
+/home/aaron/work/git_609_new/2012R2/buildroot/output/build/icc-10837/include/debug.h:
+
+jconfig.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/include/stddef.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/stdlib.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/ieeefp.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/newlib.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/config.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/features.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/reent.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/_ansi.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/_types.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/_types.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/_default_types.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/lock.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/stdlib.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/alloca.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/stdio.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/include/stdarg.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/types.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/machine/types.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/stdio.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/string.h:
+
+/opt/uClinux_2012R2_RC2_full/bfin-elf/bin/../lib/gcc/bfin-elf/4.3.5/../../../../bfin-elf/include/sys/string.h:
+
+jpeglib.h:
+
+jmorecfg.h:
+
+jpegint.h:
+
+jerror.h:

@@ -1,0 +1,4 @@
+make  all-am
+make[1]: Entering directory `/home/aaron/work/Linux_trunk/trunk/user/blkfin-apps/icc_utils/libjpeg/jpeg-7'
+  CCLD   libjpeg.la
+make[1]: Leaving directory `/home/aaron/work/Linux_trunk/trunk/user/blkfin-apps/icc_utils/libjpeg/jpeg-7'
