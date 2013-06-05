@@ -42,7 +42,7 @@ compile.h: $(CONFIGURATION) version.h .version
 	else \
 	  echo \#define TOOLCHAIN_COMPILE_DOMAIN ; \
 	fi >> .ver
-	@echo \#define TOOLCHAIN_COMPILER \"`$(CC) -v 2>&1 | tail -1`\" >> .ver
+	@echo \#define TOOLCHAIN_COMPILER \"`$(CC) -v test 2>&1 | tail -1`\" >> .ver
 	@echo \#define TOOLCHAIN_FILENAME \"$(CC)\" >> .ver
 	@mv -f .ver $@
 
