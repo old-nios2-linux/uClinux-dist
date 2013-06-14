@@ -74,7 +74,6 @@ static struct image_info *img_info;
 int cjpeg_main (int argc, char **argv);
 
 static const char * const cdjpeg_message_table[] = {
-#include "cderror.h"
   NULL
 };
 
