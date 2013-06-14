@@ -14,8 +14,7 @@
  * JPEG library.  Most applications need only include jpeglib.h.
  */
 
-//#include "../../../include/debug.h"
-#include "/home/aaron/work/git_609_new/2012R2/buildroot/output/build/icc-10837/include/debug.h"
+#include "../../../include/debug.h"
 
 /* Include auto-config file to find out which system include files we need. */
 
@@ -104,28 +103,4 @@ static void *jpg_memset(void *s, int c, size_t count)
 
 #define SIZEOF(object)	((size_t) sizeof(object))
 
-/*
- * The modules that use fread() and fwrite() always invoke them through
- * these macros.  On some systems you may need to twiddle the argument casts.
- * CAUTION: argument order is different from underlying functions!
- */
-#if 0
-#define JFREAD(file,buf,sizeofbuf)  \
-  ((size_t) fread((void *) (buf), (size_t) 1, (size_t) (sizeofbuf), (file)))
-#define JFWRITE(file,buf,sizeofbuf)  \
-  ((size_t) fwrite((const void *) (buf), (size_t) 1, (size_t) (sizeofbuf), (file)))
-#endif
-//#define JFREAD(file,buf,sizeofbuf)  \
-  ((size_t) memcpy((void *)(buf), file, sizeofbuf))
-//#define JFWRITE(file,buf,sizeofbuf)  \
-  ((size_t) memcpy(file, (void *) (buf), sizeofbuf))
-/*
-int jpg_pos;
-void *MY_JFWRITE(unsigned char *file,unsigned char *buf,int sizeofbuf) 
-{ 
-	void * ret;
-   	ret = memcpy((file + jpg_pos), (void *) (buf), sizeofbuf);
-	jpg_pos += sizeofbuf;
-}
-*/
 #endif
